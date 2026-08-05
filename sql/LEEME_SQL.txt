@@ -1,0 +1,9 @@
+ERP Supply Enterprise V10.0.4
+
+El instalador correcto es exclusivamente:
+  sql/00_INSTALL_ALL.sql
+
+La verificación posterior es:
+  sql/99_POST_INSTALL_CHECK.sql
+
+No contiene instaladores anteriores ni migraciones individuales defectuosas.

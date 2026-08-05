@@ -1,10 +1,7 @@
--- ERP Supply Enterprise V10
--- Complete installer generated from ordered migrations.
--- Execute once in Supabase SQL Editor.
+-- ============================================================
+-- MIGRATION 001_core_schema.sql
+-- ============================================================
 
--- ============================================================================
--- BEGIN 001_core_schema.sql
--- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 001: isolated enterprise schema, security model and operational data model.
 
@@ -610,11 +607,11 @@ create trigger trg_deliveries_touch before update on erp_supply.deliveries for e
 create trigger trg_credit_touch before update on erp_supply.credit_requests for each row execute function erp_supply.touch_updated_at();
 
 commit;
--- END 001_core_schema.sql
 
--- ============================================================================
--- BEGIN 002_seed_configuration.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 002_seed_configuration.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 002: roles, modules, workflow, schedules and default organization.
 
@@ -787,11 +784,11 @@ select o.id,h.d,h.n,case when h.d='2026-07-13'::date then 'Ley 2578 de 2026' els
 on conflict (organization_id,holiday_date) do update set name=excluded.name,source=excluded.source;
 
 commit;
--- END 002_seed_configuration.sql
 
--- ============================================================================
--- BEGIN 003_workflow_engine.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 003_workflow_engine.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 003: identity, calendar calculations, routing and transactional workflow engine.
 
@@ -945,12 +942,12 @@ with org as (
     select 1 from erp_supply.holidays h
     where h.organization_id=d.id and h.holiday_date=d.work_date
   )
-), overlaps as (
+), clipped_segments as (
   select greatest(seg_start,p_start) a, least(seg_end,p_end) b
   from segments where seg_end>p_start and seg_start<p_end
 )
 select coalesce(sum(greatest(0,extract(epoch from (b-a))))::bigint,0)
-from overlaps
+from clipped_segments
 $$;
 
 create or replace function erp_supply.initial_step(
@@ -1277,11 +1274,11 @@ end;
 $$;
 
 commit;
--- END 003_workflow_engine.sql
 
--- ============================================================================
--- BEGIN 004_public_api.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 004_public_api.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 004: browser-facing native Supabase RPC API.
 
@@ -1342,8 +1339,8 @@ begin
     ),
     'queues',(select coalesce(jsonb_agg(q order by (q->>'sortOrder')::int),'[]'::jsonb) from (
       select jsonb_build_object('stepCode',s.code,'name',s.name,'sortOrder',s.sort_order,'quantity',count(o.id),
-        'overdue',count(o.id) filter(where s.sla_hours is not null and erp_supply.business_seconds_between(v_org,o.updated_at,now())>s.sla_hours*3600),
-        'inProgress',count(o.id) filter(where o.status='IN_PROGRESS'),'waiting',count(o.id) filter(where o.status in('WAITING','BLOCKED'))
+        'overdue',count(o.id) filter (where s.sla_hours is not null and erp_supply.business_seconds_between(v_org,o.updated_at,now())>s.sla_hours*3600),
+        'inProgress',count(o.id) filter (where o.status='IN_PROGRESS'),'waiting',count(o.id) filter (where o.status in('WAITING','BLOCKED'))
       ) q
       from erp_supply.workflow_steps s left join erp_supply.orders o on o.current_step_code=s.code and o.organization_id=v_org and not o.is_test and erp_supply.can_view_order(o.id) and o.status not in('CLOSED','CANCELLED')
       where not s.terminal group by s.code,s.name,s.sort_order,s.sla_hours
@@ -1454,7 +1451,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_order erp_supply.orders%rowtype;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select * into v_order from erp_supply.orders where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
   if not found then raise exception 'Pedido no encontrado'; end if;
   return jsonb_build_object(
@@ -1599,7 +1596,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_total bigint; v_items jsonb; v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),200);
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select count(*) into v_total from erp_supply.inventory_items i where i.organization_id=v_org and i.active and (p_search is null or lower(i.sku||' '||i.description||' '||coalesce(i.reference,'')) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
     select i.id,i.sku,i.reference,i.description,i.unit,i.item_type "itemType",i.barcode,
@@ -1621,19 +1618,19 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   return jsonb_build_object(
     'steps',(select coalesce(jsonb_agg(to_jsonb(x) order by x.sort_order),'[]'::jsonb) from (
       select s.code,s.name,s.sort_order,count(o.id) tasks,
-        round(avg(t.business_seconds) filter(where o.id is not null)/3600.0,2) "avgBusinessHours",round(avg(t.raw_seconds) filter(where o.id is not null)/3600.0,2) "avgElapsedHours",
-        round(percentile_cont(.5) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0,2) "medianBusinessHours",
-        round(percentile_cont(.9) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0,2) "p90BusinessHours"
+        round(avg(t.business_seconds) filter (where o.id is not null)/3600.0,2) "avgBusinessHours",round(avg(t.raw_seconds) filter (where o.id is not null)/3600.0,2) "avgElapsedHours",
+        round(percentile_cont(.5) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0,2) "medianBusinessHours",
+        round(percentile_cont(.9) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0,2) "p90BusinessHours"
       from erp_supply.workflow_steps s left join erp_supply.order_tasks t on t.step_code=s.code and t.completed_at::date between p_date_from and p_date_to
       left join erp_supply.orders o on o.id=t.order_id and o.organization_id=v_org and not o.is_test
       group by s.code,s.name,s.sort_order
     ) x),
     'throughput',(select coalesce(jsonb_agg(to_jsonb(x) order by x.day),'[]'::jsonb) from (
-      select d::date day,count(o.id) filter(where o.created_at::date=d::date) created,count(o.id) filter(where o.closed_at::date=d::date) closed
+      select d::date as "day", count(o.id) filter (where o.created_at::date = d::date) as "created", count(o.id) filter (where o.closed_at::date = d::date) as "closed"
       from generate_series(p_date_from,p_date_to,'1 day') d left join erp_supply.orders o on o.organization_id=v_org and not o.is_test and (o.created_at::date=d::date or o.closed_at::date=d::date)
       group by d
     ) x),
@@ -1687,7 +1684,7 @@ declare v_org uuid:=erp_supply.current_org_id();
 begin
   if not (erp_supply.can_access_module('admin','read') or erp_supply.has_role('jefe_logistica')) then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.name),'[]'::jsonb) from (
-    select p.id,p.email,p.display_name name,p.employee_code "employeeCode",p.active,p.auth_user_id "authUserId",coalesce(array_agg(pr.role_code) filter(where pr.role_code is not null),'{}') roles
+    select p.id,p.email,p.display_name name,p.employee_code "employeeCode",p.active,p.auth_user_id "authUserId",coalesce(array_agg(pr.role_code) filter (where pr.role_code is not null),'{}') roles
     from erp_supply.profiles p left join erp_supply.profile_roles pr on pr.profile_id=p.id where p.organization_id=v_org group by p.id
   ) x);
 end;
@@ -1715,11 +1712,11 @@ grant execute on function public.erp_x_import_history(text,jsonb,uuid) to authen
 grant execute on function public.erp_x_users() to authenticated;
 
 commit;
--- END 004_public_api.sql
 
--- ============================================================================
--- BEGIN 005_qa_and_admin.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 005_qa_and_admin.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 005: bootstrap, administration and deterministic 192-scenario QA bot.
 
@@ -1744,7 +1741,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_profile erp_supply.profiles%rowtype; v_role text;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede administrar usuarios' using errcode='42501'; end if;
   if p_payload->>'id' is null then
     insert into erp_supply.profiles(organization_id,auth_user_id,email,display_name,employee_code,active)
@@ -1769,7 +1766,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_count integer;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede sincronizar Auth' using errcode='42501'; end if;
   with inserted as (
     insert into erp_supply.profiles(organization_id,auth_user_id,email,display_name,active)
@@ -1793,7 +1790,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   return jsonb_build_object(
     'calendars',(select coalesce(jsonb_agg(to_jsonb(c)),'[]'::jsonb) from erp_supply.work_calendars c where c.organization_id=v_org),
     'segments',(select coalesce(jsonb_agg(to_jsonb(s) order by s.iso_weekday,s.start_time),'[]'::jsonb) from erp_supply.work_calendar_segments s join erp_supply.work_calendars c on c.id=s.calendar_id where c.organization_id=v_org),
@@ -1878,7 +1875,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('auditoria')) then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.started_at desc),'[]'::jsonb) from (
     select q.id,q.run_type "runType",q.status,q.total_scenarios "totalScenarios",q.passed_scenarios "passedScenarios",q.failed_scenarios "failedScenarios",q.started_at "startedAt",q.completed_at "completedAt",q.summary
@@ -1896,7 +1893,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_run erp_supply.qa_runs%rowtype;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select * into v_run from erp_supply.qa_runs where id=p_run_id and organization_id=v_org;
   if not found then raise exception 'Ejecución QA no encontrada'; end if;
   return jsonb_build_object('run',to_jsonb(v_run),'scenarios',(select coalesce(jsonb_agg(to_jsonb(s) order by s.scenario_key),'[]'::jsonb) from erp_supply.qa_scenarios s where s.qa_run_id=p_run_id));
@@ -1917,11 +1914,11 @@ grant execute on function public.erp_x_qa_runs(integer) to authenticated;
 grant execute on function public.erp_x_qa_run_detail(uuid) to authenticated;
 
 commit;
--- END 005_qa_and_admin.sql
 
--- ============================================================================
--- BEGIN 006_domain_services.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 006_domain_services.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 006: credit, receiving, inventory, cutting, billing, delivery and audit services.
 
@@ -1936,7 +1933,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_total bigint;v_items jsonb;v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),200);
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('credit','read') then raise exception 'No autorizado' using errcode='42501'; end if;
   select count(*) into v_total from erp_supply.credit_requests c where c.organization_id=v_org and (p_status is null or c.status=p_status) and (p_search is null or lower(c.request_number||' '||c.client_name||' '||coalesce(c.client_document,'')) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
@@ -2029,7 +2026,7 @@ security definer
 set search_path=erp_supply,public,auth
 as $$
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   return (select coalesce(jsonb_agg(jsonb_build_object(
     'receiptNumber',r.receipt_number,'purchaseOrder',r.purchase_order,'supplier',r.supplier_name,'receivedAt',r.received_at,
     'sku',l.sku,'description',l.description,'quantity',l.accepted_quantity,'unit',l.unit,'location',l.location,'lotNumber',l.metadata->>'lotNumber','qualityStatus',l.quality_status
@@ -2128,7 +2125,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),250);v_total bigint;v_items jsonb;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('audit','read') then raise exception 'No autorizado' using errcode='42501'; end if;
   select count(*) into v_total from erp_supply.order_events e join erp_supply.orders o on o.id=e.order_id where e.organization_id=v_org and not o.is_test and (p_entity_type is null or e.event_type=p_entity_type) and (p_search is null or lower(o.order_number||' '||coalesce(e.action_code,'')||' '||e.payload::text) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
@@ -2148,11 +2145,11 @@ do $$ declare r record; begin
 end $$;
 
 commit;
--- END 006_domain_services.sql
 
--- ============================================================================
--- BEGIN 007_health_check.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 007_health_check.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 007: operational health check and security audit.
 
@@ -2191,11 +2188,11 @@ revoke all on function public.erp_x_health_check() from public,anon,authenticate
 grant execute on function public.erp_x_health_check() to authenticated;
 
 commit;
--- END 007_health_check.sql
 
--- ============================================================================
--- BEGIN 008_enterprise_controls.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 008_enterprise_controls.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 008: enterprise stage gates, mandatory checklists, assignment pools and domain controls.
 
@@ -2396,7 +2393,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.name),'[]'::jsonb) from (
     select distinct p.id,p.display_name name,p.email,array_agg(distinct pr.role_code) roles
     from erp_supply.profiles p
@@ -2480,7 +2477,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('inventory','read') and not erp_supply.can_access_module('cutting','read') and not erp_supply.has_role('super_admin') then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.description,x.location,x.lot_number),'[]'::jsonb) from (
     select l.id,l.inventory_item_id "itemId",i.sku,i.reference,i.description,i.unit,l.lot_number "lotNumber",l.serial_number "serialNumber",l.location,l.quantity_available "available",l.quantity_reserved "reserved",l.quantity_blocked "blocked",l.expires_at "expiresAt"
@@ -2566,7 +2563,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_order erp_supply.orders%rowtype;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select * into v_order from erp_supply.orders where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
   if not found then raise exception 'Pedido no encontrado'; end if;
   return jsonb_build_object(
@@ -2624,11 +2621,11 @@ begin
 end $$;
 
 commit;
--- END 008_enterprise_controls.sql
 
--- ============================================================================
--- BEGIN 009_domain_hardening.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 009_domain_hardening.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 009: harden domain services and cross-organization access.
 
@@ -2740,7 +2737,7 @@ security definer
 set search_path=erp_supply,public,auth
 as $$
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_view_order(p_order_id) then raise exception 'Pedido no disponible' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(jsonb_build_object(
     'receiptNumber',r.receipt_number,'purchaseOrder',r.purchase_order,'supplier',r.supplier_name,'receivedAt',r.received_at,
@@ -2860,11 +2857,11 @@ do $$ declare r record; begin
 end $$;
 
 commit;
--- END 009_domain_hardening.sql
 
--- ============================================================================
--- BEGIN 010_identity_and_routing_bootstrap.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 010_identity_and_routing_bootstrap.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 010: reuse Supabase Auth identities and established logistics routing without importing legacy orders.
 
@@ -2951,11 +2948,11 @@ where o.code='EI'
   );
 
 commit;
--- END 010_identity_and_routing_bootstrap.sql
 
--- ============================================================================
--- BEGIN 011_engine_hardening.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 011_engine_hardening.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 011: transactional engine hardening and precise workflow audit.
 
@@ -3171,23 +3168,23 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if p_date_from is null or p_date_to is null or p_date_from>p_date_to then raise exception 'Rango de fechas inválido'; end if;
   return jsonb_build_object(
     'steps',(select coalesce(jsonb_agg(to_jsonb(x) order by x.sort_order),'[]'::jsonb) from (
       select s.code,s.name,s.sort_order,count(o.id) tasks,
-        round((avg(t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "avgBusinessHours",
-        round((avg(t.raw_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "avgElapsedHours",
-        round((percentile_cont(.5) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "medianBusinessHours",
-        round((percentile_cont(.9) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "p90BusinessHours",
-        round((avg(greatest(0,t.raw_seconds-t.business_seconds)) filter(where o.id is not null)/3600.0)::numeric,2) "avgWaitHours"
+        round((avg(t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "avgBusinessHours",
+        round((avg(t.raw_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "avgElapsedHours",
+        round((percentile_cont(.5) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "medianBusinessHours",
+        round((percentile_cont(.9) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "p90BusinessHours",
+        round((avg(greatest(0,t.raw_seconds-t.business_seconds)) filter (where o.id is not null)/3600.0)::numeric,2) "avgWaitHours"
       from erp_supply.workflow_steps s
       left join erp_supply.order_tasks t on t.step_code=s.code and t.completed_at::date between p_date_from and p_date_to
       left join erp_supply.orders o on o.id=t.order_id and o.organization_id=v_org and not o.is_test
       group by s.code,s.name,s.sort_order
     ) x),
     'throughput',(select coalesce(jsonb_agg(to_jsonb(x) order by x.day),'[]'::jsonb) from (
-      select d::date day,count(o.id) filter(where o.created_at::date=d::date) created,count(o.id) filter(where o.closed_at::date=d::date) closed
+      select d::date as "day", count(o.id) filter (where o.created_at::date = d::date) as "created", count(o.id) filter (where o.closed_at::date = d::date) as "closed"
       from generate_series(p_date_from,p_date_to,'1 day') d
       left join erp_supply.orders o on o.organization_id=v_org and not o.is_test and (o.created_at::date=d::date or o.closed_at::date=d::date)
       group by d
@@ -3204,11 +3201,11 @@ do $$ declare r record; begin
 end $$;
 
 commit;
--- END 011_engine_hardening.sql
 
--- ============================================================================
--- BEGIN 012_enterprise_health_and_release_gate.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 012_enterprise_health_and_release_gate.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 012: release-grade health audit for configuration, security, concurrency and operational integrity.
 
@@ -3455,11 +3452,11 @@ begin
 end $$;
 
 commit;
--- END 012_enterprise_health_and_release_gate.sql
 
--- ============================================================================
--- BEGIN 013_history_import_hardening.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 013_history_import_hardening.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 013: robust, resumable and auditable historical CSV import.
 
@@ -3616,11 +3613,11 @@ revoke all on function public.erp_x_import_history(text,jsonb,uuid) from public,
 grant execute on function public.erp_x_import_history(text,jsonb,uuid) to authenticated;
 
 commit;
--- END 013_history_import_hardening.sql
 
--- ============================================================================
--- BEGIN 014_qa_control_suite.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 014_qa_control_suite.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 014: cross-cutting QA suite for concurrency, gates, approvals, history and inventory.
 
@@ -3879,11 +3876,11 @@ do $$ declare r record; begin
 end $$;
 
 commit;
--- END 014_qa_control_suite.sql
 
--- ============================================================================
--- BEGIN 015_approval_lifecycle_hardening.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 015_approval_lifecycle_hardening.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 015: strict approval lifecycle, canonical approvers and safe execution.
 
@@ -4089,11 +4086,11 @@ grant execute on function public.erp_x_execute_action(uuid,text,jsonb,integer,te
 grant execute on function public.erp_x_decide_approval(uuid,text,text) to authenticated;
 
 commit;
--- END 015_approval_lifecycle_hardening.sql
 
--- ============================================================================
--- BEGIN 016_domain_audit_triggers.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 016_domain_audit_triggers.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 016: append-only audit coverage for every sensitive domain record.
 
@@ -4182,11 +4179,11 @@ begin
 end $$;
 
 commit;
--- END 016_domain_audit_triggers.sql
 
--- ============================================================================
--- BEGIN 017_input_contract_hardening.sql
--- ============================================================================
+-- ============================================================
+-- MIGRATION 017_input_contract_hardening.sql
+-- ============================================================
+
 -- ERP Supply Enterprise V10
 -- Migration 017: strict and friendly input contracts for creation, administration and credit.
 
@@ -4406,7 +4403,7 @@ declare
   v_roles jsonb:=coalesce(p_payload->'roles','[]'::jsonb);
   v_role text;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede administrar usuarios' using errcode='42501'; end if;
   if p_payload is null or jsonb_typeof(p_payload)<>'object' then raise exception 'Perfil inválido'; end if;
   if v_email is null or position('@' in v_email)<=1 then raise exception 'Correo inválido'; end if;
@@ -4494,5 +4491,3 @@ begin
 end $$;
 
 commit;
--- END 017_input_contract_hardening.sql
-

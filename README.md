@@ -1,4 +1,7 @@
-# EI ERP Supply Enterprise V10
+# EI ERP Supply Enterprise V10.0.4
+
+> Paquete completo con instalador SQL corregido V10.0.4.
+
 
 ERP transaccional independiente para controlar de extremo a extremo la operación de suministros y logística de Electroingeniería. Fue construido directamente para **Supabase PostgreSQL + Supabase Auth + Google Drive**, sin reutilizar el runtime heredado de V8/V9.
 
