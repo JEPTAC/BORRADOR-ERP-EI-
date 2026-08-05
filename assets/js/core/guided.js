@@ -1,18 +1,21 @@
 import {fmt,statusBadge,priorityBadge} from "./format.js";
 
 export function workspaceIntro({title,description,helper="Selecciona una opción para comenzar.",cards=""}){
-  return `<section class="guided-workspace"><div class="guided-workspace-head"><div><span class="guided-kicker">Espacio de trabajo guiado</span><h3>${fmt.escape(title)}</h3><p>${fmt.escape(description)}</p></div><div class="guided-helper-pill">${fmt.escape(helper)}</div></div>${cards}</section>`;
+  return `<section class="guided-workspace"><div class="guided-workspace-head"><div><span class="guided-kicker">Trabajo sencillo y guiado</span><h3>${fmt.escape(title)}</h3><p>${fmt.escape(description)}</p></div><div class="guided-helper-pill">${fmt.escape(helper)}</div></div>${cards}</section>`;
 }
 
 export function orderVisualCards(rows,{queue=false}={}){
   const css=queue?"queue-visual-grid":"order-visual-grid";
-  return `<div class="${css}">${rows.map(order=>`
-    <button type="button" class="order-visual-card ${queue?"queue-order-card":""} ${order.slaExceeded?"overdue":""}" data-order="${fmt.escape(order.id)}">
-      <div class="order-card-accent"></div>
-      <div class="order-card-head"><div><span class="order-card-number">${fmt.escape(order.orderNumber)}</span><span class="order-card-reference">${fmt.escape(order.externalReference||fmt.label(order.orderType))}</span></div>${priorityBadge(order.priority)}</div>
-      <div class="order-card-body"><p class="order-card-client">${fmt.escape(order.clientName)}</p><div class="order-card-route"><strong>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</strong><span>${fmt.escape(fmt.route(order.route))}</span></div><div class="order-card-meta"><div><label>Estado</label><strong>${fmt.escape(fmt.label(order.status))}</strong></div><div><label>Responsable</label><strong>${fmt.escape(order.assigneeName||"Sin asignar")}</strong></div><div><label>Tiempo en etapa</label><strong>${fmt.hours(order.ageBusinessSeconds)}</strong></div><div><label>Condición de pago</label><strong>${fmt.escape(fmt.payment(order.paymentCondition))}</strong></div></div></div>
-      <footer class="order-card-foot"><div>${statusBadge(order.status)}${order.slaExceeded?'<span class="order-card-alert">Atención</span>':""}</div><span class="order-card-cta">Abrir expediente <b>›</b></span></footer>
-    </button>`).join("")}</div>`;
+  return `<div class="${css} simple-order-grid">${rows.map(order=>{
+    const status=simpleStatus(order.status);
+    return `<button type="button" class="order-visual-card simple-order-card ${queue?"queue-order-card":""} ${order.slaExceeded?"overdue":""}" data-order="${fmt.escape(order.id)}">
+      <div class="simple-order-top"><div><span class="simple-order-number">${fmt.escape(order.orderNumber)}</span><span class="simple-order-client">${fmt.escape(order.clientName)}</span></div>${priorityBadge(order.priority)}</div>
+      <div class="simple-order-stage"><span>Etapa actual</span><strong>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</strong></div>
+      <div class="simple-order-status ${status.tone}"><span class="simple-status-dot"></span><div><small>Situación</small><strong>${fmt.escape(status.label)}</strong></div></div>
+      <div class="simple-order-facts"><span><small>Responsable</small><strong>${fmt.escape(order.assigneeName||"Sin asignar")}</strong></span><span><small>Tiempo</small><strong>${fmt.hours(order.ageBusinessSeconds)}</strong></span><span><small>Entrega</small><strong>${fmt.escape(fmt.route(order.route))}</strong></span></div>
+      <footer class="simple-order-foot"><span>${order.slaExceeded?"Requiere atención":"Listo para gestionar"}</span><strong>Gestionar pedido →</strong></footer>
+    </button>`;
+  }).join("")}</div>`;
 }
 
 export function viewSwitch(mode="cards"){
@@ -25,4 +28,15 @@ export function summaryItem(label,value){
 
 export function choice(name,value,title,description,selected=false){
   return `<label class="wizard-choice"><input type="radio" name="${fmt.escape(name)}" value="${fmt.escape(value)}" ${selected?"checked":""} required><span><strong>${fmt.escape(title)}</strong><small>${fmt.escape(description)}</small></span></label>`;
+}
+
+export function simpleStatus(value){
+  const code=String(value||"").toUpperCase();
+  if(["QUEUED","ASSIGNED"].includes(code))return {label:"Pendiente por iniciar",tone:"pending"};
+  if(code==="IN_PROGRESS")return {label:"En gestión",tone:"working"};
+  if(code==="WAITING")return {label:"En espera",tone:"waiting"};
+  if(code==="BLOCKED")return {label:"Con novedad",tone:"blocked"};
+  if(["CLOSED","COMPLETED"].includes(code))return {label:"Gestionado",tone:"done"};
+  if(code==="CANCELLED")return {label:"Cancelado",tone:"blocked"};
+  return {label:fmt.label(value),tone:"pending"};
 }

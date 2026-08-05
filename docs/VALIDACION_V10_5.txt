@@ -1,0 +1,13 @@
+VALIDACIÓN V10.5 · OPERACIÓN SIMPLE
+
+- 25 archivos JavaScript: sintaxis correcta.
+- Importación de orders.js: correcta.
+- Importación de queue.js: correcta.
+- 39 RPC consumidos y definidos.
+- 0 accesos directos a tablas.
+- Sin cambios SQL.
+- Expediente lateral retirado del flujo operativo.
+- Colas conservan Toda la cola / Sin asignar / Mis pedidos.
+- Estados simples: Pendiente / En gestión / En espera / Con novedad / Gestionado.
+
+La validación final de negocio debe ejecutarse en el Supabase real con usuarios de cada rol.

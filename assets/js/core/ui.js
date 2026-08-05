@@ -27,7 +27,9 @@ export function modal({title,body,confirmLabel="Guardar",cancelLabel="Cancelar",
   if(confirm)confirm.onclick=async()=>{
     try{
       confirm.disabled=true;
-      await onConfirm?.(root.querySelector(".modal"));
+      const dialog=root.querySelector(".modal");
+      if(!validatePanel(dialog)){confirm.disabled=false;return;}
+      await onConfirm?.(dialog);
       close();
     }catch(error){
       toast(error.message||String(error),"error",6500);
