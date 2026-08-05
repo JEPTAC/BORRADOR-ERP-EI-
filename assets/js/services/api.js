@@ -15,7 +15,14 @@ function friendly(message=""){
 }
 async function rpc(name,params={}){
   const {data,error}=await getSupabase().rpc(name,params);
-  if(error){const e=new Error(friendly(error.message));Object.assign(e,error);e.message=friendly(error.message);throw e}
+  if(error){
+    const technical=[error.message,error.details,error.hint].filter(Boolean).join(" · ");
+    console.error(`[ERP RPC] ${name}`,{params,error});
+    const e=new Error(friendly(technical||error.message));
+    Object.assign(e,error,{rpc:name,params,technicalMessage:technical});
+    e.message=friendly(technical||error.message);
+    throw e;
+  }
   return data;
 }
 
@@ -52,6 +59,8 @@ export const api={
   runQa:(cleanup=true)=>rpc("erp_x_run_qa_matrix",{p_cleanup:cleanup}),
   runQaControls:(cleanup=true)=>rpc("erp_x_run_qa_control_suite",{p_cleanup:cleanup}),
   qaDetail:id=>rpc("erp_x_qa_run_detail",{p_run_id:id}),
+  queueIntegrity:(apply=false)=>rpc("erp_x_queue_integrity",{p_apply:apply}),
+  runtimeDiagnostics:()=>rpc("erp_x_runtime_diagnostics"),
   creditList:(status=null,search="",page=1,pageSize=50)=>rpc("erp_x_credit_list",{p_status:status,p_search:search||null,p_page:page,p_page_size:pageSize}),
   creditCreate:payload=>rpc("erp_x_credit_create",{p_payload:payload}),
   creditTransition:(id,action,reason=null)=>rpc("erp_x_credit_transition",{p_request_id:id,p_action:action,p_reason:reason}),

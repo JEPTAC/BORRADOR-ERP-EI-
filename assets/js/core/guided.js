@@ -7,11 +7,12 @@ export function workspaceIntro({title,description,helper="Selecciona una opción
 export function orderVisualCards(rows,{queue=false}={}){
   const css=queue?"queue-visual-grid":"order-visual-grid";
   return `<div class="${css}">${rows.map(order=>`
-    <article class="order-visual-card ${queue?"queue-order-card":""}">
+    <button type="button" class="order-visual-card ${queue?"queue-order-card":""} ${order.slaExceeded?"overdue":""}" data-order="${fmt.escape(order.id)}">
+      <div class="order-card-accent"></div>
       <div class="order-card-head"><div><span class="order-card-number">${fmt.escape(order.orderNumber)}</span><span class="order-card-reference">${fmt.escape(order.externalReference||fmt.label(order.orderType))}</span></div>${priorityBadge(order.priority)}</div>
-      <div class="order-card-body"><p class="order-card-client">${fmt.escape(order.clientName)}</p><div class="order-card-route"><strong>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</strong><span>${fmt.escape(fmt.route(order.route))}</span></div><div class="order-card-meta"><div><label>Estado</label><strong>${fmt.escape(fmt.label(order.status))}</strong></div><div><label>Responsable</label><strong>${fmt.escape(order.assigneeName||"En cola")}</strong></div><div><label>Tiempo en etapa</label><strong>${fmt.hours(order.ageBusinessSeconds)}</strong></div><div><label>Condición de pago</label><strong>${fmt.escape(fmt.payment(order.paymentCondition))}</strong></div></div></div>
-      <footer class="order-card-foot"><div>${statusBadge(order.status)}</div><button class="btn btn-primary" data-order="${fmt.escape(order.id)}">Abrir pedido</button></footer>
-    </article>`).join("")}</div>`;
+      <div class="order-card-body"><p class="order-card-client">${fmt.escape(order.clientName)}</p><div class="order-card-route"><strong>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</strong><span>${fmt.escape(fmt.route(order.route))}</span></div><div class="order-card-meta"><div><label>Estado</label><strong>${fmt.escape(fmt.label(order.status))}</strong></div><div><label>Responsable</label><strong>${fmt.escape(order.assigneeName||"Sin asignar")}</strong></div><div><label>Tiempo en etapa</label><strong>${fmt.hours(order.ageBusinessSeconds)}</strong></div><div><label>Condición de pago</label><strong>${fmt.escape(fmt.payment(order.paymentCondition))}</strong></div></div></div>
+      <footer class="order-card-foot"><div>${statusBadge(order.status)}${order.slaExceeded?'<span class="order-card-alert">Atención</span>':""}</div><span class="order-card-cta">Abrir expediente <b>›</b></span></footer>
+    </button>`).join("")}</div>`;
 }
 
 export function viewSwitch(mode="cards"){

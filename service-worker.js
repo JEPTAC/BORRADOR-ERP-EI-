@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-3-guiado-20260805";
+const CACHE="erp-electroingenieria-v10-4-correccion-raiz-20260805";
 const ASSETS=[
   "./",
   "./index.html",

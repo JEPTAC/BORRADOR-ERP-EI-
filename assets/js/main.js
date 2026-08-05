@@ -32,7 +32,7 @@ async function bootAuthenticated(){
       try{
         if(queueModules[moduleId])await renderQueue(root,{moduleId,steps:queueModules[moduleId],params:route.params});
         else await (routes[moduleId]||renderDashboard)(root,{moduleId,params:route.params});
-      }catch(e){root.innerHTML=`<div class="card card-pad"><h3>No fue posible cargar el módulo</h3><p class="danger">${e.message}</p></div>`;toast(e.message,"error")}
+      }catch(e){console.error("[ERP MODULE]",moduleId,e);root.innerHTML=`<div class="card card-pad module-error"><h3>No fue posible cargar el módulo</h3><p class="danger">${e.message}</p><button class="btn btn-primary" id="retry-module">Reintentar</button></div>`;root.querySelector("#retry-module")?.addEventListener("click",()=>location.reload());toast(e.message,"error",8000)}
     });
   }catch(e){renderLogin(e.message);bindLogin()}
 }
