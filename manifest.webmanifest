@@ -1,0 +1,9 @@
+{
+  "name":"EI ERP Supply Enterprise",
+  "short_name":"ERP Supply",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#071226",
+  "theme_color":"#071226",
+  "description":"Control integral de pedidos, suministros, inventario y logística."
+}

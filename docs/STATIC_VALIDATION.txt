@@ -1,0 +1,26 @@
+ERP SUPPLY ENTERPRISE V10 · VALIDACIÓN ESTÁTICA
+Fecha: 2026-08-05
+
+VALIDACIÓN ESTÁTICA CORRECTA
+- 23 archivos JavaScript revisados.
+- 17 migraciones incluidas.
+- 37 RPC nativos definidos y 37 consumidos por el frontend.
+- No se detectaron accesos directos a tablas desde el navegador.
+
+SINTAXIS JAVASCRIPT
+Correcta.
+
+PRUEBA DE SERVICIO ESTÁTICO
+200 /
+200 /index.html
+200 /404.html
+200 /assets/css/app.css
+200 /assets/js/main.js
+200 /assets/js/services/api.js
+200 /assets/js/modules/orders.js
+200 /manifest.webmanifest
+200 /templates/historical_orders.csv
+
+ALCANCE DE ESTA VALIDACIÓN
+- Valida archivos, sintaxis, imports, rutas, RPC declarados/consumidos y ausencia de adaptadores heredados.
+- No sustituye la instalación en Supabase ni la ejecución real de las 202 verificaciones QA.
