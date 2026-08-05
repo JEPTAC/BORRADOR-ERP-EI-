@@ -1,0 +1,9 @@
+{
+  "product": "EI ERP Nova",
+  "version": "9.0.0",
+  "build": "2026-08-05.1",
+  "architecture": "Supabase Native + Google Drive",
+  "requires_node": false,
+  "firebase_runtime": false,
+  "legacy_adapter": false
+}
