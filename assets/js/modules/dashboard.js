@@ -1,32 +1,47 @@
 import {api} from "../services/api.js";
 import {fmt,statusBadge} from "../core/format.js";
-import {empty} from "../core/ui.js";
+import {empty,actionCards,guide} from "../core/ui.js";
+import {workspaceIntro} from "../core/guided.js";
 import {navigate} from "../core/router.js";
+import {state,can} from "../core/state.js";
 
 export async function renderDashboard(root){
-  const data=await api.dashboard();const k=data.kpis||{};const queues=data.queues||[];const recent=data.recent||[];
+  const data=await api.dashboard();
+  const k=data.kpis||{};
+  const queues=data.queues||[];
+  const recent=data.recent||[];
+  const cards=[];
+  if(can("sales","canCreate")||can("orders","canCreate"))cards.push({id:"guide-new-order",title:"Crear un pedido",description:"El asistente te pedirá solo la información necesaria, paso a paso.",icon:"＋",tone:"accent"});
+  if(state.modules.some(m=>["cartera","caja","purchasing","receiving","picking","cutting","billing","shipping"].includes(m.code)&&m.canRead))cards.push({id:"guide-my-work",title:"Ver mis tareas",description:"Abre los pedidos asignados a tu usuario y continúa la etapa correspondiente.",icon:"✓",tone:"primary"});
+  if(can("approvals","canRead"))cards.push({id:"guide-approvals",title:"Revisar decisiones",description:"Consulta solicitudes pendientes y registra la decisión con su justificación.",icon:"!",tone:"warning"});
+  if(can("orders","canRead"))cards.push({id:"guide-orders",title:"Buscar un pedido",description:"Encuentra rápidamente un pedido por número, cliente, etapa o estado.",icon:"⌕"});
+  if(can("qa","canRead"))cards.push({id:"guide-qa",title:"Validar el ERP",description:"Ejecuta las pruebas automáticas antes de habilitar nuevos cambios.",icon:"▶",tone:"success"});
+
   root.innerHTML=`
-    <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div><div class="page-actions"><button class="btn btn-primary" id="new-order">＋ Nuevo pedido</button><button class="btn btn-ghost" id="go-qa">Abrir pruebas automáticas</button></div></section>
+    <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div></section>
+    ${workspaceIntro({title:`Hola, ${state.profile?.name?.split(" ")[0]||"bienvenido"}`,description:"Aquí encuentras las opciones principales disponibles para tu rol. Selecciona una tarjeta y el ERP te guiará.",cards:actionCards(cards)})}
     <section class="grid grid-kpi">
       ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",k.pendingApprovals,"Solicitudes por revisar")}
     </section>
-    <div style="height:18px"></div>
+    <div class="section-gap"></div>
     <section class="card"><header class="card-head"><h3>Carga de trabajo por etapa</h3><span class="muted">Actualizado ${fmt.date(data.generatedAt)}</span></header><div class="card-body"><div class="queue-grid">${queues.map(queueCard).join("")}</div></div></section>
-    <div style="height:18px"></div>
+    <div class="section-gap"></div>
     <section class="grid grid-2">
-      <article class="card"><header class="card-head"><h3>Pedidos actualizados recientemente</h3><button class="btn btn-ghost" id="all-orders">Ver todos los pedidos</button></header><div class="card-body">${recent.length?recentTable(recent):empty()}</div></article>
-      <article class="card"><header class="card-head"><h3>Controles que protegen la operación</h3></header><div class="card-body"><div class="timeline">
-        ${principle("Una tarea activa por pedido","Evita movimientos duplicados y estados incompatibles.")}
-        ${principle("Una sesión activa por operario","La toma de tiempos no se duplica entre procesos.")}
-        ${principle("Control de cambios simultáneos","Impide sobrescribir el trabajo realizado por otra persona.")}
-        ${principle("Registro de cada decisión","Las acciones quedan trazadas y no se procesan dos veces.")}
-      </div></div></article>
+      <article class="card"><header class="card-head"><h3>Pedidos actualizados recientemente</h3><button class="btn btn-ghost" id="all-orders">Ver todos</button></header><div class="card-body">${recent.length?recentTable(recent):empty()}</div></article>
+      <article class="card"><header class="card-head"><h3>Cómo trabajar en el ERP</h3></header><div class="card-body"><div class="timeline">${principle("Selecciona una tarea","Entra al módulo correspondiente y elige visualmente el pedido que vas a gestionar.")}${principle("Sigue el asistente","El ERP te mostrará qué información registrar y validará cada paso.")}${principle("Revisa antes de confirmar","La última pantalla resume lo que se guardará para evitar errores.")}${principle("Consulta la trazabilidad","Cada decisión, tiempo y documento queda dentro del expediente del pedido.")}</div><button class="btn btn-ghost" id="dashboard-help">Ver guía rápida</button></div></article>
     </section>`;
-  root.querySelector("#new-order").onclick=()=>navigate("sales",{create:"1"});root.querySelector("#go-qa").onclick=()=>navigate("qa");root.querySelector("#all-orders").onclick=()=>navigate("orders");
-  root.querySelectorAll("[data-step]").forEach(x=>x.onclick=()=>navigate("orders",{step:x.dataset.step}));
-  root.querySelectorAll("[data-order]").forEach(x=>x.onclick=()=>window.dispatchEvent(new CustomEvent("erp:open-order",{detail:x.dataset.order})));
+
+  root.querySelector("#guide-new-order")?.addEventListener("click",()=>navigate("sales",{create:"1"}));
+  root.querySelector("#guide-my-work")?.addEventListener("click",()=>navigate("orders",{assignment:"MINE",history:"0"}));
+  root.querySelector("#guide-approvals")?.addEventListener("click",()=>navigate("approvals"));
+  root.querySelector("#guide-orders")?.addEventListener("click",()=>navigate("orders"));
+  root.querySelector("#guide-qa")?.addEventListener("click",()=>navigate("qa"));
+  root.querySelector("#all-orders").onclick=()=>navigate("orders");
+  root.querySelector("#dashboard-help").onclick=()=>guide({title:"Guía rápida del ERP",description:"La operación sigue el mismo patrón en todos los módulos.",items:[{title:"Elige una opción",detail:"Las tarjetas grandes muestran lo que puedes hacer según tu rol."},{title:"Selecciona un pedido",detail:"Las tarjetas de pedidos muestran cliente, etapa, prioridad y responsable."},{title:"Completa pasos cortos",detail:"Los formularios extensos se dividieron en pasos sencillos."},{title:"Confirma la información",detail:"Antes de guardar verás un resumen completo."}]});
+  root.querySelectorAll("[data-step]").forEach(element=>element.onclick=()=>navigate("orders",{step:element.dataset.step,history:"0"}));
+  root.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>window.dispatchEvent(new CustomEvent("erp:open-order",{detail:element.dataset.order})));
 }
 function kpi(label,value,foot,tone=""){return `<article class="card kpi"><div class="kpi-label">${label}</div><div class="kpi-value ${tone}">${fmt.number(value)}</div><div class="kpi-foot">${foot}</div></article>`}
-function queueCard(q){const total=Number(q.quantity||0),overdue=Number(q.overdue||0);return `<article class="queue-card" data-step="${q.stepCode}"><div class="queue-top"><span class="queue-name">${fmt.escape(fmt.step(q.name||q.stepCode))}</span>${overdue?`<span class="badge badge-red"><span class="badge-dot"></span>${overdue} fuera de plazo</span>`:""}</div><div class="queue-number">${fmt.number(total)}</div><div class="progress"><span style="width:${Math.min(100,total?((Number(q.inProgress||0)/total)*100):0)}%"></span></div><div class="queue-meta"><span>${fmt.number(q.inProgress)} en proceso</span><span>${fmt.number(q.waiting)} en espera</span></div></article>`}
-function recentTable(rows){return `<div class="table-wrap"><table style="min-width:650px"><thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa actual</th><th>Estado</th></tr></thead><tbody>${rows.map(r=>`<tr><td><span class="table-link" data-order="${r.id}">${fmt.escape(r.orderNumber)}</span><div class="cell-sub">${fmt.escape(fmt.label(r.orderType))}</div></td><td>${fmt.escape(r.clientName)}</td><td>${fmt.escape(fmt.step(r.currentStep))}</td><td>${statusBadge(r.status)}</td></tr>`).join("")}</tbody></table></div>`}
+function queueCard(q){const total=Number(q.quantity||0),overdue=Number(q.overdue||0);return `<article class="queue-card" data-step="${q.stepCode}"><div class="queue-top"><span class="queue-name">${fmt.escape(fmt.step(q.name||q.stepCode))}</span>${overdue?`<span class="badge badge-red"><span class="badge-dot"></span>${overdue} fuera de plazo</span>`:""}</div><div class="queue-number">${fmt.number(total)}</div><div class="progress"><span style="width:${Math.min(100,total?Number(q.inProgress||0)/total*100:0)}%"></span></div><div class="queue-meta"><span>${fmt.number(q.inProgress)} en proceso</span><span>${fmt.number(q.waiting)} en espera</span></div></article>`}
+function recentTable(rows){return `<div class="table-wrap"><table style="min-width:650px"><thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa actual</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr><td><span class="table-link" data-order="${row.id}">${fmt.escape(row.orderNumber)}</span><div class="cell-sub">${fmt.escape(fmt.label(row.orderType))}</div></td><td>${fmt.escape(row.clientName)}</td><td>${fmt.escape(fmt.step(row.currentStep))}</td><td>${statusBadge(row.status)}</td></tr>`).join("")}</tbody></table></div>`}
 function principle(title,text){return `<div class="timeline-item"><h4>${title}</h4><p>${text}</p></div>`}

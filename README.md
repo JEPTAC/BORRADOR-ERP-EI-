@@ -1,10 +1,11 @@
-# Actualización visual V10.2
+# Actualización funcional V10.3
 
-Reemplaza los archivos respetando exactamente la estructura de carpetas.
+Reemplaza la interacción anterior por módulos reconstruidos con:
 
-No requiere ejecutar SQL y no modifica datos, usuarios, permisos, RPC ni reglas de negocio.
+- Tarjetas grandes según el módulo y los permisos del rol.
+- Selección visual de pedidos.
+- Asistentes paso a paso.
+- Validación por etapa.
+- Resumen antes de confirmar.
 
-Después de subir los archivos:
-1. Abre el ERP.
-2. Presiona Ctrl + Shift + R.
-3. Si conserva el diseño anterior, elimina o actualiza el Service Worker desde las herramientas del navegador.
+No requiere ejecutar SQL. Respeta las rutas del archivo RUTAS_A_REEMPLAZAR.txt.

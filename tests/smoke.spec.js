@@ -22,7 +22,7 @@ test("authenticated shell, modules and native API",async({page})=>{
   await login(page);
 
   const modules=[
-    ["Control de pedidos","Bandeja integral de pedidos"],
+    ["Control de pedidos","Control integral de pedidos"],
     ["Inventario","Inventario"],
     ["Aprobaciones","Aprobaciones"],
     ["Flujo y tiempos","Flujo y tiempos de la operación"],
@@ -41,6 +41,7 @@ test("integral 202 verification can be triggered by super admin",async({page})=>
   test.skip(process.env.RUN_INTEGRAL_QA!=="true"||!process.env.ERP_TEST_EMAIL||!process.env.ERP_TEST_PASSWORD,"Set RUN_INTEGRAL_QA=true and credentials");
   await login(page);
   await page.getByRole("button",{name:"Pruebas automáticas"}).click();
-  await page.getByRole("button",{name:"Ejecutar validación completa"}).click();
+  await page.getByRole("button",{name:"Validación integral"}).click();
+  await page.getByRole("button",{name:"Iniciar pruebas"}).click();
   await expect(page.getByText(/Validación completa aprobada: 202 pruebas sin fallos/i)).toBeVisible({timeout:25*60*1000});
 });

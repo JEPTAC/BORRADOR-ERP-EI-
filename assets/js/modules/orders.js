@@ -1,45 +1,61 @@
 import {api} from "../services/api.js";
 import {state,can} from "../core/state.js";
 import {fmt,statusBadge,priorityBadge} from "../core/format.js";
-import {modal,toast,serializeForm,paginationHtml,empty,loading} from "../core/ui.js";
+import {wizard,modal,toast,serializeForm,paginationHtml,empty,loading,actionCards,guide} from "../core/ui.js";
+import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice} from "../core/guided.js";
 import {uploadOrderFile} from "../services/drive.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
+let currentView="cards";
 
 export async function renderOrders(root,{moduleId="orders",params={}}={}){
   currentList.root=root;
   currentList.filters={...currentList.filters,...params,page:Number(params.page||1)};
+  if(params.history==="0")currentList.filters.includeHistory=false;
+  const canCreate=can("orders","canCreate")||can("sales","canCreate");
+  const cards=[
+    ...(canCreate?[{id:"create-order",title:"Crear pedido",description:"Registra el pedido en cinco pasos cortos y revisa la información antes de enviarlo.",icon:"＋",tone:"accent"}]:[]),
+    {id:"show-all-orders",title:"Todos los pedidos",description:"Consulta operación activa e historial con filtros sencillos.",icon:"▦",tone:"primary"},
+    {id:"show-my-orders",title:"Mis pedidos asignados",description:"Muestra únicamente los pedidos que requieren tu intervención.",icon:"✓",tone:"success"},
+    {id:"show-blocked-orders",title:"Pedidos con atención",description:"Encuentra pedidos bloqueados o en espera para revisar su situación.",icon:"!",tone:"warning"},
+    {id:"orders-help",title:"Cómo usar este módulo",description:"Consulta una guía corta para buscar, abrir y gestionar pedidos.",icon:"?"}
+  ];
   root.innerHTML=`
-    <section class="page-head">
-      <div>
-        <h2>${moduleId==="sales"?"Registro y control comercial":"Bandeja integral de pedidos"}</h2>
-        <p>Consulta responsables, tiempos, estado, controles y expediente completo de cada pedido.</p>
-      </div>
-      <div class="page-actions">
-        ${can("orders","canCreate")||can("sales","canCreate")?'<button class="btn btn-primary" id="create-order">＋ Crear pedido</button>':""}
-        <button class="btn btn-ghost" id="export-list">Exportar página</button>
-      </div>
-    </section>
+    <section class="page-head"><div><h2>${moduleId==="sales"?"Registro y control comercial":"Control integral de pedidos"}</h2><p>Selecciona una opción, encuentra el pedido visualmente y sigue el asistente de la operación.</p></div><div class="page-actions"><button class="btn btn-ghost" id="export-list">Exportar resultados</button></div></section>
+    ${workspaceIntro({title:moduleId==="sales"?"¿Qué necesitas registrar?":"¿Qué deseas hacer con los pedidos?",description:"Las tarjetas muestran las opciones habilitadas para tu usuario. Ningún formulario extenso se presenta de una sola vez.",cards:actionCards(cards)})}
     <section class="card card-pad">
       <div class="toolbar">
-        <input class="control search-wide" id="f-search" placeholder="Pedido, cliente o referencia" value="${fmt.escape(currentList.filters.search||"")}">
+        <input class="control search-wide" id="f-search" placeholder="Buscar pedido, cliente o referencia" value="${fmt.escape(currentList.filters.search||"")}">
         ${select("f-step","Etapa",state.catalogs.steps,"code","name",currentList.filters.step)}
         ${simpleSelect("f-status","Estado",["QUEUED","ASSIGNED","IN_PROGRESS","WAITING","BLOCKED","CLOSED","CANCELLED"],currentList.filters.status)}
         ${select("f-type","Tipo",state.catalogs.orderTypes,"code","name",currentList.filters.orderType)}
-        ${select("f-route","Ruta",state.catalogs.deliveryRoutes,"code","name",currentList.filters.route)}
+        ${select("f-route","Modalidad",state.catalogs.deliveryRoutes,"code","name",currentList.filters.route)}
         ${simpleSelect("f-assignment","Asignación",["ALL","MINE","UNASSIGNED"],currentList.filters.assignment)}
         <label class="filter-pill"><input type="checkbox" id="f-history" ${currentList.filters.includeHistory!==false?"checked":""}> Incluir historial</label>
-        <button class="btn btn-primary" id="apply-filters">Filtrar</button>
+        <button class="btn btn-primary" id="apply-filters">Buscar</button>
+        ${viewSwitch(currentView)}
       </div>
+      <div class="selection-hint"><strong>Selecciona un pedido</strong><span>Las tarjetas resumen etapa, estado, responsable, tiempo y prioridad antes de abrir el expediente.</span></div>
       <div id="orders-result">${loading("Cargando pedidos…")}</div>
     </section>`;
 
   root.querySelector("#create-order")?.addEventListener("click",openCreateOrder);
+  root.querySelector("#show-all-orders").onclick=()=>{setFilters({assignment:"ALL",status:"",includeHistory:true});loadOrders(1)};
+  root.querySelector("#show-my-orders").onclick=()=>{setFilters({assignment:"MINE",status:"",includeHistory:false});loadOrders(1)};
+  root.querySelector("#show-blocked-orders").onclick=()=>{setFilters({assignment:"ALL",status:"BLOCKED",includeHistory:false});loadOrders(1)};
+  root.querySelector("#orders-help").onclick=()=>guide({title:"Cómo gestionar pedidos",description:"El módulo está organizado para reducir errores.",items:[{title:"Selecciona una opción",detail:"Usa las tarjetas grandes para crear, buscar o revisar pedidos con atención."},{title:"Filtra solo cuando sea necesario",detail:"Puedes buscar por número, cliente, etapa, tipo, ruta o responsable."},{title:"Abre una tarjeta",detail:"Verás el expediente completo y las acciones permitidas para tu rol."},{title:"Sigue el paso a paso",detail:"Cada acción valida los datos y muestra un resumen antes de guardar."}]});
   root.querySelector("#apply-filters").onclick=()=>loadOrders(1);
-  root.querySelector("#f-search").onkeydown=e=>{if(e.key==="Enter")loadOrders(1)};
+  root.querySelector("#f-search").onkeydown=event=>{if(event.key==="Enter")loadOrders(1)};
   root.querySelector("#export-list").onclick=exportCurrent;
+  root.querySelectorAll("[data-view]").forEach(button=>button.onclick=()=>{currentView=button.dataset.view;root.querySelectorAll("[data-view]").forEach(item=>item.classList.toggle("active",item===button));renderOrderResults()});
   if(moduleId==="sales"&&params.create==="1")openCreateOrder();
   await loadOrders(currentList.filters.page);
+}
+
+function setFilters(values){
+  if("assignment" in values)currentList.root.querySelector("#f-assignment").value=values.assignment;
+  if("status" in values)currentList.root.querySelector("#f-status").value=values.status;
+  if("includeHistory" in values)currentList.root.querySelector("#f-history").checked=values.includeHistory;
 }
 
 async function loadOrders(page=1){
@@ -47,118 +63,70 @@ async function loadOrders(page=1){
   if(!root?.isConnected)return;
   const result=root.querySelector("#orders-result");
   result.innerHTML=loading("Consultando la operación…");
-  const filters={
-    search:root.querySelector("#f-search").value.trim(),
-    step:root.querySelector("#f-step").value,
-    status:root.querySelector("#f-status").value,
-    orderType:root.querySelector("#f-type").value,
-    route:root.querySelector("#f-route").value,
-    assignment:root.querySelector("#f-assignment").value,
-    includeHistory:root.querySelector("#f-history").checked,
-    page,
-    pageSize:50
-  };
+  const filters={search:root.querySelector("#f-search").value.trim(),step:root.querySelector("#f-step").value,status:root.querySelector("#f-status").value,orderType:root.querySelector("#f-type").value,route:root.querySelector("#f-route").value,assignment:root.querySelector("#f-assignment").value,includeHistory:root.querySelector("#f-history").checked,page,pageSize:50};
   currentList.filters=filters;
-  const data=await api.listOrders(filters);
-  currentList.data=data;
-  result.innerHTML=data.items.length?`${ordersTable(data.items)}${paginationHtml(data.pagination)}`:empty("No se encontraron pedidos","Ajuste los filtros o cree un pedido nuevo.");
-  result.querySelectorAll("[data-order]").forEach(x=>x.onclick=()=>openOrder(x.dataset.order));
-  result.querySelectorAll("[data-page]").forEach(x=>x.onclick=()=>loadOrders(Number(x.dataset.page)));
+  currentList.data=await api.listOrders(filters);
+  renderOrderResults();
+}
+
+function renderOrderResults(){
+  const root=currentList.root;
+  const result=root?.querySelector("#orders-result");
+  const data=currentList.data;
+  if(!result||!data)return;
+  const content=data.items.length?(currentView==="cards"?orderVisualCards(data.items):ordersTable(data.items)):empty("No se encontraron pedidos","Ajusta los filtros o crea un pedido nuevo.");
+  result.innerHTML=`${content}${data.items.length?paginationHtml(data.pagination):""}`;
+  result.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
+  result.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>loadOrders(Number(element.dataset.page)));
 }
 
 function ordersTable(rows){
-  return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Tipo y pago</th><th>Etapa</th><th>Estado</th><th>Responsable</th><th>Tiempo en etapa</th><th>Prioridad</th><th>Actualizado</th></tr></thead><tbody>${rows.map(o=>`<tr>
-    <td><span class="table-link" data-order="${o.id}">${fmt.escape(o.orderNumber)}</span><div class="cell-sub">${fmt.escape(o.externalReference||"")}</div></td>
-    <td><div class="cell-main">${fmt.escape(o.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.route(o.route))}</div></td>
-    <td><span class="badge badge-blue">${fmt.escape(fmt.label(o.orderType))}</span><div class="cell-sub">${fmt.escape(fmt.payment(o.paymentCondition))}</div></td>
-    <td><div class="cell-main">${fmt.escape(fmt.step(o.stepName||o.currentStep))}</div><div class="cell-sub">${fmt.escape(fmt.step(o.currentStep))}</div></td>
-    <td>${statusBadge(o.status)}${o.slaExceeded?'<div class="cell-sub danger">Plazo excedido</div>':""}</td>
-    <td>${fmt.escape(o.assigneeName||"En cola")}<div class="cell-sub">${fmt.escape(fmt.role(o.roleCode||""))}</div></td>
-    <td>${fmt.hours(o.ageBusinessSeconds)}</td>
-    <td>${priorityBadge(o.priority)}</td>
-    <td>${fmt.date(o.updatedAt)}</td>
-  </tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Tipo y pago</th><th>Etapa</th><th>Estado</th><th>Responsable</th><th>Tiempo</th><th>Prioridad</th><th>Actualizado</th></tr></thead><tbody>${rows.map(order=>`<tr><td><span class="table-link" data-order="${order.id}">${fmt.escape(order.orderNumber)}</span><div class="cell-sub">${fmt.escape(order.externalReference||"")}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.route(order.route))}</div></td><td><span class="badge badge-blue">${fmt.escape(fmt.label(order.orderType))}</span><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td><div class="cell-main">${fmt.escape(fmt.step(order.stepName||order.currentStep))}</div></td><td>${statusBadge(order.status)}${order.slaExceeded?'<div class="cell-sub danger">Plazo excedido</div>':""}</td><td>${fmt.escape(order.assigneeName||"En cola")}<div class="cell-sub">${fmt.escape(fmt.role(order.roleCode||""))}</div></td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${priorityBadge(order.priority)}</td><td>${fmt.date(order.updatedAt)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function select(id,label,items=[],valueKey="code",labelKey="name",selected=""){
-  return `<select class="control" id="${id}"><option value="">${label}: todos</option>${items.map(x=>`<option value="${fmt.escape(x[valueKey])}" ${x[valueKey]===selected?"selected":""}>${fmt.escape(x[labelKey])}</option>`).join("")}</select>`;
+  return `<select class="control" id="${id}"><option value="">${label}: todos</option>${items.map(item=>`<option value="${fmt.escape(item[valueKey])}" ${item[valueKey]===selected?"selected":""}>${fmt.escape(item[labelKey])}</option>`).join("")}</select>`;
 }
 function simpleSelect(id,label,items,selected=""){
-  return `<select class="control" id="${id}"><option value="">${label}: todos</option>${items.map(x=>`<option value="${x}" ${x===selected?"selected":""}>${fmt.escape(fmt.label(x))}</option>`).join("")}</select>`;
+  return `<select class="control" id="${id}"><option value="">${label}: todos</option>${items.map(item=>`<option value="${item}" ${item===selected?"selected":""}>${fmt.escape(fmt.label(item))}</option>`).join("")}</select>`;
 }
 function formSelect(name,items,valueKey=null,labelKey=null,selected=null){
-  return `<select class="control" name="${name}" required>${items.map(x=>{const value=valueKey?x[valueKey]:x;const label=labelKey?x[labelKey]:fmt.label(x);return `<option value="${fmt.escape(value)}" ${value===(selected??"MEDIUM")?"selected":""}>${fmt.escape(label)}</option>`}).join("")}</select>`;
+  return `<select class="control" name="${name}" required>${items.map(item=>{const value=valueKey?item[valueKey]:item;const label=labelKey?item[labelKey]:fmt.label(item);return `<option value="${fmt.escape(value)}" ${value===(selected??"MEDIUM")?"selected":""}>${fmt.escape(label)}</option>`}).join("")}</select>`;
 }
 
 function openCreateOrder(){
-  const types=state.catalogs.orderTypes||[];
-  const payments=state.catalogs.paymentConditions||[];
-  const routes=state.catalogs.deliveryRoutes||[];
-  const m=modal({
-    title:"Crear pedido",
-    confirmLabel:"Crear y enrutar",
-    body:`<form id="order-form"><div class="form-grid">
-      <div class="field"><label>Número de pedido</label><input class="control" name="orderNumber" required></div>
-      <div class="field"><label>Referencia externa</label><input class="control" name="externalReference"></div>
-      <div class="field"><label>Tipo de pedido</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div>
-      <div class="field"><label>Condición de pago</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div>
-      <div class="field"><label>Modalidad de entrega</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div>
-      <div class="field"><label>Prioridad</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div>
-      <div class="field"><label>Cliente</label><input class="control" name="clientName" required></div>
-      <div class="field"><label>NIT / documento</label><input class="control" name="clientDocument"></div>
-      <div class="field"><label>Ciudad</label><input class="control" name="clientCity"></div>
-      <div class="field"><label>Dirección</label><input class="control" name="clientAddress"></div>
-      <div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div>
-      <div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div>
-      <div class="field"><label><input type="checkbox" name="requiresCut"> Requiere corte</label></div>
-      <div class="field"><label><input type="checkbox" name="requiresPurchase"> Requiere compra</label></div>
-      <div class="full">
-        <div class="card-head" style="padding-left:0"><h3>Ítems del pedido</h3><button class="btn btn-ghost" type="button" id="add-item">＋ Agregar línea</button></div>
-        <div class="items-editor" id="items-editor"></div>
-      </div>
-    </div></form>`,
-    onConfirm:async()=>{
-      const form=document.querySelector("#order-form");
-      if(!form.reportValidity())throw new Error("Complete los campos obligatorios.");
-      const data=serializeForm(form);
-      const items=[...document.querySelectorAll(".item-row")].map((row,i)=>({
-        lineNumber:i+1,
-        sku:row.querySelector('[name="sku"]').value.trim()||null,
-        reference:row.querySelector('[name="reference"]').value.trim()||null,
-        description:row.querySelector('[name="description"]').value.trim(),
-        quantity:Number(row.querySelector('[name="quantity"]').value),
-        unit:row.querySelector('[name="unit"]').value.trim()||"UND",
-        warehouseLocation:row.querySelector('[name="location"]').value.trim()||null,
-        requiresCut:row.querySelector('[name="itemCut"]').checked,
-        requestedCutLength:Number(row.querySelector('[name="cutLength"]').value||0)||null
-      }));
-      if(!items.length||items.some(i=>!i.description||!Number.isFinite(i.quantity)||i.quantity<=0))throw new Error("Registre al menos un ítem válido.");
+  const types=state.catalogs.orderTypes||[],payments=state.catalogs.paymentConditions||[],routes=state.catalogs.deliveryRoutes||[];
+  const assistant=wizard({
+    title:"Crear un nuevo pedido",
+    subtitle:"Registra la información comercial sin saltarte ningún dato importante.",
+    finishLabel:"Crear y enviar al flujo",
+    steps:[
+      {title:"Identificación",description:"Indica cómo reconocer el pedido y su prioridad.",content:`<div class="form-grid"><div class="field"><label>Número de pedido *</label><input class="control" name="orderNumber" placeholder="Ejemplo: PVC-5001" required></div><div class="field"><label>Referencia externa</label><input class="control" name="externalReference" placeholder="OC, cotización o referencia"></div><div class="field"><label>Tipo de pedido *</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div><div class="field"><label>Prioridad *</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div></div><div class="wizard-tip">Usa el número oficial del pedido. La prioridad alta, urgente o crítica debe corresponder a una necesidad real.</div>`},
+      {title:"Cliente",description:"Completa los datos que permiten identificar y contactar al cliente.",content:`<div class="form-grid"><div class="field full"><label>Nombre o razón social *</label><input class="control" name="clientName" required></div><div class="field"><label>NIT o documento</label><input class="control" name="clientDocument"></div><div class="field"><label>Ciudad</label><input class="control" name="clientCity"></div><div class="field"><label>Dirección</label><input class="control" name="clientAddress"></div><div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div></div>`},
+      {title:"Condiciones",description:"Define pago, entrega y necesidades especiales del pedido.",content:`<div class="form-grid"><div class="field"><label>Condición de pago *</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div><div class="field"><label>Modalidad de entrega *</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div><div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div></div><div class="wizard-choice-grid"><label class="wizard-choice"><input type="checkbox" name="requiresCut"><span><strong>Requiere corte</strong><small>Actívalo cuando uno o más materiales deban pasar por corte.</small></span></label><label class="wizard-choice"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>Actívalo cuando el pedido dependa de una orden de compra.</small></span></label></div>`},
+      {title:"Materiales",description:"Agrega cada línea del pedido. Puedes registrar tantas como necesites.",content:`<div class="items-wizard-head"><div><strong>Ítems del pedido</strong><p>La descripción y la cantidad son obligatorias.</p></div><button class="btn btn-ghost" type="button" id="add-item">＋ Agregar material</button></div><div class="items-editor" id="items-editor"></div>`,validate:({root})=>{const rows=[...root.querySelectorAll(".item-row")];if(!rows.length)throw new Error("Agrega al menos un material.");for(const row of rows){const description=row.querySelector('[name="description"]').value.trim(),quantity=Number(row.querySelector('[name="quantity"]').value);if(!description||!Number.isFinite(quantity)||quantity<=0)throw new Error("Cada material debe tener descripción y cantidad mayor que cero.")}return true}},
+      {title:"Revisión",description:"Comprueba la información antes de crear el pedido.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>¿Todo está correcto?</strong><p>Al confirmar, el ERP creará el pedido y lo enviará automáticamente a la primera etapa que corresponda.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Prioridad",fmt.label(d.priority)),summaryItem("Materiales",String(count)),summaryItem("Corte / compra",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`)].join("")}}
+    ],
+    onFinish:async({root,form,data})=>{
+      const items=[...root.querySelectorAll(".item-row")].map((row,index)=>({lineNumber:index+1,sku:row.querySelector('[name="sku"]').value.trim()||null,reference:row.querySelector('[name="reference"]').value.trim()||null,description:row.querySelector('[name="description"]').value.trim(),quantity:Number(row.querySelector('[name="quantity"]').value),unit:row.querySelector('[name="unit"]').value.trim()||"UND",warehouseLocation:row.querySelector('[name="location"]').value.trim()||null,requiresCut:row.querySelector('[name="itemCut"]').checked,requestedCutLength:Number(row.querySelector('[name="cutLength"]').value||0)||null}));
       const result=await api.createOrder({...data,items});
-      toast(`Pedido ${result.orderNumber} creado y enviado a ${fmt.step(result.currentStep)}.`);
+      toast(`Pedido ${result.orderNumber} creado y enviado a ${fmt.step(result.currentStep)}.`,"success",6500);
       await loadOrders(1);
-      setTimeout(()=>openOrder(result.orderId),150);
+      setTimeout(()=>openOrder(result.orderId),180);
     }
   });
-  const editor=m.root.querySelector("#items-editor");
+  const editor=assistant.root.querySelector("#items-editor");
   const add=()=>{
     const row=document.createElement("div");
-    row.className="item-row item-row-enterprise";
-    row.innerHTML=`
-      <input class="control" name="sku" placeholder="SKU">
-      <input class="control" name="reference" placeholder="Referencia">
-      <input class="control" name="description" placeholder="Descripción" required>
-      <input class="control" name="quantity" type="number" min="0.0001" step="any" placeholder="Cantidad" required>
-      <input class="control" name="unit" value="UND" placeholder="Unidad">
-      <input class="control" name="location" placeholder="Ubicación sugerida">
-      <label class="filter-pill"><input type="checkbox" name="itemCut"> Corte</label>
-      <input class="control" name="cutLength" type="number" step="any" placeholder="Longitud">
-      <button type="button" class="icon-btn" title="Eliminar línea">×</button>`;
-    row.querySelector("button").onclick=()=>row.remove();
-    editor.append(row);
+    row.className="item-row item-row-guided";
+    row.innerHTML=`<div class="item-row-number"></div><input class="control" name="sku" placeholder="SKU"><input class="control" name="reference" placeholder="Referencia"><input class="control item-description" name="description" placeholder="Descripción del material" required><input class="control" name="quantity" type="number" min="0.0001" step="any" placeholder="Cantidad" required><input class="control" name="unit" value="UND" placeholder="Unidad"><input class="control" name="location" placeholder="Ubicación sugerida"><label class="filter-pill"><input type="checkbox" name="itemCut"> Requiere corte</label><input class="control" name="cutLength" type="number" step="any" placeholder="Longitud"><button type="button" class="icon-btn" title="Eliminar línea">×</button>`;
+    row.querySelector("button").onclick=()=>{row.remove();renumberItems(editor)};
+    editor.append(row);renumberItems(editor);
   };
-  m.root.querySelector("#add-item").onclick=add;
+  assistant.root.querySelector("#add-item").onclick=add;
   add();
 }
+function renumberItems(editor){[...editor.querySelectorAll(".item-row-number")].forEach((element,index)=>element.textContent=String(index+1))}
 
 export async function openOrder(orderId){
   document.querySelector(".drawer-overlay")?.remove();
@@ -185,50 +153,27 @@ async function refreshOrder(orderId,drawer,overlay){
   renderOrderDrawer(drawer,overlay,data);
 }
 
+
 function renderOrderDrawer(drawer,overlay,data){
-  const o=data.order;
+  const order=data.order;
   const actions=data.actions?.actions||[];
   const domainActions=data.actions?.domainActions||[];
+  const allActions=[...actions.map(action=>({code:action.code,label:action.label,description:actionDescription(action.code),tone:action.kind==="danger"?"warning":action.kind==="success"?"success":action.kind==="primary"?"accent":"primary",domain:false})),...domainActions.map(action=>({code:action.code,label:action.label,description:domainDescription(action.code),tone:"",domain:true}))];
   drawer.innerHTML=`
-    <header class="drawer-head">
-      <div class="drawer-title"><h2>${fmt.escape(o.order_number)}</h2><div>${statusBadge(o.status)} ${priorityBadge(o.priority)} <span class="muted">${fmt.escape(o.client_name)}</span></div></div>
-      <button class="icon-btn" id="close-drawer">×</button>
-    </header>
+    <header class="drawer-head"><div class="drawer-title"><h2>${fmt.escape(order.order_number)}</h2><div>${statusBadge(order.status)} ${priorityBadge(order.priority)} <span class="muted">${fmt.escape(order.client_name)}</span></div></div><button class="icon-btn" id="close-drawer">×</button></header>
     <div class="drawer-content">
-      ${(actions.length||domainActions.length)?`<section class="action-panel">
-        <div class="cell-sub" style="margin-bottom:9px">ACCIONES DISPONIBLES · VERSIÓN ${o.version}</div>
-        <div class="action-row">
-          ${actions.map(a=>actionButton(a)).join("")}
-          ${domainActions.map(a=>`<button class="btn btn-ghost" data-domain="${a.code}">${fmt.escape(a.label)}</button>`).join("")}
-        </div>
-      </section>`:""}
-      <div class="detail-tabs">
-        <button class="detail-tab active" data-tab="summary">Resumen</button>
-        <button class="detail-tab" data-tab="items">Ítems (${data.items.length})</button>
-        <button class="detail-tab" data-tab="controls">Controles</button>
-        <button class="detail-tab" data-tab="checklist">Lista de control (${(data.checklist||[]).filter(x=>x.completed).length}/${(data.checklist||[]).length})</button>
-        <button class="detail-tab" data-tab="timeline">Trazabilidad (${data.events.length})</button>
-        <button class="detail-tab" data-tab="times">Tiempos</button>
-        <button class="detail-tab" data-tab="docs">Documentos (${data.files.length})</button>
-        <button class="detail-tab" data-tab="comments">Comentarios (${data.comments.length})</button>
-        <button class="detail-tab" data-tab="approvals">Aprobaciones (${data.approvals.length})</button>
-      </div>
+      ${allActions.length?`<section class="operation-guide"><strong>¿Qué necesitas hacer con este pedido?</strong><p>Selecciona una opción. El ERP te explicará el proceso y pedirá únicamente la información necesaria.</p></section><section class="guided-order-actions">${allActions.map(action=>`<button class="guided-order-action ${action.domain?"domain":""} ${action.tone}" data-${action.domain?"domain":"action"}="${action.code}"><strong>${fmt.escape(action.label)}</strong><small>${fmt.escape(action.description)}</small></button>`).join("")}</section><div class="section-gap-small"></div>`:""}
+      <div class="detail-tabs"><button class="detail-tab active" data-tab="summary">Resumen</button><button class="detail-tab" data-tab="items">Ítems (${data.items.length})</button><button class="detail-tab" data-tab="controls">Controles</button><button class="detail-tab" data-tab="checklist">Lista de control (${(data.checklist||[]).filter(item=>item.completed).length}/${(data.checklist||[]).length})</button><button class="detail-tab" data-tab="timeline">Trazabilidad (${data.events.length})</button><button class="detail-tab" data-tab="times">Tiempos</button><button class="detail-tab" data-tab="docs">Documentos (${data.files.length})</button><button class="detail-tab" data-tab="comments">Comentarios (${data.comments.length})</button><button class="detail-tab" data-tab="approvals">Aprobaciones (${data.approvals.length})</button></div>
       <div id="detail-panel">${summaryTab(data)}</div>
     </div>`;
-
   drawer.querySelector("#close-drawer").onclick=()=>closeDrawer(drawer,overlay);
-  drawer.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{
-    drawer.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("active",x===b));
-    drawer.querySelector("#detail-panel").innerHTML=tabContent(b.dataset.tab,data);
-  });
-  drawer.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>handleAction(data,b.dataset.action,drawer,overlay));
-  drawer.querySelectorAll("[data-domain]").forEach(b=>b.onclick=()=>handleDomain(data,b.dataset.domain,drawer,overlay));
+  drawer.querySelectorAll("[data-tab]").forEach(button=>button.onclick=()=>{drawer.querySelectorAll("[data-tab]").forEach(item=>item.classList.toggle("active",item===button));drawer.querySelector("#detail-panel").innerHTML=tabContent(button.dataset.tab,data)});
+  drawer.querySelectorAll("[data-action]").forEach(button=>button.onclick=()=>handleAction(data,button.dataset.action,drawer,overlay));
+  drawer.querySelectorAll("[data-domain]").forEach(button=>button.onclick=()=>handleDomain(data,button.dataset.domain,drawer,overlay));
 }
+function actionDescription(code){return ({CLAIM:"Toma el pedido y déjalo asignado a tu usuario.",START:"Inicia la etapa y activa la toma de tiempo.",RESUME:"Continúa una etapa que estaba en espera.",COMPLETE:"Finaliza la etapa después de verificar sus controles.",WAIT:"Pausa la etapa indicando el motivo.",BLOCK:"Registra un impedimento que requiere intervención.",NO_DELIVERY:"Registra el intento fallido y su causa.",COMMENT:"Agrega una observación al expediente.",REQUEST_APPROVAL:"Solicita una decisión formal antes de continuar.",ASSIGN:"Selecciona un responsable habilitado.",REPROGRAM:"Define una nueva fecha para la entrega."})[code]||"Continúa la operación siguiendo el paso a paso."}
+function domainDescription(code){return ({FILE:"Adjunta un soporte o evidencia al expediente.",CHECKLIST:"Completa los controles obligatorios de la etapa.",FINANCIAL:"Registra la validación de Cartera o Caja.",PURCHASE:"Registra la orden de compra y el proveedor.",RECEIPT:"Registra mercancía recibida, calidad, lote y ubicación.",CUT:"Registra medidas, consumo y desperdicio del corte.",INVOICE:"Registra la factura y sus datos principales.",DELIVERY:"Registra programación, guía y resultado de la entrega.",STICKERS:"Imprime las etiquetas de la mercancía recibida."})[code]||"Registra el control requerido para esta etapa."}
 
-function actionButton(a){
-  const css=a.kind==="success"?"btn-success":a.kind==="danger"?"btn-danger":a.kind==="warning"?"btn-warning":a.kind==="primary"?"btn-primary":"btn-ghost";
-  return `<button class="btn ${css}" data-action="${a.code}">${fmt.escape(a.label)}</button>`;
-}
 function info(label,value){return `<div class="info-box"><label>${fmt.escape(label)}</label><strong>${fmt.escape(value??"—")}</strong></div>`}
 function summaryTab(d){
   const o=d.order;
@@ -296,107 +241,92 @@ function approvalsTab(rows){return rows.length?`<div class="table-wrap"><table s
 
 async function handleAction(data,action,drawer,overlay){
   const order=data.order;
-  if(["CLAIM","START","RESUME"].includes(action))return execute(order,action,{detail:`${action} desde consola operativa`},drawer,overlay);
-  if(action==="COMPLETE")return promptAction(order,action,"Finalizar etapa","Resultado y observaciones","Finalizar",drawer,overlay);
-  if(["WAIT","BLOCK","NO_DELIVERY"].includes(action))return promptAction(order,action,action==="NO_DELIVERY"?"Registrar no entrega":"Registrar espera o bloqueo","Motivo obligatorio",action==="NO_DELIVERY"?"Registrar":"Guardar",drawer,overlay,"reason");
-  if(action==="COMMENT")return promptAction(order,action,"Agregar comentario","Escriba el comentario","Publicar",drawer,overlay,"body");
+  if(["CLAIM","START","RESUME"].includes(action))return simpleActionWizard(order,action,drawer,overlay);
+  if(action==="COMPLETE")return textActionWizard(order,action,"Finalizar etapa","Describe el resultado y cualquier novedad antes de cerrar esta etapa.","Resultado y observaciones","Finalizar etapa",drawer,overlay,"detail");
+  if(["WAIT","BLOCK","NO_DELIVERY"].includes(action)){const title=action==="NO_DELIVERY"?"Registrar no entrega":action==="BLOCK"?"Bloquear pedido":"Poner etapa en espera";return textActionWizard(order,action,title,"Explica claramente la causa para que el siguiente responsable pueda actuar.","Motivo obligatorio",action==="NO_DELIVERY"?"Registrar no entrega":"Guardar estado",drawer,overlay,"reason")}
+  if(action==="COMMENT")return commentWizard(order,drawer,overlay);
   if(action==="REQUEST_APPROVAL")return approvalRequest(order,drawer,overlay);
-  if(action==="ASSIGN")return assignmentModal(data,drawer,overlay);
-  if(action==="REPROGRAM")return reprogramModal(order,drawer,overlay);
+  if(action==="ASSIGN")return assignmentWizard(data,drawer,overlay);
+  if(action==="REPROGRAM")return reprogramWizard(order,drawer,overlay);
 }
-function promptAction(order,action,title,label,confirm,drawer,overlay,key="detail"){
-  modal({title,confirmLabel:confirm,body:`<form id="action-form"><div class="field"><label>${label}</label><textarea class="control" name="value" required></textarea></div></form>`,onConfirm:async()=>{const value=document.querySelector('#action-form [name="value"]').value.trim();if(!value)throw new Error("Debe registrar el detalle.");await execute(order,action,{[key]:value},drawer,overlay)}});
+function simpleActionWizard(order,action,drawer,overlay){
+  const label=fmt.action(action),explanation=action==="CLAIM"?"El pedido quedará asignado a tu usuario.":action==="START"?"Se iniciará la etapa y comenzará la toma de tiempo productivo.":"Se reanudará la etapa y continuará la toma de tiempo.";
+  wizard({title:label,subtitle:"Confirma que estás listo para continuar.",finishLabel:label,steps:[{title:"Antes de continuar",description:"Verifica qué sucederá con el pedido.",content:`<div class="wizard-confirm-box"><strong>${fmt.escape(label)}</strong><p>${fmt.escape(explanation)}</p></div><div class="field"><label>Observación opcional</label><textarea class="control" name="detail" placeholder="Registra una aclaración si es necesaria"></textarea></div>`},{title:"Confirmación",description:"Comprueba el pedido y la acción.",content:`<div class="wizard-summary">${summaryItem("Pedido",order.order_number)}${summaryItem("Cliente",order.client_name)}${summaryItem("Etapa",fmt.step(order.current_step_code))}${summaryItem("Acción",label)}</div>`}],onFinish:async({data})=>execute(order,action,{detail:data.detail||`${label} desde asistente guiado`},drawer,overlay)});
 }
-async function assignmentModal(data,drawer,overlay){
+function textActionWizard(order,action,title,description,label,finishLabel,drawer,overlay,key){
+  wizard({title,subtitle:description,finishLabel,steps:[{title:"Registrar motivo",description:"La información quedará dentro de la trazabilidad del pedido.",content:`<div class="field"><label>${fmt.escape(label)} *</label><textarea class="control" name="value" required placeholder="Escribe información clara y suficiente"></textarea></div><div class="wizard-tip">Evita mensajes genéricos. Indica qué ocurrió, qué falta y quién debería intervenir.</div>`},{title:"Revisar",description:"Confirma antes de guardar.",content:`<div class="wizard-summary">${summaryItem("Pedido",order.order_number)}${summaryItem("Cliente",order.client_name)}${summaryItem("Etapa",fmt.step(order.current_step_code))}${summaryItem("Acción",fmt.action(action))}</div><div class="review-text" data-review-text></div>`,onEnter:({root,data})=>{root.querySelector("[data-review-text]").innerHTML=`<strong>Información que se registrará</strong><p>${fmt.escape(data.value||"")}</p>`}}],onFinish:async({data})=>execute(order,action,{[key]:data.value.trim()},drawer,overlay)});
+}
+function commentWizard(order,drawer,overlay){
+  wizard({title:"Agregar comentario",subtitle:"Registra una novedad o información útil en el expediente.",finishLabel:"Publicar comentario",steps:[{title:"Tipo de comentario",description:"Selecciona cómo debe clasificarse.",content:`<div class="wizard-choice-grid">${choice("commentType","COMMENT","Comentario","Información general del pedido.",true)}${choice("commentType","NOVELTY","Novedad","Situación que requiere seguimiento.")}${choice("commentType","SUPERVISION","Supervisión","Orientación o decisión de un responsable.")}</div><div class="field"><label>Visibilidad</label><select class="control" name="visibility"><option value="INTERNAL">Interno del ERP</option><option value="PUBLIC">General</option></select></div>`},{title:"Escribir comentario",description:"Sé claro y evita abreviaturas difíciles de entender.",content:`<div class="field"><label>Comentario *</label><textarea class="control" name="body" required placeholder="Describe la situación, la acción realizada o lo que debe revisarse"></textarea></div>`},{title:"Revisar",description:"El comentario quedará asociado al pedido.",content:`<div class="wizard-summary">${summaryItem("Pedido",order.order_number)}${summaryItem("Cliente",order.client_name)}<div class="wizard-summary-item"><label>Tipo</label><strong data-comment-type></strong></div></div><div class="review-text" data-comment-review></div>`,onEnter:({root,data})=>{root.querySelector("[data-comment-type]").textContent=fmt.label(data.commentType);root.querySelector("[data-comment-review]").innerHTML=`<strong>Comentario</strong><p>${fmt.escape(data.body||"")}</p>`}}],onFinish:async({data})=>execute(order,"COMMENT",{body:data.body.trim(),commentType:data.commentType,visibility:data.visibility},drawer,overlay)});
+}
+async function assignmentWizard(data,drawer,overlay){
   const pool=await api.assignmentPool(data.order.current_step_code);
-  modal({title:"Asignar responsable",confirmLabel:"Asignar",body:`<form id="assign-form"><div class="field"><label>Responsable habilitado</label><select class="control" name="profileId" required><option value="">Seleccione…</option>${pool.map(p=>`<option value="${p.id}">${fmt.escape(p.name)} · ${fmt.escape((p.roles||[]).map(r=>fmt.role(r)).join(", "))}</option>`).join("")}</select></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#assign-form"));await execute(data.order,"ASSIGN",d,drawer,overlay)}});
+  if(!pool.length)return toast("No hay responsables habilitados para esta etapa.","error");
+  wizard({title:"Asignar responsable",subtitle:"Selecciona a la persona que continuará la etapa actual.",finishLabel:"Confirmar asignación",steps:[{title:"Seleccionar responsable",description:"Solo aparecen usuarios habilitados para esta etapa.",content:`<div class="assignee-grid">${pool.map((person,index)=>`<label class="assignee-card"><input type="radio" name="profileId" value="${person.id}" ${index===0?"checked":""} required><span><strong>${fmt.escape(person.name)}</strong><small>${fmt.escape((person.roles||[]).map(role=>fmt.role(role)).join(" · "))}</small></span></label>`).join("")}</div>`},{title:"Confirmar",description:"Verifica la etapa y la persona seleccionada.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}${summaryItem("Etapa",fmt.step(data.order.current_step_code))}<div class="wizard-summary-item"><label>Responsable</label><strong data-assignee-name></strong></div></div>`,onEnter:({root,data:formData})=>{const person=pool.find(item=>item.id===formData.profileId);root.querySelector("[data-assignee-name]").textContent=person?.name||"—"}}],onFinish:async({data:formData})=>execute(data.order,"ASSIGN",{profileId:formData.profileId},drawer,overlay)});
 }
-function reprogramModal(order,drawer,overlay){
-  modal({title:"Reprogramar entrega",confirmLabel:"Reprogramar",body:`<form id="reprogram-form"><div class="field"><label>Nueva fecha y hora</label><input class="control" name="scheduledAt" type="datetime-local" required></div><div class="field"><label>Observación</label><textarea class="control" name="detail"></textarea></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#reprogram-form"));d.scheduledAt=new Date(d.scheduledAt).toISOString();await execute(order,"REPROGRAM",d,drawer,overlay)}});
+function reprogramWizard(order,drawer,overlay){
+  wizard({title:"Reprogramar entrega",subtitle:"Define la nueva fecha y explica el cambio.",finishLabel:"Reprogramar entrega",steps:[{title:"Nueva programación",description:"Selecciona una fecha y hora realista.",content:`<div class="field"><label>Nueva fecha y hora *</label><input class="control" name="scheduledAt" type="datetime-local" required></div><div class="field"><label>Motivo *</label><textarea class="control" name="detail" required></textarea></div>`},{title:"Confirmar",description:"Comprueba la nueva programación.",content:`<div class="wizard-summary">${summaryItem("Pedido",order.order_number)}<div class="wizard-summary-item"><label>Nueva fecha</label><strong data-new-date></strong></div></div><div class="review-text" data-reprogram-reason></div>`,onEnter:({root,data})=>{root.querySelector("[data-new-date]").textContent=data.scheduledAt?fmt.date(new Date(data.scheduledAt).toISOString()):"—";root.querySelector("[data-reprogram-reason]").innerHTML=`<strong>Motivo</strong><p>${fmt.escape(data.detail||"")}</p>`}}],onFinish:async({data})=>execute(order,"REPROGRAM",{scheduledAt:new Date(data.scheduledAt).toISOString(),detail:data.detail.trim()},drawer,overlay)});
 }
 function approvalRequest(order,drawer,overlay){
-  const routes=state.catalogs.deliveryRoutes||[];
-  const priorities=["LOW","MEDIUM","HIGH","URGENT","CRITICAL"];
-  const m=modal({
-    title:"Solicitar aprobación",
-    confirmLabel:"Enviar solicitud",
-    body:`<form id="approval-form"><div class="form-grid">
-      <div class="field full"><label>Tipo de solicitud</label><select class="control" name="requestType"><option value="CANCELLATION">Cancelación</option><option value="PRIORITY">Cambio de prioridad</option><option value="ROUTE_CHANGE">Cambio de modalidad de entrega</option><option value="REOPEN">Reapertura</option><option value="STOCK_EXCEPTION">Excepción de inventario</option><option value="FLOW_EXCEPTION">Excepción del flujo</option><option value="PAYMENT_EXCEPTION">Excepción financiera</option><option value="DATA_CORRECTION">Corrección de información</option></select></div>
-      <div class="field full" data-extra="priority" hidden><label>Nueva prioridad</label><select class="control" name="priority">${priorities.map(x=>`<option value="${x}">${fmt.escape(fmt.label(x))}</option>`).join("")}</select></div>
-      <div class="field full" data-extra="route" hidden><label>Nueva modalidad de entrega</label><select class="control" name="route"><option value="">Seleccione…</option>${routes.map(x=>`<option value="${fmt.escape(x.code)}">${fmt.escape(x.name||fmt.route(x.code))}</option>`).join("")}</select></div>
-      <div class="field full"><label>Motivo de la solicitud</label><textarea class="control" name="reason" placeholder="Explique claramente la razón y el resultado esperado" required></textarea></div>
-    </div></form>`,
-    onConfirm:async()=>{
-      const form=document.querySelector("#approval-form");
-      if(!form.reportValidity())throw new Error("Complete la información solicitada.");
-      const d=serializeForm(form),payload={requestType:d.requestType,reason:d.reason};
-      if(d.requestType==="PRIORITY")payload.priority=d.priority;
-      if(d.requestType==="ROUTE_CHANGE"){
-        if(!d.route)throw new Error("Seleccione la nueva modalidad de entrega.");
-        payload.route=d.route;
-      }
-      await execute(order,"REQUEST_APPROVAL",payload,drawer,overlay);
-    }
-  });
-  const type=m.root.querySelector('[name="requestType"]');
-  const refresh=()=>{
-    m.root.querySelector('[data-extra="priority"]').hidden=type.value!=="PRIORITY";
-    m.root.querySelector('[data-extra="route"]').hidden=type.value!=="ROUTE_CHANGE";
-  };
-  type.addEventListener("change",refresh);refresh();
+  const routes=state.catalogs.deliveryRoutes||[],priorities=["LOW","MEDIUM","HIGH","URGENT","CRITICAL"];
+  const assistant=wizard({title:"Solicitar aprobación",subtitle:"Selecciona el tipo de decisión y explica por qué es necesaria.",finishLabel:"Enviar solicitud",steps:[{title:"Tipo de solicitud",description:"Escoge la decisión formal que necesita el pedido.",content:`<div class="wizard-choice-grid">${choice("requestType","CANCELLATION","Cancelación","Cancelar el pedido de forma controlada.",true)}${choice("requestType","PRIORITY","Cambiar prioridad","Modificar el nivel de urgencia.")}${choice("requestType","ROUTE_CHANGE","Cambiar entrega","Modificar la modalidad de entrega.")}${choice("requestType","REOPEN","Reabrir pedido","Reactivar un pedido ya cerrado.")}${choice("requestType","STOCK_EXCEPTION","Excepción de inventario","Autorizar una condición especial de disponibilidad.")}${choice("requestType","FLOW_EXCEPTION","Excepción del flujo","Autorizar una desviación controlada.")}${choice("requestType","PAYMENT_EXCEPTION","Excepción financiera","Autorizar una situación especial de pago.")}${choice("requestType","DATA_CORRECTION","Corregir información","Solicitar corrección controlada de datos.")}</div>`},{title:"Información requerida",description:"Completa únicamente los datos correspondientes al tipo elegido.",content:`<div class="field" data-approval-priority hidden><label>Nueva prioridad</label><select class="control" name="priority">${priorities.map(item=>`<option value="${item}">${fmt.escape(fmt.label(item))}</option>`).join("")}</select></div><div class="field" data-approval-route hidden><label>Nueva modalidad</label><select class="control" name="route"><option value="">Seleccione…</option>${routes.map(item=>`<option value="${fmt.escape(item.code)}">${fmt.escape(item.name||fmt.route(item.code))}</option>`).join("")}</select></div><div class="field"><label>Motivo de la solicitud *</label><textarea class="control" name="reason" required placeholder="Explique la situación, el riesgo y el resultado esperado"></textarea></div>`,onEnter:({root,data})=>{root.querySelector("[data-approval-priority]").hidden=data.requestType!=="PRIORITY";root.querySelector("[data-approval-route]").hidden=data.requestType!=="ROUTE_CHANGE"},validate:({data})=>{if(data.requestType==="ROUTE_CHANGE"&&!data.route)throw new Error("Selecciona la nueva modalidad de entrega.");return true}},{title:"Revisar",description:"La solicitud quedará pendiente de decisión.",content:`<div class="wizard-summary">${summaryItem("Pedido",order.order_number)}<div class="wizard-summary-item"><label>Tipo</label><strong data-request-type></strong></div><div class="wizard-summary-item"><label>Cambio solicitado</label><strong data-request-change></strong></div></div><div class="review-text" data-request-reason></div>`,onEnter:({root,data})=>{root.querySelector("[data-request-type]").textContent=fmt.request(data.requestType);root.querySelector("[data-request-change]").textContent=data.requestType==="PRIORITY"?fmt.label(data.priority):data.requestType==="ROUTE_CHANGE"?fmt.route(data.route):"No aplica";root.querySelector("[data-request-reason]").innerHTML=`<strong>Motivo</strong><p>${fmt.escape(data.reason||"")}</p>`}}],onFinish:async({data})=>{const payload={requestType:data.requestType,reason:data.reason.trim()};if(data.requestType==="PRIORITY")payload.priority=data.priority;if(data.requestType==="ROUTE_CHANGE")payload.route=data.route;await execute(order,"REQUEST_APPROVAL",payload,drawer,overlay)}});
+  const refresh=()=>{const type=assistant.form.querySelector('[name="requestType"]:checked')?.value;assistant.root.querySelector("[data-approval-priority]").hidden=type!=="PRIORITY";assistant.root.querySelector("[data-approval-route]").hidden=type!=="ROUTE_CHANGE"};
+  assistant.root.querySelectorAll('[name="requestType"]').forEach(input=>input.addEventListener("change",refresh));refresh();
 }
 async function execute(order,action,payload,drawer,overlay){
   const result=await api.executeAction(order.id,action,payload,order.version);
-  toast(`${fmt.action(action)}: operación registrada correctamente.`);
+  toast(`${fmt.action(action)}: operación registrada correctamente.`,"success",6000);
   if(currentList.root?.isConnected)await loadOrders(currentList.filters.page);
   await refreshOrder(result.orderId||order.id,drawer,overlay);
 }
 
 async function handleDomain(data,type,drawer,overlay){
-  if(type==="FILE")return fileModal(data,drawer,overlay);
-  if(type==="CHECKLIST")return checklistModal(data,drawer,overlay);
-  if(type==="FINANCIAL")return financialModal(data,drawer,overlay);
-  if(type==="PURCHASE")return purchaseModal(data,drawer,overlay);
-  if(type==="RECEIPT")return receiptModal(data,drawer,overlay);
-  if(type==="CUT")return cutModal(data,drawer,overlay);
-  if(type==="INVOICE")return invoiceModal(data,drawer,overlay);
-  if(type==="DELIVERY")return deliveryModal(data,drawer,overlay);
+  if(type==="FILE")return fileWizard(data,drawer,overlay);
+  if(type==="CHECKLIST")return checklistWizard(data,drawer,overlay);
+  if(type==="FINANCIAL")return financialWizard(data,drawer,overlay);
+  if(type==="PURCHASE")return purchaseWizard(data,drawer,overlay);
+  if(type==="RECEIPT")return receiptWizard(data,drawer,overlay);
+  if(type==="CUT")return cutWizard(data,drawer,overlay);
+  if(type==="INVOICE")return invoiceWizard(data,drawer,overlay);
+  if(type==="DELIVERY")return deliveryWizard(data,drawer,overlay);
   if(type==="STICKERS")return printStickers(data.order.id);
 }
-function afterDomain(data,drawer,overlay,message){toast(message);return refreshOrder(data.order.id,drawer,overlay)}
-function fileModal(data,drawer,overlay){
-  modal({title:"Subir archivo al expediente",confirmLabel:"Subir archivo",body:`<form id="file-form"><div class="field"><label>Categoría</label><select class="control" name="category"><option value="EVIDENCE">Evidencia general</option><option value="INVOICE">Factura</option><option value="PAYMENT">Soporte de pago</option><option value="PURCHASE_ORDER">Orden de compra</option><option value="RECEIPT">Recepción</option><option value="DELIVERY">Entrega</option><option value="QUALITY">Calidad</option></select></div><div class="field"><label>Archivo</label><input class="control" name="file" type="file" required></div></form>`,onConfirm:async()=>{const form=document.querySelector("#file-form");const file=form.file.files[0];if(!file)throw new Error("Seleccione un archivo.");await uploadOrderFile(data.order.id,file,form.category.value,data.actions?.taskId||null,data.order.order_number||data.order.orderNumber);await afterDomain(data,drawer,overlay,"Archivo registrado en el expediente.")}});
+function afterDomain(data,drawer,overlay,message){toast(message,"success",6000);return refreshOrder(data.order.id,drawer,overlay)}
+function fileWizard(data,drawer,overlay){
+  wizard({title:"Adjuntar documento",subtitle:"Clasifica el archivo para que quede organizado dentro del expediente.",finishLabel:"Subir archivo",steps:[{title:"Clasificar",description:"Selecciona la categoría del documento.",content:`<div class="wizard-choice-grid">${choice("category","EVIDENCE","Evidencia general","Fotos, actas u otros soportes.",true)}${choice("category","INVOICE","Factura","Documento de facturación.")}${choice("category","PAYMENT","Soporte de pago","Comprobante o validación financiera.")}${choice("category","PURCHASE_ORDER","Orden de compra","Documento del proveedor.")}${choice("category","RECEIPT","Recepción","Soporte del ingreso de mercancía.")}${choice("category","DELIVERY","Entrega","Prueba de despacho o recibido.")}${choice("category","QUALITY","Calidad","Inspección o novedad de calidad.")}</div>`},{title:"Seleccionar archivo",description:"Escoge el documento desde tu equipo.",content:`<div class="field"><label>Archivo *</label><input class="control" name="file" type="file" required></div><div class="wizard-tip">Verifica que el documento sea legible y corresponda al pedido.</div>`},{title:"Confirmar",description:"El archivo quedará asociado al expediente.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}<div class="wizard-summary-item"><label>Categoría</label><strong data-file-category></strong></div><div class="wizard-summary-item"><label>Archivo</label><strong data-file-name></strong></div></div>`,onEnter:({root,form,data:formData})=>{root.querySelector("[data-file-category]").textContent=fmt.label(formData.category);root.querySelector("[data-file-name]").textContent=form.querySelector('[name="file"]').files[0]?.name||"—"}}],onFinish:async({form,data:formData})=>{const file=form.querySelector('[name="file"]').files[0];if(!file)throw new Error("Selecciona un archivo.");await uploadOrderFile(data.order.id,file,formData.category,data.actions?.taskId||null,data.order.order_number);await afterDomain(data,drawer,overlay,"Archivo registrado en el expediente.")}});
 }
-function checklistModal(data,drawer,overlay){
-  const task=data.tasks.find(t=>["QUEUED","ASSIGNED","IN_PROGRESS","WAITING","BLOCKED"].includes(t.status));
-  const rows=(data.checklist||[]).filter(x=>x.task_id===task?.id);
+function checklistWizard(data,drawer,overlay){
+  const task=data.tasks.find(item=>["QUEUED","ASSIGNED","IN_PROGRESS","WAITING","BLOCKED"].includes(item.status));
+  const rows=(data.checklist||[]).filter(item=>item.task_id===task?.id);
   if(!task||!rows.length)return toast("La etapa no tiene una lista de verificación activa.","error");
-  modal({title:`Checklist · ${task.step_code}`,confirmLabel:"Guardar controles",body:`<form id="checklist-form"><div class="checklist-list">${rows.map(x=>`<div class="checklist-edit"><label class="checklist-item ${x.completed?"done":""}"><input type="checkbox" name="done_${x.item_code}" ${x.completed?"checked":""}><span><strong>${fmt.escape(x.label)}</strong><small>${x.required?"Obligatorio":"Opcional"}</small></span></label><input class="control" name="note_${x.item_code}" value="${fmt.escape(x.note||"")}" placeholder="Observación"></div>`).join("")}</div></form>`,onConfirm:async()=>{const form=document.querySelector("#checklist-form");for(const x of rows){const completed=form.querySelector(`[name="done_${CSS.escape(x.item_code)}"]`).checked;const note=form.querySelector(`[name="note_${CSS.escape(x.item_code)}"]`).value.trim()||null;if(completed!==x.completed||note!==(x.note||null))await api.updateChecklist(task.id,x.item_code,completed,note)}await afterDomain(data,drawer,overlay,"Checklist actualizado.")}});
+  wizard({title:`Lista de control · ${fmt.step(task.step_code)}`,subtitle:"Completa cada control antes de finalizar la etapa.",finishLabel:"Guardar controles",steps:[{title:"Verificar controles",description:"Marca únicamente lo que ya fue comprobado.",content:`<div class="checklist-list">${rows.map(item=>`<div class="checklist-edit"><label class="checklist-item ${item.completed?"done":""}"><input type="checkbox" name="done_${item.item_code}" ${item.completed?"checked":""}><span><strong>${fmt.escape(item.label)}</strong><small>${item.required?"Obligatorio":"Opcional"}</small></span></label><input class="control" name="note_${item.item_code}" value="${fmt.escape(item.note||"")}" placeholder="Observación si aplica"></div>`).join("")}</div>`},{title:"Revisar",description:"Comprueba cuántos controles quedarían completos.",content:`<div class="wizard-confirm-box"><strong data-check-count></strong><p>Los controles obligatorios deben completarse antes de finalizar la etapa.</p></div>`,onEnter:({root,form})=>{const completed=rows.filter(item=>form.querySelector(`[name="done_${CSS.escape(item.item_code)}"]`)?.checked).length;root.querySelector("[data-check-count]").textContent=`${completed} de ${rows.length} controles marcados`}}],onFinish:async({form})=>{for(const item of rows){const completed=form.querySelector(`[name="done_${CSS.escape(item.item_code)}"]`).checked,note=form.querySelector(`[name="note_${CSS.escape(item.item_code)}"]`).value.trim()||null;if(completed!==item.completed||note!==(item.note||null))await api.updateChecklist(task.id,item.item_code,completed,note)}await afterDomain(data,drawer,overlay,"Lista de control actualizada.")}});
 }
-function financialModal(data,drawer,overlay){
+function financialWizard(data,drawer,overlay){
   const type=data.order.current_step_code;
-  modal({title:`Validación de ${type}`,confirmLabel:"Registrar validación",body:`<form id="financial-form"><div class="form-grid"><div class="field"><label>Decisión</label><select class="control" name="decision"><option value="APPROVED">Aprobado</option><option value="REJECTED">Rechazado</option><option value="PENDING">Pendiente</option></select></div><div class="field"><label>Valor</label><input class="control" name="amount" type="number" step="any"></div><div class="field"><label>Referencia</label><input class="control" name="reference"></div><div class="field full"><label>Notas</label><textarea class="control" name="notes" required></textarea></div></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#financial-form"));await api.saveFinancialValidation(data.order.id,{...d,validationType:type});await afterDomain(data,drawer,overlay,"Validación financiera registrada.")}});
+  wizard({title:`Validación de ${fmt.step(type)}`,subtitle:"Registra la decisión financiera y su soporte.",finishLabel:"Registrar validación",steps:[{title:"Decisión",description:"Selecciona el resultado de la revisión.",content:`<div class="wizard-choice-grid">${choice("decision","APPROVED","Aprobado","La validación permite continuar el flujo.",true)}${choice("decision","PENDING","Pendiente","Falta información o confirmación.")}${choice("decision","REJECTED","Rechazado","La validación no permite continuar.")}</div>`},{title:"Datos de soporte",description:"Registra valor, referencia y observaciones.",content:`<div class="form-grid"><div class="field"><label>Valor</label><input class="control" name="amount" type="number" step="any"></div><div class="field"><label>Referencia</label><input class="control" name="reference"></div><div class="field full"><label>Observaciones *</label><textarea class="control" name="notes" required></textarea></div></div>`},{title:"Confirmar",description:"Comprueba la decisión.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}${summaryItem("Etapa",fmt.step(type))}<div class="wizard-summary-item"><label>Decisión</label><strong data-financial-decision></strong></div><div class="wizard-summary-item"><label>Valor</label><strong data-financial-amount></strong></div></div><div class="review-text" data-financial-notes></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-financial-decision]").textContent=fmt.label(formData.decision);root.querySelector("[data-financial-amount]").textContent=formData.amount?fmt.money(formData.amount):"No registrado";root.querySelector("[data-financial-notes]").innerHTML=`<strong>Observaciones</strong><p>${fmt.escape(formData.notes||"")}</p>`}}],onFinish:async({data:formData})=>{await api.saveFinancialValidation(data.order.id,{...formData,validationType:type});await afterDomain(data,drawer,overlay,"Validación financiera registrada.")}});
 }
-function purchaseModal(data,drawer,overlay){
-  modal({title:"Registrar orden de compra",confirmLabel:"Guardar orden",body:`<form id="purchase-form"><div class="form-grid"><div class="field"><label>Número OC</label><input class="control" name="poNumber" required></div><div class="field"><label>Proveedor</label><input class="control" name="supplierName" required></div><div class="field"><label>Estado</label><select class="control" name="status"><option value="ISSUED">Emitida</option><option value="CONFIRMED">Confirmada</option><option value="PARTIAL">Parcial</option><option value="RECEIVED">Recibida</option></select></div><div class="field"><label>Valor total</label><input class="control" name="totalAmount" type="number" step="any"></div><div class="field"><label>Moneda</label><input class="control" name="currency" value="COP"></div><div class="field"><label>Fecha esperada</label><input class="control" name="expectedAt" type="datetime-local"></div></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#purchase-form"));if(d.expectedAt)d.expectedAt=new Date(d.expectedAt).toISOString();await api.savePurchaseOrder(data.order.id,d);await afterDomain(data,drawer,overlay,"Orden de compra registrada.")}});
+function purchaseWizard(data,drawer,overlay){
+  wizard({title:"Registrar orden de compra",subtitle:"Completa la información del proveedor y la entrega esperada.",finishLabel:"Guardar orden de compra",steps:[{title:"Orden y proveedor",description:"Identifica el documento y el proveedor.",content:`<div class="form-grid"><div class="field"><label>Número de orden *</label><input class="control" name="poNumber" required></div><div class="field"><label>Proveedor *</label><input class="control" name="supplierName" required></div><div class="field"><label>Valor total</label><input class="control" name="totalAmount" type="number" step="any"></div><div class="field"><label>Fecha esperada</label><input class="control" name="expectedAt" type="datetime-local"></div></div>`},{title:"Estado",description:"Indica la situación actual de la orden.",content:`<div class="wizard-choice-grid">${choice("status","ISSUED","Emitida","La orden fue generada y enviada.",true)}${choice("status","CONFIRMED","Confirmada","El proveedor confirmó la orden.")}${choice("status","PARTIAL","Parcial","La orden tiene cumplimiento parcial.")}${choice("status","RECEIVED","Recibida","La mercancía fue recibida.")}${choice("status","CANCELLED","Cancelada","La orden no continuará.")}</div>`},{title:"Revisar",description:"Comprueba la información registrada.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}<div class="wizard-summary-item"><label>Orden</label><strong data-po-number></strong></div><div class="wizard-summary-item"><label>Proveedor</label><strong data-po-supplier></strong></div><div class="wizard-summary-item"><label>Estado</label><strong data-po-status></strong></div></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-po-number]").textContent=formData.poNumber||"—";root.querySelector("[data-po-supplier]").textContent=formData.supplierName||"—";root.querySelector("[data-po-status]").textContent=fmt.label(formData.status)}}],onFinish:async({data:formData})=>{if(formData.expectedAt)formData.expectedAt=new Date(formData.expectedAt).toISOString();await api.savePurchaseOrder(data.order.id,formData);await afterDomain(data,drawer,overlay,"Orden de compra registrada.")}});
 }
-function receiptModal(data,drawer,overlay){
-  const itemOptions=data.items.map(i=>`<option value="${i.id}" data-sku="${fmt.escape(i.sku||"")}" data-description="${fmt.escape(i.description)}" data-unit="${fmt.escape(i.unit)}" data-quantity="${i.quantity}">${i.line_number} · ${fmt.escape(i.sku||i.reference||i.description)}</option>`).join("");
-  const m=modal({title:"Registrar recepción de mercancía",confirmLabel:"Guardar recepción",body:`<form id="receipt-form"><div class="form-grid"><div class="field"><label>Número de recepción</label><input class="control" name="receiptNumber"></div><div class="field"><label>Orden de compra</label><input class="control" name="purchaseOrder"></div><div class="field"><label>Proveedor</label><input class="control" name="supplierName"></div><div class="field"><label>Estado</label><select class="control" name="status"><option value="CONFORMING">Conforme</option><option value="PARTIAL">Parcial</option><option value="NONCONFORMING">No conforme</option></select></div><div class="field full"><div class="card-head" style="padding-left:0"><h3>Líneas recibidas</h3><button type="button" class="btn btn-ghost" id="add-receipt-line">＋ Línea</button></div><div id="receipt-lines" class="items-editor"></div></div></div></form>`,onConfirm:async()=>{const form=document.querySelector("#receipt-form");const d=serializeForm(form);const lines=[...form.querySelectorAll(".receipt-line")].map(row=>({orderItemId:row.querySelector('[name="orderItemId"]').value||null,sku:row.querySelector('[name="sku"]').value||null,description:row.querySelector('[name="description"]').value,expectedQuantity:Number(row.querySelector('[name="expectedQuantity"]').value||0)||null,receivedQuantity:Number(row.querySelector('[name="receivedQuantity"]').value),acceptedQuantity:Number(row.querySelector('[name="acceptedQuantity"]').value),rejectedQuantity:Number(row.querySelector('[name="rejectedQuantity"]').value||0),unit:row.querySelector('[name="unit"]').value,location:row.querySelector('[name="location"]').value,lotNumber:row.querySelector('[name="lotNumber"]').value||null,qualityStatus:row.querySelector('[name="qualityStatus"]').value,metadata:{lotNumber:row.querySelector('[name="lotNumber"]').value||null}}));if(!lines.length||lines.some(x=>!x.description||x.receivedQuantity<=0))throw new Error("Registre al menos una línea válida.");await api.saveReceipt(data.order.id,{receiptNumber:d.receiptNumber,purchaseOrder:d.purchaseOrder,supplierName:d.supplierName,status:d.status,lines});await afterDomain(data,drawer,overlay,"Recepción, calidad e inventario registrados.")}});
-  const root=m.root.querySelector("#receipt-lines");
-  const add=()=>{const row=document.createElement("div");row.className="receipt-line card card-pad";row.innerHTML=`<div class="form-grid"><div class="field full"><label>Ítem del pedido</label><select class="control" name="orderItemId"><option value="">Material adicional</option>${itemOptions}</select></div><div class="field"><label>SKU</label><input class="control" name="sku"></div><div class="field"><label>Descripción</label><input class="control" name="description" required></div><div class="field"><label>Esperado</label><input class="control" name="expectedQuantity" type="number" step="any"></div><div class="field"><label>Recibido</label><input class="control" name="receivedQuantity" type="number" step="any" required></div><div class="field"><label>Aceptado</label><input class="control" name="acceptedQuantity" type="number" step="any" required></div><div class="field"><label>Rechazado</label><input class="control" name="rejectedQuantity" type="number" step="any" value="0"></div><div class="field"><label>Unidad</label><input class="control" name="unit" value="UND"></div><div class="field"><label>Ubicación</label><input class="control" name="location" value="RECEPCION"></div><div class="field"><label>Lote</label><input class="control" name="lotNumber"></div><div class="field"><label>Calidad</label><select class="control" name="qualityStatus"><option value="ACCEPTED">Aceptado</option><option value="CONDITIONAL">Aceptado con condición</option><option value="REJECTED">Rechazado</option></select></div><div class="field"><button class="btn btn-danger" type="button" data-remove>Eliminar línea</button></div></div>`;const sel=row.querySelector('[name="orderItemId"]');sel.onchange=()=>{const opt=sel.selectedOptions[0];if(!opt?.value)return;row.querySelector('[name="sku"]').value=opt.dataset.sku||"";row.querySelector('[name="description"]').value=opt.dataset.description||"";row.querySelector('[name="unit"]').value=opt.dataset.unit||"UND";row.querySelector('[name="expectedQuantity"]').value=opt.dataset.quantity||"";row.querySelector('[name="receivedQuantity"]').value=opt.dataset.quantity||"";row.querySelector('[name="acceptedQuantity"]').value=opt.dataset.quantity||""};row.querySelector("[data-remove]").onclick=()=>row.remove();root.append(row)};
-  m.root.querySelector("#add-receipt-line").onclick=add;add();
+function receiptWizard(data,drawer,overlay){
+  const itemOptions=data.items.map(item=>`<option value="${item.id}" data-sku="${fmt.escape(item.sku||"")}" data-description="${fmt.escape(item.description)}" data-unit="${fmt.escape(item.unit)}" data-quantity="${item.quantity}">${item.line_number} · ${fmt.escape(item.sku||item.description)}</option>`).join("");
+  const assistant=wizard({title:"Registrar recepción de mercancía",subtitle:"Registra el documento, las cantidades y el resultado de calidad.",finishLabel:"Guardar recepción",steps:[{title:"Documento de recepción",description:"Identifica la recepción y su proveedor.",content:`<div class="form-grid"><div class="field"><label>Número de recepción *</label><input class="control" name="receiptNumber" required></div><div class="field"><label>Orden de compra</label><input class="control" name="purchaseOrder"></div><div class="field"><label>Proveedor</label><input class="control" name="supplierName"></div><div class="field"><label>Estado</label><select class="control" name="status"><option value="CONFORMING">Conforme</option><option value="PARTIAL">Parcial</option><option value="NONCONFORMING">No conforme</option></select></div></div>`},{title:"Material recibido",description:"Agrega una línea por material, lote o ubicación.",content:`<div class="items-wizard-head"><div><strong>Líneas recibidas</strong><p>Registra cantidad recibida, aceptada, rechazada y ubicación.</p></div><button class="btn btn-ghost" type="button" id="add-receipt-line">＋ Agregar línea</button></div><div id="receipt-lines" class="items-editor"></div>`,validate:({root})=>{const lines=[...root.querySelectorAll(".receipt-line")];if(!lines.length)throw new Error("Agrega al menos una línea recibida.");if(lines.some(row=>!row.querySelector('[name="description"]').value.trim()||Number(row.querySelector('[name="receivedQuantity"]').value)<=0))throw new Error("Cada línea debe tener descripción y cantidad recibida mayor que cero.");return true}},{title:"Revisar",description:"Comprueba el total de líneas y el estado de recepción.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}<div class="wizard-summary-item"><label>Recepción</label><strong data-receipt-number></strong></div><div class="wizard-summary-item"><label>Estado</label><strong data-receipt-status></strong></div><div class="wizard-summary-item"><label>Líneas</label><strong data-receipt-lines></strong></div></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-receipt-number]").textContent=formData.receiptNumber||"—";root.querySelector("[data-receipt-status]").textContent=fmt.label(formData.status);root.querySelector("[data-receipt-lines]").textContent=String(root.querySelectorAll(".receipt-line").length)}}],onFinish:async({root,data:formData})=>{const lines=[...root.querySelectorAll(".receipt-line")].map(row=>({orderItemId:row.querySelector('[name="orderItemId"]').value||null,sku:row.querySelector('[name="sku"]').value||null,description:row.querySelector('[name="description"]').value.trim(),expectedQuantity:Number(row.querySelector('[name="expectedQuantity"]').value||0)||null,receivedQuantity:Number(row.querySelector('[name="receivedQuantity"]').value),acceptedQuantity:Number(row.querySelector('[name="acceptedQuantity"]').value),rejectedQuantity:Number(row.querySelector('[name="rejectedQuantity"]').value||0),unit:row.querySelector('[name="unit"]').value,location:row.querySelector('[name="location"]').value,lotNumber:row.querySelector('[name="lotNumber"]').value||null,qualityStatus:row.querySelector('[name="qualityStatus"]').value,metadata:{lotNumber:row.querySelector('[name="lotNumber"]').value||null}}));await api.saveReceipt(data.order.id,{receiptNumber:formData.receiptNumber,purchaseOrder:formData.purchaseOrder,supplierName:formData.supplierName,status:formData.status,lines});await afterDomain(data,drawer,overlay,"Recepción, calidad e inventario registrados.")}});
+  const list=assistant.root.querySelector("#receipt-lines");
+  const add=()=>{const row=document.createElement("div");row.className="receipt-line card card-pad";row.innerHTML=`<div class="form-grid"><div class="field full"><label>Ítem del pedido</label><select class="control" name="orderItemId"><option value="">Material adicional</option>${itemOptions}</select></div><div class="field"><label>SKU</label><input class="control" name="sku"></div><div class="field"><label>Descripción *</label><input class="control" name="description" required></div><div class="field"><label>Esperado</label><input class="control" name="expectedQuantity" type="number" step="any"></div><div class="field"><label>Recibido *</label><input class="control" name="receivedQuantity" type="number" step="any" required></div><div class="field"><label>Aceptado *</label><input class="control" name="acceptedQuantity" type="number" step="any" required></div><div class="field"><label>Rechazado</label><input class="control" name="rejectedQuantity" type="number" step="any" value="0"></div><div class="field"><label>Unidad</label><input class="control" name="unit" value="UND"></div><div class="field"><label>Ubicación</label><input class="control" name="location" value="RECEPCION"></div><div class="field"><label>Lote</label><input class="control" name="lotNumber"></div><div class="field"><label>Calidad</label><select class="control" name="qualityStatus"><option value="ACCEPTED">Aceptado</option><option value="CONDITIONAL">Aceptado con condición</option><option value="REJECTED">Rechazado</option></select></div><div class="field"><button class="btn btn-danger" type="button" data-remove>Eliminar línea</button></div></div>`;const selectItem=row.querySelector('[name="orderItemId"]');selectItem.onchange=()=>{const option=selectItem.selectedOptions[0];if(!option?.value)return;row.querySelector('[name="sku"]').value=option.dataset.sku||"";row.querySelector('[name="description"]').value=option.dataset.description||"";row.querySelector('[name="unit"]').value=option.dataset.unit||"UND";row.querySelector('[name="expectedQuantity"]').value=option.dataset.quantity||"";row.querySelector('[name="receivedQuantity"]').value=option.dataset.quantity||"";row.querySelector('[name="acceptedQuantity"]').value=option.dataset.quantity||""};row.querySelector("[data-remove]").onclick=()=>row.remove();list.append(row)};
+  assistant.root.querySelector("#add-receipt-line").onclick=add;add();
 }
-async function cutModal(data,drawer,overlay){
+async function cutWizard(data,drawer,overlay){
   const lots=await api.inventoryLots(null,"");
-  const cutItems=data.items.filter(i=>i.requires_cut);
-  modal({title:"Registrar corte",confirmLabel:"Guardar corte",body:`<form id="cut-form"><div class="form-grid"><div class="field full"><label>Chipa o lote disponible</label><select class="control" name="inventoryLotId" required><option value="">Seleccione…</option>${lots.map(l=>`<option value="${l.id}">${fmt.escape(l.sku)} · ${fmt.escape(l.description)} · ${fmt.escape(l.location)} · disponible ${fmt.number(l.available,3)} ${fmt.escape(l.unit)}</option>`).join("")}</select></div><div class="field full"><label>Ítem del pedido</label><select class="control" name="orderItemId" required><option value="">Seleccione…</option>${cutItems.map(i=>`<option value="${i.id}">${i.line_number} · ${fmt.escape(i.sku||i.description)}</option>`).join("")}</select></div><div class="field"><label>Longitud solicitada</label><input class="control" name="requestedLength" type="number" step="any" required></div><div class="field"><label>Longitud real</label><input class="control" name="actualLength" type="number" step="any" required></div><div class="field"><label>Desperdicio</label><input class="control" name="scrapLength" type="number" step="any" value="0"></div></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#cut-form"));await api.saveCutJob(data.order.id,d);await afterDomain(data,drawer,overlay,"Corte, consumo y desperdicio registrados.")}});
+  const cutItems=data.items.filter(item=>item.requires_cut);
+  if(!lots.length)return toast("No hay lotes disponibles para registrar el corte.","error");
+  if(!cutItems.length)return toast("El pedido no tiene ítems marcados para corte.","error");
+  wizard({title:"Registrar trabajo de corte",subtitle:"Selecciona la chipa, el material y registra las medidas reales.",finishLabel:"Guardar corte",steps:[{title:"Seleccionar material",description:"Elige el lote disponible y la línea del pedido.",content:`<div class="field"><label>Chipa o lote disponible *</label><select class="control" name="inventoryLotId" required><option value="">Seleccione…</option>${lots.map(lot=>`<option value="${lot.id}">${fmt.escape(lot.sku)} · ${fmt.escape(lot.description)} · ${fmt.escape(lot.location)} · disponible ${fmt.number(lot.available,3)} ${fmt.escape(lot.unit)}</option>`).join("")}</select></div><div class="field"><label>Ítem del pedido *</label><select class="control" name="orderItemId" required><option value="">Seleccione…</option>${cutItems.map(item=>`<option value="${item.id}">${item.line_number} · ${fmt.escape(item.sku||item.description)}</option>`).join("")}</select></div>`},{title:"Registrar medidas",description:"Indica lo solicitado, lo cortado y el desperdicio.",content:`<div class="form-grid"><div class="field"><label>Longitud solicitada *</label><input class="control" name="requestedLength" type="number" min="0" step="any" required></div><div class="field"><label>Longitud real *</label><input class="control" name="actualLength" type="number" min="0" step="any" required></div><div class="field"><label>Desperdicio</label><input class="control" name="scrapLength" type="number" min="0" step="any" value="0"></div></div><div class="wizard-tip">Mide y verifica antes de guardar. Estos datos alimentan el consumo de inventario y el VSM.</div>`},{title:"Revisar",description:"Comprueba las medidas antes de afectar el inventario.",content:`<div class="wizard-summary"><div class="wizard-summary-item"><label>Solicitado</label><strong data-cut-requested></strong></div><div class="wizard-summary-item"><label>Real</label><strong data-cut-actual></strong></div><div class="wizard-summary-item"><label>Desperdicio</label><strong data-cut-scrap></strong></div></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-cut-requested]").textContent=formData.requestedLength||"—";root.querySelector("[data-cut-actual]").textContent=formData.actualLength||"—";root.querySelector("[data-cut-scrap]").textContent=formData.scrapLength||"0"}}],onFinish:async({data:formData})=>{await api.saveCutJob(data.order.id,formData);await afterDomain(data,drawer,overlay,"Corte, consumo y desperdicio registrados.")}});
 }
-function invoiceModal(data,drawer,overlay){
-  modal({title:"Registrar factura",confirmLabel:"Guardar factura",body:`<form id="invoice-form"><div class="form-grid"><div class="field"><label>Número</label><input class="control" name="invoiceNumber" required></div><div class="field"><label>Fecha</label><input class="control" name="invoiceDate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Valor</label><input class="control" name="amount" type="number" step="any"></div><div class="field"><label>Moneda</label><input class="control" name="currency" value="COP"></div></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#invoice-form"));await api.saveInvoice(data.order.id,d);await afterDomain(data,drawer,overlay,"Factura registrada.")}});
+function invoiceWizard(data,drawer,overlay){
+  wizard({title:"Registrar factura",subtitle:"Completa los datos principales de facturación.",finishLabel:"Guardar factura",steps:[{title:"Datos de factura",description:"Registra número, fecha y valor.",content:`<div class="form-grid"><div class="field"><label>Número de factura *</label><input class="control" name="invoiceNumber" required></div><div class="field"><label>Fecha *</label><input class="control" name="invoiceDate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Valor</label><input class="control" name="amount" type="number" step="any"></div><div class="field"><label>Moneda</label><input class="control" name="currency" value="COP"></div></div>`},{title:"Revisar",description:"Comprueba los datos antes de guardar.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}<div class="wizard-summary-item"><label>Factura</label><strong data-invoice-number></strong></div><div class="wizard-summary-item"><label>Fecha</label><strong data-invoice-date></strong></div><div class="wizard-summary-item"><label>Valor</label><strong data-invoice-amount></strong></div></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-invoice-number]").textContent=formData.invoiceNumber||"—";root.querySelector("[data-invoice-date]").textContent=formData.invoiceDate||"—";root.querySelector("[data-invoice-amount]").textContent=formData.amount?fmt.money(formData.amount):"No registrado"}}],onFinish:async({data:formData})=>{await api.saveInvoice(data.order.id,formData);await afterDomain(data,drawer,overlay,"Factura registrada.")}});
 }
-function deliveryModal(data,drawer,overlay){
-  modal({title:"Registrar despacho o entrega",confirmLabel:"Guardar",body:`<form id="delivery-form"><div class="form-grid"><div class="field"><label>Estado</label><select class="control" name="status"><option value="PLANNED">Programado</option><option value="DISPATCHED">Despachado</option><option value="IN_TRANSIT">En tránsito</option><option value="DELIVERED">Entregado</option><option value="NOT_DELIVERED">No entregado</option></select></div><div class="field"><label>Programado</label><input class="control" name="scheduledAt" type="datetime-local"></div><div class="field"><label>Despachado</label><input class="control" name="dispatchedAt" type="datetime-local"></div><div class="field"><label>Entregado</label><input class="control" name="deliveredAt" type="datetime-local"></div><div class="field"><label>Transportadora</label><input class="control" name="carrier"></div><div class="field"><label>Guía</label><input class="control" name="trackingNumber"></div><div class="field"><label>Recibido por</label><input class="control" name="receivedBy"></div><div class="field full"><label>Motivo no entrega</label><textarea class="control" name="noDeliveryReason"></textarea></div></div></form>`,onConfirm:async()=>{const d=serializeForm(document.querySelector("#delivery-form"));for(const key of ["scheduledAt","dispatchedAt","deliveredAt"])if(d[key])d[key]=new Date(d[key]).toISOString();await api.saveDelivery(data.order.id,d);await afterDomain(data,drawer,overlay,"Despacho o entrega registrados.")}});
+function deliveryWizard(data,drawer,overlay){
+  wizard({title:"Registrar despacho o entrega",subtitle:"Indica el estado, las fechas y el soporte de transporte.",finishLabel:"Guardar entrega",steps:[{title:"Resultado",description:"Selecciona la situación actual de la entrega.",content:`<div class="wizard-choice-grid">${choice("status","PLANNED","Programado","La entrega tiene fecha definida.",true)}${choice("status","DISPATCHED","Despachado","El pedido salió de la operación.")}${choice("status","IN_TRANSIT","En tránsito","La transportadora tiene el pedido.")}${choice("status","DELIVERED","Entregado","El cliente recibió el pedido.")}${choice("status","NOT_DELIVERED","No entregado","El intento no pudo completarse.")}</div>`},{title:"Datos de transporte",description:"Completa únicamente la información disponible.",content:`<div class="form-grid"><div class="field"><label>Fecha programada</label><input class="control" name="scheduledAt" type="datetime-local"></div><div class="field"><label>Fecha de despacho</label><input class="control" name="dispatchedAt" type="datetime-local"></div><div class="field"><label>Fecha de entrega</label><input class="control" name="deliveredAt" type="datetime-local"></div><div class="field"><label>Transportadora</label><input class="control" name="carrier"></div><div class="field"><label>Número de guía</label><input class="control" name="trackingNumber"></div><div class="field"><label>Recibido por</label><input class="control" name="receivedBy"></div><div class="field full"><label>Motivo de no entrega</label><textarea class="control" name="noDeliveryReason"></textarea></div></div>`},{title:"Revisar",description:"Comprueba el resultado de la entrega.",content:`<div class="wizard-summary">${summaryItem("Pedido",data.order.order_number)}<div class="wizard-summary-item"><label>Estado</label><strong data-delivery-status></strong></div><div class="wizard-summary-item"><label>Transportadora</label><strong data-delivery-carrier></strong></div><div class="wizard-summary-item"><label>Guía</label><strong data-delivery-tracking></strong></div></div>`,onEnter:({root,data:formData})=>{root.querySelector("[data-delivery-status]").textContent=fmt.label(formData.status);root.querySelector("[data-delivery-carrier]").textContent=formData.carrier||"No registrada";root.querySelector("[data-delivery-tracking]").textContent=formData.trackingNumber||"No registrada"}}],onFinish:async({data:formData})=>{for(const key of ["scheduledAt","dispatchedAt","deliveredAt"])if(formData[key])formData[key]=new Date(formData[key]).toISOString();await api.saveDelivery(data.order.id,formData);await afterDomain(data,drawer,overlay,"Despacho o entrega registrados.")}});
 }
 
 function exportCurrent(){
