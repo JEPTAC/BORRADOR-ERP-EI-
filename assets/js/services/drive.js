@@ -5,7 +5,7 @@ let tokenClient,accessToken,rootFolderId;
 const folderCache=new Map();
 
 function requireGsi(){
-  if(!window.google?.accounts?.oauth2)throw new Error("Google Identity Services no está disponible.");
+  if(!window.google?.accounts?.oauth2)throw new Error("El servicio de archivos no está disponible. Recarga la página e inténtalo nuevamente.");
 }
 function safeName(value,fallback="SIN_REFERENCIA"){
   return String(value||fallback).trim().replace(/[\\/:*?"<>|#%{}~&]/g,"-").replace(/\s+/g," ").slice(0,120)||fallback;
@@ -25,7 +25,7 @@ async function token(){
 async function driveFetch(url,options={}){
   const t=await token();
   const res=await fetch(url,{...options,headers:{...(options.headers||{}),Authorization:`Bearer ${t}`}});
-  if(!res.ok)throw new Error(`Drive ${res.status}: ${await res.text()}`);
+  if(!res.ok){await res.text().catch(()=>"");throw new Error(`No fue posible completar la operación con el archivo (código ${res.status}).`);}
   return res.status===204?{}:res.json();
 }
 async function ensureFolder(name,parentId=null){
@@ -64,8 +64,8 @@ export async function uploadOrderFile(orderId,file,category="EVIDENCE",taskId=nu
   const metadata={
     name:safeName(file.name,"archivo"),
     parents:[categoryFolder],
-    description:`ERP Supply · pedido ${orderNumber||orderId} · ${category}`,
-    appProperties:{erp:"ERP_SUPPLY_ENTERPRISE",orderId:String(orderId),orderNumber:String(orderNumber||""),category:String(category)}
+    description:`ERP Electroingeniería · pedido ${orderNumber||orderId} · ${category}`,
+    appProperties:{erp:"ERP_ELECTROINGENIERIA",orderId:String(orderId),orderNumber:String(orderNumber||""),category:String(category)}
   };
   const boundary=`erp_${Date.now()}_${crypto.randomUUID()}`;
   const body=new Blob([

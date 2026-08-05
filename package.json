@@ -1,6 +1,6 @@
 {
-  "name": "erp-supply-enterprise-v10",
-  "version": "10.0.0",
+  "name": "erp-electroingenieria-v10",
+  "version": "10.1.0",
   "private": true,
   "type": "module",
   "scripts": {

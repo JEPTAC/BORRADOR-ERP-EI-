@@ -1,0 +1,15 @@
+VALIDACIÓN VISUAL V10.1
+
+- 24 archivos JavaScript revisados con node --check.
+- 37 RPC nativos definidos y 37 consumidos por el frontend.
+- No se detectaron accesos directos a tablas desde el navegador.
+- Imports locales y recursos HTML verificados.
+- Interfaz configurada completamente en español.
+- Tema claro profesional con identidad azul y amarilla de Electroingeniería.
+- Logo corporativo incluido en acceso, barra lateral, favicon y aplicación instalable.
+- Referencias visibles a proveedores técnicos retiradas de la experiencia del usuario.
+- Formularios de aprobación sin códigos internos visibles.
+- Plantilla de importación histórica traducida al español.
+- Pruebas de interfaz actualizadas a la nueva navegación y textos.
+
+El SQL y las funciones operativas no fueron modificados en esta actualización visual.

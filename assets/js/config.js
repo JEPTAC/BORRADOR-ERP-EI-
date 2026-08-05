@@ -1,7 +1,7 @@
 export const CONFIG = Object.freeze({
-  version: "10.0.0-enterprise-release",
-  build: "2026-08-05.2",
-  appName: "EI ERP Supply Enterprise",
+  version: "10.1.0-visual-es",
+  build: "2026-08-05.3",
+  appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
     url: "https://hezjxcxxcjlpmyalftam.supabase.co",
@@ -17,30 +17,30 @@ export const CONFIG = Object.freeze({
 });
 
 export const NAV_GROUPS = [
-  {label:"Operación",items:[
-    {id:"dashboard",label:"Centro de operación",icon:"◫"},
-    {id:"orders",label:"Control de pedidos",icon:"▤"},
-    {id:"sales",label:"Registro de ventas",icon:"＋"},
-    {id:"credit",label:"Crédito",icon:"◇"}
+  {label:"Inicio y gestión comercial",items:[
+    {id:"dashboard",label:"Centro de operación",icon:"dashboard"},
+    {id:"orders",label:"Control de pedidos",icon:"orders"},
+    {id:"sales",label:"Registro de ventas",icon:"sales"},
+    {id:"credit",label:"Solicitudes de crédito",icon:"credit"}
   ]},
-  {label:"Flujo de suministro",items:[
-    {id:"cartera",label:"Cartera",icon:"₵",step:"CARTERA"},
-    {id:"caja",label:"Caja",icon:"$",step:"CAJA"},
-    {id:"purchasing",label:"Compras",icon:"⌑",step:"COMPRAS"},
-    {id:"receiving",label:"Recepción",icon:"⇩",steps:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"]},
-    {id:"picking",label:"Alistamiento",icon:"✓",step:"ALISTAMIENTO"},
-    {id:"cutting",label:"Corte",icon:"✂",step:"CORTE"},
-    {id:"billing",label:"Facturación",icon:"▧",step:"FACTURACION"},
-    {id:"shipping",label:"Despachos y entrega",icon:"▰",steps:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]}
+  {label:"Operación de suministros",items:[
+    {id:"cartera",label:"Cartera",icon:"wallet",step:"CARTERA"},
+    {id:"caja",label:"Caja",icon:"cash",step:"CAJA"},
+    {id:"purchasing",label:"Compras",icon:"purchasing",step:"COMPRAS"},
+    {id:"receiving",label:"Recepción",icon:"receiving",steps:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"]},
+    {id:"picking",label:"Alistamiento",icon:"picking",step:"ALISTAMIENTO"},
+    {id:"cutting",label:"Corte",icon:"cutting",step:"CORTE"},
+    {id:"billing",label:"Facturación",icon:"billing",step:"FACTURACION"},
+    {id:"shipping",label:"Despachos y entregas",icon:"shipping",steps:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]}
   ]},
-  {label:"Control",items:[
-    {id:"inventory",label:"Inventario",icon:"▦"},
-    {id:"approvals",label:"Aprobaciones",icon:"⚑"},
-    {id:"vsm",label:"VSM y tiempos",icon:"↝"},
-    {id:"reports",label:"Reportes",icon:"▥"},
-    {id:"imports",label:"Importar histórico",icon:"⇧"},
-    {id:"qa",label:"Bot QA E2E",icon:"◎"},
-    {id:"audit",label:"Auditoría",icon:"⌕"},
-    {id:"admin",label:"Administración",icon:"⚙"}
+  {label:"Control y análisis",items:[
+    {id:"inventory",label:"Inventario",icon:"inventory"},
+    {id:"approvals",label:"Aprobaciones",icon:"approvals"},
+    {id:"vsm",label:"Flujo y tiempos",icon:"vsm"},
+    {id:"reports",label:"Reportes",icon:"reports"},
+    {id:"imports",label:"Importar historial",icon:"imports"},
+    {id:"qa",label:"Pruebas automáticas",icon:"qa"},
+    {id:"audit",label:"Auditoría",icon:"audit"},
+    {id:"admin",label:"Administración",icon:"admin"}
   ]}
 ];

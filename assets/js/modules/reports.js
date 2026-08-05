@@ -3,13 +3,13 @@ import {fmt} from "../core/format.js";
 import {loading,toast} from "../core/ui.js";
 
 export async function renderReports(root){
-  root.innerHTML=`<section class="page-head"><div><h2>Reportes operativos</h2><p>Exportaciones de pedidos, VSM, auditoría e inventario con los filtros actuales.</p></div></section><section class="grid grid-3">
+  root.innerHTML=`<section class="page-head"><div><h2>Reportes operativos</h2><p>Exportaciones de pedidos, flujo y tiempos, auditoría e inventario con los filtros actuales.</p></div></section><section class="grid grid-3">
   ${card("Pedidos completos","Descarga hasta 250 registros por página y permite recorrer todo el histórico.","orders")}
-  ${card("VSM últimos 30 días","Tiempos laborales, calendario, mediana y percentil 90.","vsm")}
+  ${card("Flujo y tiempos de los últimos 30 días","Tiempos productivos, duración total, mediana y percentil 90.","vsm")}
   ${card("Auditoría reciente","Últimos eventos, actores y transiciones.","audit")}
   ${card("Inventario","Existencias agregadas por artículo y lotes.","inventory")}
   ${card("Aprobaciones","Solicitudes pendientes o decididas.","approvals")}
-  ${card("Diagnóstico de salud","Controles de configuración, permisos y API.","health")}
+  ${card("Estado del sistema","Controles de configuración, permisos y funcionamiento.","health")}
   </section><div id="report-progress" style="margin-top:16px"></div>`;
   root.querySelectorAll("[data-report]").forEach(b=>b.onclick=()=>download(b.dataset.report,root.querySelector("#report-progress")));
 }

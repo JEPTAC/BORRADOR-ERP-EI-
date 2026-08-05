@@ -1,4 +1,4 @@
-# EI ERP Supply Enterprise V10.0.4
+# EI ERP Electroingeniería V10.1.0.4
 
 > Paquete completo con instalador SQL corregido V10.0.4.
 
@@ -56,7 +56,7 @@ El navegador no accede directamente a las tablas. El esquema `erp_supply` perman
 5. Active GitHub Pages mediante el workflow incluido.
 6. Agregue la URL de Pages a los orígenes autorizados del cliente OAuth de Google Drive.
 7. Inicie sesión, sincronice usuarios Auth y configure roles.
-8. Ejecute **Bot QA E2E → Validación integral**.
+8. Ejecute **Pruebas automáticas → Ejecutar validación completa**.
 
 ## Puerta de salida a producción
 

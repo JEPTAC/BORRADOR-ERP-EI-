@@ -1,9 +1,21 @@
 import {getSupabase} from "./supabase.js";
 import {CONFIG} from "../config.js";
 
+function friendly(message=""){
+  const raw=String(message||"");
+  const rules=[
+    [/permission denied|not authorized|unauthorized|42501/i,"No tienes permiso para realizar esta acción."],
+    [/not found|no existe|no encontrado/i,"No se encontró la información solicitada."],
+    [/duplicate|already exists|unique constraint/i,"Ya existe un registro con esa información."],
+    [/version|concurrent|simult/i,"El pedido fue actualizado por otra persona. Actualiza la información antes de continuar."],
+    [/jwt expired|token.*expired/i,"Tu sesión venció. Ingresa nuevamente."],
+    [/failed to fetch|networkerror|load failed/i,"No fue posible conectar con el ERP. Revisa la conexión e inténtalo nuevamente."]
+  ];
+  return rules.find(([re])=>re.test(raw))?.[1]||raw||"No fue posible completar la operación.";
+}
 async function rpc(name,params={}){
   const {data,error}=await getSupabase().rpc(name,params);
-  if(error){const e=new Error(error.message||`Error en ${name}`);Object.assign(e,error);throw e}
+  if(error){const e=new Error(friendly(error.message));Object.assign(e,error);e.message=friendly(error.message);throw e}
   return data;
 }
 

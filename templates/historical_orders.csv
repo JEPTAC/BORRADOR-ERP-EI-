@@ -1,2 +1,2 @@
-orderNumber,externalReference,orderType,paymentCondition,deliveryRoute,clientName,clientDocument,clientCity,status,priority,requiresCut,requiresPurchase,createdAt,updatedAt,closedAt
-HIST-0001,REF-001,PVC,CREDIT,LOCAL_DISPATCH,Cliente histórico,900000001,Cali,CLOSED,MEDIUM,false,false,2026-01-10T08:00:00-05:00,2026-01-12T16:00:00-05:00,2026-01-12T16:00:00-05:00
+pedido,referencia_externa,tipo_pedido,condicion_pago,ruta,cliente,documento,ciudad,estado,prioridad,requiere_corte,requiere_compra,fecha_creacion,fecha_actualizacion,fecha_cierre
+HIST-0001,REF-001,PVC,Crédito,Despacho local,Cliente histórico,900000001,Cali,Cerrado,Media,No,No,2026-01-10T08:00:00-05:00,2026-01-12T16:00:00-05:00,2026-01-12T16:00:00-05:00

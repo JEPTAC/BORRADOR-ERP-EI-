@@ -35,9 +35,10 @@ for(const term of ["supabase-compat","supabase-legacy","window.firebase","Docume
 }
 check(!/\.from\s*\(/.test(executable),"El frontend contiene acceso directo .from(...); toda operación debe pasar por RPC nativo.");
 
-const migrations=walk("sql/migrations",".sql").sort();
-const sql=migrations.map(read).join("\n");
+const migrationsDir=path.join(root,"sql/migrations");
+const migrations=fs.existsSync(migrationsDir)?walk("sql/migrations",".sql").sort():[];
 const install=read("sql/00_INSTALL_ALL.sql");
+const sql=migrations.length?migrations.map(read).join("\n"):install;
 for(const rel of migrations){
   const marker=read(rel).split("\n").slice(0,3).join("\n").trim();
   check(install.includes(marker),`La migración no está incluida en 00_INSTALL_ALL.sql: ${rel}`);
@@ -72,7 +73,7 @@ check(fs.existsSync(path.join(root,"templates/historical_orders.csv")),"Falta pl
 check(fs.existsSync(path.join(root,"supabase/functions/erp-e2e-bot/index.ts")),"Falta Edge Function del bot QA.");
 
 notes.push(`${jsFiles.length} archivos JavaScript revisados.`);
-notes.push(`${migrations.length} migraciones incluidas.`);
+notes.push(migrations.length?`${migrations.length} migraciones incluidas.`:"Instalador SQL consolidado revisado.");
 notes.push(`${rpcDefs.size} RPC nativos definidos y ${rpcCalls.size} consumidos por el frontend.`);
 notes.push("No se detectaron accesos directos a tablas desde el navegador.");
 

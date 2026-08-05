@@ -18,15 +18,20 @@ export function parseCsv(text){
 export function normalizeHistoryRow(row){
   const pick=(...keys)=>{for(const k of keys){if(row[k]!==undefined&&row[k]!=="")return row[k]}return null};
   const bool=v=>["1","true","si","sí","yes","x"].includes(String(v||"").toLowerCase());
+  const normalize=v=>String(v||"").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const payment=v=>({CREDITO:"CREDIT",CREDIT:"CREDIT",CONTADO:"CASH",CASH:"CASH",MIXTO:"MIXED",MIXED:"MIXED"})[normalize(v)]||normalize(v)||"CREDIT";
+  const route=v=>({"ENTREGA EN PUNTO":"CLIENT_POINT",CLIENT_POINT:"CLIENT_POINT","CLIENTE RECOGE":"CLIENT_PICKUP",CLIENT_PICKUP:"CLIENT_PICKUP","DESPACHO LOCAL":"LOCAL_DISPATCH",LOCAL_DISPATCH:"LOCAL_DISPATCH","DESPACHO NACIONAL":"NATIONAL_DISPATCH",NATIONAL_DISPATCH:"NATIONAL_DISPATCH"})[normalize(v)]||normalize(v)||"LOCAL_DISPATCH";
+  const status=v=>({CERRADO:"CLOSED",CLOSED:"CLOSED",CANCELADO:"CANCELLED",CANCELLED:"CANCELLED",EN_PROCESO:"IN_PROGRESS","EN PROCESO":"IN_PROGRESS",IN_PROGRESS:"IN_PROGRESS",ASIGNADO:"ASSIGNED",ASSIGNED:"ASSIGNED",EN_ESPERA:"WAITING","EN ESPERA":"WAITING",WAITING:"WAITING",EN_COLA:"QUEUED","EN COLA":"QUEUED",QUEUED:"QUEUED"})[normalize(v)]||normalize(v)||"CLOSED";
+  const priority=v=>({BAJA:"LOW",LOW:"LOW",MEDIA:"MEDIUM",MEDIUM:"MEDIUM",ALTA:"HIGH",HIGH:"HIGH",URGENTE:"URGENT",URGENT:"URGENT",CRITICA:"CRITICAL",CRITICA:"CRITICAL",CRITICAL:"CRITICAL"})[normalize(v)]||normalize(v)||"MEDIUM";
   return {
     orderNumber:pick("orderNumber","pedido","numero_pedido","número_pedido","PVE","PVC","PVN"),
     externalReference:pick("externalReference","referencia_externa","referencia"),
     orderType:String(pick("orderType","tipo_pedido","tipo")||"PVC").toUpperCase(),
-    paymentCondition:String(pick("paymentCondition","condicion_pago","condición_pago")||"CREDIT").toUpperCase(),
-    deliveryRoute:String(pick("deliveryRoute","ruta","modalidad_entrega")||"LOCAL_DISPATCH").toUpperCase(),
+    paymentCondition:payment(pick("paymentCondition","condicion_pago","condición_pago")),
+    deliveryRoute:route(pick("deliveryRoute","ruta","modalidad_entrega")),
     clientName:pick("clientName","cliente","nombre_cliente")||"Cliente histórico",
     clientDocument:pick("clientDocument","nit","documento"),clientCity:pick("clientCity","ciudad"),
-    status:String(pick("status","estado")||"CLOSED").toUpperCase(),priority:String(pick("priority","prioridad")||"MEDIUM").toUpperCase(),
+    status:status(pick("status","estado")),priority:priority(pick("priority","prioridad")),
     requiresCut:bool(pick("requiresCut","requiere_corte")),requiresPurchase:bool(pick("requiresPurchase","requiere_compra")),
     createdAt:pick("createdAt","fecha_creacion","fecha"),updatedAt:pick("updatedAt","fecha_actualizacion"),closedAt:pick("closedAt","fecha_cierre"),
     originalRow:row.__row
