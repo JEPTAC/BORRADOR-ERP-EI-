@@ -15,9 +15,9 @@ export function renderLogin(error=""){
           <h1>La operación completa, clara y bajo control.</h1>
           <p>Administra pedidos, cartera, compras, recepción, alistamiento, corte, facturación, inventario, despachos y tiempos desde un solo lugar.</p>
           <div class="login-features">
-            <div><strong>Operación guiada</strong><span>Cada usuario ve las tareas que le corresponden.</span></div>
-            <div><strong>Trazabilidad completa</strong><span>Decisiones, tiempos y evidencias quedan registradas.</span></div>
-            <div><strong>Información centralizada</strong><span>Consulta pedidos, responsables y avances en segundos.</span></div>
+            <div><span class="login-feature-icon">${icon("dashboard")}</span><strong>Operación guiada</strong><span>Cada persona encuentra sus tareas, prioridades y próximos pasos.</span></div>
+            <div><span class="login-feature-icon">${icon("audit")}</span><strong>Trazabilidad completa</strong><span>Decisiones, tiempos, novedades y evidencias quedan organizadas.</span></div>
+            <div><span class="login-feature-icon">${icon("reports")}</span><strong>Control en tiempo real</strong><span>Consulta responsables, avances y cargas de trabajo desde un solo lugar.</span></div>
           </div>
         </div>
         <div class="login-note">Electroingeniería S.A.S. · Trabajando con buena energía</div>

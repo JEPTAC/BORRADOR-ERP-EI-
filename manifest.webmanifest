@@ -4,7 +4,7 @@
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#0b3ea8",
+  "theme_color": "#071a45",
   "description": "Gestión integral de pedidos, suministros, inventario y logística de Electroingeniería.",
   "icons": [
     {"src":"./assets/img/iso-electroingenieria.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
