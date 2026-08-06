@@ -19,7 +19,7 @@ async function token(){
       scope:CONFIG.drive.scope,
       callback:r=>r.error?reject(new Error(r.error)):resolve(accessToken=r.access_token)
     });
-    tokenClient.requestAccessToken({prompt:"consent"});
+    tokenClient.requestAccessToken({prompt:""});
   });
 }
 async function driveFetch(url,options={}){

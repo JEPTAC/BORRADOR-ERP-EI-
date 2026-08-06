@@ -516,3 +516,218 @@ tbody tr:hover td{background:#eef5ff}
 .billing-upload-note strong{display:block;color:#173c69;font-size:12px}.billing-upload-note p{margin:4px 0 0;color:#61758d;font-size:10px;line-height:1.5}
 .pvp-annex-confirmed{border-color:#d9c27a;background:#fff9e8}.pvp-annex-confirmed span,.pvp-annex-confirmed strong{color:#6e5310}
 @media(max-width:680px){.billing-entry-actions.two-options{grid-template-columns:1fr}.billing-entry-card{min-height:98px}.billing-process-intro{display:grid}}
+
+/* ==========================================================
+   V10.9.1 · SISTEMA VISUAL GLOBAL DE BOTONES EN POPUPS
+   Mejora exclusivamente estética y de estados de interacción.
+   ========================================================== */
+.modal .btn:not(.icon-btn),
+.reception-confirm-dialog .btn:not(.icon-btn),
+.picking-confirm-dialog .btn:not(.icon-btn){
+  position:relative;
+  min-height:46px;
+  padding:11px 18px;
+  border-radius:13px;
+  border-width:1px;
+  font-size:12px;
+  font-weight:850;
+  letter-spacing:.01em;
+  box-shadow:0 7px 18px rgba(7,26,69,.10);
+  transition:transform .16s ease,box-shadow .16s ease,background .16s ease,border-color .16s ease,filter .16s ease;
+}
+.modal .btn:not(.icon-btn):hover:not(:disabled),
+.reception-confirm-dialog .btn:not(.icon-btn):hover:not(:disabled),
+.picking-confirm-dialog .btn:not(.icon-btn):hover:not(:disabled){
+  transform:translateY(-2px);
+  box-shadow:0 12px 25px rgba(7,26,69,.16);
+}
+.modal .btn:not(.icon-btn):active:not(:disabled),
+.reception-confirm-dialog .btn:not(.icon-btn):active:not(:disabled),
+.picking-confirm-dialog .btn:not(.icon-btn):active:not(:disabled){
+  transform:translateY(0) scale(.985);
+  box-shadow:0 4px 11px rgba(7,26,69,.12);
+}
+.modal .btn:focus-visible,
+.reception-confirm-dialog .btn:focus-visible,
+.picking-confirm-dialog .btn:focus-visible,
+.modal button:focus-visible{
+  outline:3px solid rgba(47,122,229,.27);
+  outline-offset:2px;
+}
+.modal .btn-primary,
+.reception-confirm-dialog .btn-primary,
+.picking-confirm-dialog .btn-primary{
+  color:#fff;
+  border-color:#0a46b4;
+  background:linear-gradient(135deg,#1765d8 0%,#0c4dc4 56%,#082f83 100%);
+  box-shadow:0 9px 22px rgba(12,77,196,.23),inset 0 1px rgba(255,255,255,.20);
+}
+.modal .btn-primary:hover:not(:disabled),
+.reception-confirm-dialog .btn-primary:hover:not(:disabled),
+.picking-confirm-dialog .btn-primary:hover:not(:disabled){
+  background:linear-gradient(135deg,#1d70e4 0%,#0b49b8 58%,#072970 100%);
+  box-shadow:0 14px 29px rgba(12,77,196,.30),inset 0 1px rgba(255,255,255,.24);
+}
+.modal .btn-success,
+.reception-confirm-dialog .btn-success,
+.picking-confirm-dialog .btn-success{
+  color:#fff;
+  border-color:#08744a;
+  background:linear-gradient(135deg,#18a36c 0%,#0f8657 58%,#08613f 100%);
+  box-shadow:0 9px 21px rgba(15,134,87,.22),inset 0 1px rgba(255,255,255,.20);
+}
+.modal .btn-danger,
+.reception-confirm-dialog .btn-danger,
+.picking-confirm-dialog .btn-danger{
+  color:#fff;
+  border-color:#a92332;
+  background:linear-gradient(135deg,#df4b58 0%,#c4323f 58%,#96222d 100%);
+  box-shadow:0 9px 21px rgba(196,50,63,.21),inset 0 1px rgba(255,255,255,.20);
+}
+.modal .btn-warning,
+.reception-confirm-dialog .btn-warning,
+.picking-confirm-dialog .btn-warning{
+  color:#4d3900;
+  border-color:#e1b700;
+  background:linear-gradient(135deg,#ffe46a 0%,#ffd100 62%,#f2bd00 100%);
+  box-shadow:0 9px 20px rgba(213,167,0,.20),inset 0 1px rgba(255,255,255,.42);
+}
+.modal .btn-accent{
+  color:#071a45;
+  border-color:#e4b900;
+  background:linear-gradient(135deg,#ffe776 0%,#ffd100 58%,#efb900 100%);
+  box-shadow:0 9px 21px rgba(213,167,0,.20),inset 0 1px rgba(255,255,255,.40);
+}
+.modal .btn-ghost,
+.reception-confirm-dialog .btn-ghost,
+.picking-confirm-dialog .btn-ghost{
+  color:#16457f;
+  border-color:#c8d6e8;
+  background:linear-gradient(180deg,#fff 0%,#f4f7fb 100%);
+  box-shadow:0 5px 14px rgba(7,26,69,.07),inset 0 1px #fff;
+}
+.modal .btn-ghost:hover:not(:disabled),
+.reception-confirm-dialog .btn-ghost:hover:not(:disabled),
+.picking-confirm-dialog .btn-ghost:hover:not(:disabled){
+  color:#0b3e8f;
+  border-color:#8fb0dd;
+  background:linear-gradient(180deg,#fff 0%,#eaf2ff 100%);
+}
+.modal .btn:disabled,
+.reception-confirm-dialog .btn:disabled,
+.picking-confirm-dialog .btn:disabled{
+  opacity:.48;
+  filter:grayscale(.18) saturate(.65);
+  box-shadow:none!important;
+}
+.modal-foot{
+  gap:10px;
+  padding:15px 18px;
+  background:linear-gradient(180deg,#fbfcfe,#f4f7fb);
+}
+.modal-foot .btn:not(.icon-btn){min-width:132px}
+.modal .icon-btn{
+  width:42px;
+  height:42px;
+  border-radius:12px;
+  border-color:#d3ddea;
+  background:linear-gradient(180deg,#fff,#f4f7fb);
+  box-shadow:0 5px 13px rgba(7,26,69,.07);
+}
+.modal .icon-btn:hover{
+  color:#0b4bb7;
+  border-color:#9db8dd;
+  background:#eef5ff;
+  box-shadow:0 8px 18px rgba(7,26,69,.11);
+}
+
+/* Acciones principales tipo tarjeta dentro de procesos guiados */
+.guided-action-card,
+.reception-decision-card,
+.billing-entry-card,
+.cash-invoice-step{
+  overflow:hidden;
+  border-width:1px;
+  box-shadow:0 7px 20px rgba(7,26,69,.07),inset 0 1px #fff;
+  transition:transform .17s ease,box-shadow .17s ease,border-color .17s ease,background .17s ease;
+}
+.guided-action-card:hover:not(:disabled),
+.reception-decision-card:hover:not(:disabled),
+.billing-entry-card:hover:not(:disabled),
+.cash-invoice-step.active:hover:not(:disabled){
+  transform:translateY(-3px);
+  box-shadow:0 15px 32px rgba(7,26,69,.13),inset 0 1px #fff;
+}
+.guided-action-card:active:not(:disabled),
+.reception-decision-card:active:not(:disabled),
+.billing-entry-card:active:not(:disabled),
+.cash-invoice-step.active:active:not(:disabled){transform:translateY(-1px) scale(.992)}
+.guided-action-card:focus-visible,
+.reception-decision-card:focus-visible,
+.billing-entry-card:focus-visible,
+.cash-invoice-step:focus-visible{
+  outline:3px solid rgba(47,122,229,.24);
+  outline-offset:3px;
+}
+.reception-decision-card.correct{
+  border-color:#acd8c3;
+  background:linear-gradient(145deg,#f0fbf6 0%,#fff 72%);
+}
+.reception-decision-card.assign{
+  border-color:#ead174;
+  background:linear-gradient(145deg,#fff9df 0%,#fff 72%);
+}
+.billing-entry-card.accept{
+  border-color:#b5cdec;
+  background:linear-gradient(145deg,#f1f6ff 0%,#fff 72%);
+}
+.billing-entry-card.cash{
+  border-color:#e5ca70;
+  background:linear-gradient(145deg,#fff7da 0%,#fff 72%);
+}
+.cash-invoice-step.active{
+  border-color:#7ba5e6;
+  background:linear-gradient(145deg,#eef5ff,#fff);
+  box-shadow:0 11px 27px rgba(21,94,239,.12),inset 0 1px #fff;
+}
+.cash-invoice-step.done{
+  border-color:#abd8bf;
+  background:linear-gradient(145deg,#effaf4,#fff);
+}
+
+/* Botones grandes de avance del macroproceso */
+.modal .financial-main-button,
+.modal .reception-take-button,
+.modal .reception-confirm-button,
+.modal .picking-take-button,
+.modal .picking-send-button{
+  min-height:58px;
+  border-radius:16px;
+  font-size:14px;
+  font-weight:900;
+  letter-spacing:.005em;
+}
+.modal .financial-main-button{min-height:78px}
+.modal .financial-main-button>span{
+  box-shadow:inset 0 1px rgba(255,255,255,.22),0 7px 16px rgba(7,26,69,.12);
+}
+.modal .reception-confirm-button,
+.modal .picking-send-button{
+  box-shadow:0 12px 28px rgba(12,77,196,.25),inset 0 1px rgba(255,255,255,.22);
+}
+.modal .action-row,
+.modal .reception-support-actions,
+.modal .reception-editor-actions,
+.modal .reception-pdf-actions{
+  gap:10px;
+}
+
+@media(max-width:680px){
+  .modal-foot{display:grid;grid-template-columns:1fr;width:100%}
+  .modal-foot .btn:not(.icon-btn){width:100%;min-width:0}
+  .modal .action-row{display:grid;grid-template-columns:1fr}
+  .modal .action-row .btn{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+  .modal .btn,.guided-action-card,.reception-decision-card,.billing-entry-card,.cash-invoice-step{transition:none!important}
+}
