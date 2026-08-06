@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.9.2-multi-pedidos",
-  build: "2026-08-06.5",
+  version: "10.9.5-cierre-popup-diseno",
+  build: "2026-08-06.8",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

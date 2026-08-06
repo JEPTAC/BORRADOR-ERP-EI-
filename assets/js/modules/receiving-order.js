@@ -327,10 +327,9 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
           }))
         });
         clearDraft(data.order.id);
+        host.replaceChildren();
         refreshLists?.();
         toast("Recepción confirmada. El pedido fue asignado a Alistamiento.","success",7000);
-        host.replaceChildren();
-        setTimeout(()=>reload?.(),120);
       }catch(error){toast(error.message,"error",7500);button.disabled=false}
     }
   });

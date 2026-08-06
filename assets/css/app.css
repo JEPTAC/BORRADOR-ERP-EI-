@@ -764,3 +764,105 @@ tbody tr:hover td{background:#eef5ff}
 .parallel-work-actions{display:flex;align-items:center;gap:9px;flex:0 0 auto}
 @media(max-width:1280px){.active-work-trigger{min-width:45px;width:45px;padding:6px}.active-work-trigger-copy{display:none}.active-work-trigger>b{position:absolute;right:-5px;top:-6px;min-width:19px;height:19px;padding:0 4px;border-radius:7px;font-size:9px}.active-work-trigger-icon{width:31px}.global-search-shell{width:min(30vw,330px)}}
 @media(max-width:680px){.active-work-popover{position:fixed;left:12px;right:12px;top:76px;width:auto}.active-work-popover:before{display:none}.parallel-work-footer{display:grid!important;grid-template-columns:1fr!important}.parallel-work-note{padding:2px 1px}.parallel-work-actions{display:grid;grid-template-columns:1fr}.parallel-work-actions .btn{width:100%}.top-actions{gap:7px}.active-work-trigger{display:flex}.active-work-trigger-icon{width:31px;height:31px}}
+
+/* ==========================================================
+   V10.9.5 · LEGIBILIDAD, JERARQUÍA VISUAL Y CIERRE DE PROCESO
+   Ajuste ligero: sin librerías, imágenes nuevas ni animaciones costosas.
+   ========================================================== */
+body{font-size:16px;line-height:1.55}
+.card-head h3{font-size:17px;letter-spacing:-.01em}
+.card-head p,.card-head small{font-size:12px;line-height:1.5}
+.card-body,.card-pad{font-size:15px}
+.field{gap:9px;margin-bottom:19px}
+.field label{font-size:13px;letter-spacing:.005em}
+.control{min-height:48px;padding:12px 14px;border-radius:11px;font-size:15px;line-height:1.4}
+textarea.control{min-height:124px}
+.btn{min-height:46px;padding:11px 17px;border-radius:11px;font-size:14px}
+
+/* Tarjetas operativas: más información útil, mejor ocupación del espacio */
+.simple-queue-message{min-height:56px;padding:14px 16px;border:1px solid #d6e5fa;background:linear-gradient(135deg,#edf5ff,#f8fbff)}
+.simple-queue-message strong{font-size:14px}.simple-queue-message span{font-size:12px;line-height:1.45}
+.queue-result-head{margin:14px 0 12px}.queue-result-head strong{font-size:15px}.queue-result-head span{font-size:12px}
+.simple-order-grid{gap:18px}
+.simple-order-card{overflow:hidden;border-radius:20px;border-color:#d2deec;background:linear-gradient(180deg,#fff 0%,#fbfdff 100%);box-shadow:0 8px 24px rgba(7,26,69,.075)}
+.simple-order-card:hover{transform:translateY(-4px);border-color:#8eadd5;box-shadow:0 18px 40px rgba(7,26,69,.14)}
+.simple-order-top{padding:21px 20px 15px;border-top-width:6px}
+.simple-order-number{font-size:22px;letter-spacing:-.025em}.simple-order-client{margin-top:5px;font-size:13px;line-height:1.35}
+.simple-order-stage{margin:0 20px 12px;padding:13px 14px;border:1px solid #dbe7f6;border-radius:13px}
+.simple-order-stage span,.simple-order-facts small{font-size:10px}.simple-order-stage strong{margin-top:4px;font-size:14px;line-height:1.35}
+.simple-order-status{margin:0 20px 14px;padding:12px 14px;border-radius:13px}.simple-order-status small{font-size:10px}.simple-order-status strong{font-size:13px}
+.simple-status-dot{width:12px;height:12px}
+.simple-order-facts{gap:9px;padding:0 20px 17px}.simple-order-facts span{padding:10px;border-radius:11px;background:#fff}.simple-order-facts strong{margin-top:4px;font-size:11px}
+.simple-order-foot{padding:14px 20px}.simple-order-foot span{font-size:11px}.simple-order-foot strong{font-size:12px}
+.order-partial-tag,.picking-partial-badge{font-size:10px}
+
+/* Popups: encabezado más sólido, contenido más legible y mejor jerarquía */
+.modal{border-radius:21px;box-shadow:0 30px 85px rgba(4,17,45,.26)}
+.modal.wide,.simple-process-modal{width:min(1160px,calc(100vw - 30px))}
+.modal-head{min-height:82px;padding:18px 22px;border-radius:21px 21px 0 0;background:radial-gradient(circle at 86% -30%,rgba(47,122,229,.45),transparent 42%),linear-gradient(118deg,#05142f 0%,#08265b 58%,#0a3a8b 100%)}
+.modal-head h3{font-size:23px;letter-spacing:-.025em}.modal-head p{margin:5px 0 0;font-size:13px;line-height:1.45;color:rgba(255,255,255,.72)}
+.wizard-kicker{font-size:10px;letter-spacing:.11em}
+.modal-body{padding:24px;font-size:15px}.simple-process-body{max-height:calc(95vh - 166px);padding:24px;background:linear-gradient(180deg,#f4f7fb,#f8fafd)}
+.modal-foot{min-height:72px;padding:15px 22px}.modal-foot .btn:not(.icon-btn){min-width:144px}
+.simple-process-modal .simple-details summary,.modal .simple-details summary{padding:16px 18px;font-size:13px}
+.simple-detail-sections section>h4{font-size:16px}.info-box label{font-size:10px}.info-box strong{font-size:13px}
+.simple-order-summary{gap:12px}.simple-order-summary>div{padding:14px;border-radius:14px}.simple-order-summary small{font-size:10px}.simple-order-summary strong{font-size:13px}.simple-order-summary .simple-status-title{font-size:18px}
+.simple-flow-line{padding:12px 14px}.simple-flow-line small{font-size:10px}
+.simple-next-action{padding:20px 21px;border-radius:17px}.simple-next-action span{font-size:10px}.simple-next-action h4{font-size:21px}.simple-next-action p{font-size:13px;line-height:1.5}
+.simple-status-actions{padding:19px}.simple-status-actions h4{font-size:18px}.simple-status-actions p{font-size:12px}.simple-status-option{min-height:122px;padding:14px}.simple-status-option strong{font-size:13px}.simple-status-option small{font-size:11px}.simple-status-option b{font-size:9px}
+
+/* Recepción */
+.reception-process-modal{width:min(1200px,calc(100vw - 30px))}
+.reception-order-strip{gap:12px}.reception-order-strip>div,.reception-advisor-grid article{padding:14px;border-radius:14px}
+.reception-order-strip small,.reception-advisor-grid small,.reception-final-summary small{font-size:10px}.reception-order-strip strong,.reception-advisor-grid strong,.reception-final-summary strong{font-size:13px}
+.reception-stage-card{padding:22px;border-radius:19px;box-shadow:0 12px 30px rgba(7,26,69,.065)}
+.reception-stage-heading{margin-bottom:18px}.reception-stage-heading h4{font-size:22px;letter-spacing:-.015em}.reception-stage-heading p{font-size:13px;line-height:1.55}.reception-step-tag{padding:6px 10px;font-size:10px}
+.reception-decision-grid{gap:14px}.reception-decision-card{min-height:150px;padding:20px;border-radius:17px}.reception-decision-card>span{width:50px;height:50px;font-size:13px}.reception-decision-card strong{font-size:17px}.reception-decision-card small{font-size:12px;line-height:1.5}
+.reception-files>div>article{padding:12px;border-radius:12px}.reception-files>div>article strong{font-size:12px}.reception-files>div>article small{font-size:10px}.reception-files>div>article a{font-size:11px}
+.reception-lines-preview>article{padding:12px;border-radius:12px}.reception-lines-preview>article strong{font-size:12px}.reception-lines-preview>article p{font-size:11px}.reception-lines-preview>article span{font-size:12px}.reception-lines-preview>article b{font-size:9px}
+.reception-reader-status{font-size:12px}.reception-file-warning strong{font-size:13px}.reception-file-warning p{font-size:11px}
+.reception-reader-summary strong{font-size:13px}.reception-reader-summary span{font-size:11px}
+.reception-line-number{font-size:11px}.reception-cut-toggle{font-size:11px}.reception-assignment-grid .field small{font-size:11px}
+.reception-no-cut strong{font-size:14px}.reception-no-cut p{font-size:11px}.reception-confirm-button{min-height:62px;font-size:16px}
+.reception-support-actions .btn{min-height:48px}
+
+/* Alistamiento */
+.picking-process-modal{width:min(1180px,calc(100vw - 30px));max-width:none}
+.picking-order-strip{gap:12px;padding:14px}.picking-order-strip>div{padding:11px 13px}.picking-order-strip small{font-size:10px}.picking-order-strip strong{font-size:13px}
+.picking-progress-strip strong{font-size:12px}.picking-resume-banner strong{font-size:14px}.picking-resume-banner p{font-size:11px}
+.picking-verification-card{padding:21px;border-radius:19px}.picking-stage-head h4{font-size:23px}.picking-stage-head p{font-size:13px;line-height:1.5}
+.picking-counter strong{font-size:30px}.picking-counter span{font-size:11px}
+.picking-item-row{grid-template-columns:38px minmax(0,1fr) 250px;gap:14px;padding:15px;border-radius:16px}
+.picking-item-number{width:34px;height:34px;font-size:12px}.picking-item-data small{font-size:10px}.picking-item-data strong{font-size:12px;line-height:1.4}
+.picking-result{min-height:44px;font-size:12px}.picking-novelty{padding:13px}.picking-novelty label{font-size:12px}.picking-novelty small{font-size:10px}
+.picking-summary-state{padding:14px 16px}.picking-summary-state strong{font-size:15px}.picking-summary-state span{font-size:12px}.picking-route-note{font-size:11px}
+.picking-send-button{min-height:62px!important;font-size:16px!important}
+.picking-confirm-dialog{width:min(680px,95vw)}.picking-confirm-dialog h4{font-size:22px}.picking-confirm-dialog header p{font-size:12px}.picking-confirm-warning p,.picking-confirm-success p{font-size:12px}
+.picking-pending-preview h5{font-size:14px}.picking-pending-preview strong{font-size:12px}.picking-pending-preview span,.picking-pending-preview b{font-size:11px}
+.picking-round-history summary{font-size:12px}.picking-round-history article span,.picking-round-history article strong,.picking-round-history article small{font-size:11px}
+.picking-details-grid small{font-size:10px}.picking-details-grid strong{font-size:12px}.picking-partial-help{font-size:11px}
+
+/* Cartera, Caja y Facturación */
+.financial-simple-modal,.billing-process-modal{width:min(840px,calc(100vw - 30px));max-width:none}
+.financial-reason,.cash-invoice-intro{padding:18px 20px;border-radius:17px}.financial-reason span,.financial-last-update small,.invoice-confirmed span{font-size:10px}.financial-reason strong,.cash-invoice-intro strong{font-size:17px}.cash-invoice-intro p{font-size:13px}
+.financial-current-state{padding:20px;border-radius:18px}.financial-current-state small{font-size:10px}.financial-current-state strong{font-size:25px}.financial-current-state p{font-size:14px}
+.financial-main-button{min-height:84px;padding:16px 19px!important}.financial-main-button>span{width:40px;height:40px;font-size:16px}.financial-main-button strong{font-size:17px}.financial-main-button small{font-size:13px}
+.financial-last-update strong,.invoice-confirmed strong{font-size:15px}.financial-last-update span,.invoice-confirmed small{font-size:12px}
+.financial-state-choice span{min-height:88px;padding:17px}.financial-state-choice strong{font-size:15px}.financial-state-choice small{font-size:13px}
+.cash-invoice-step{padding:17px 19px;border-radius:17px}.cash-invoice-step>span{width:42px;height:42px}.cash-invoice-step strong{font-size:17px}.cash-invoice-step small{font-size:13px}
+.billing-process-intro{padding:18px 20px}.billing-process-intro span{font-size:10px}.billing-process-intro strong{font-size:17px}.billing-process-intro p{font-size:13px}
+.billing-entry-card{min-height:130px;padding:20px}.billing-entry-card strong{font-size:17px}.billing-entry-card small{font-size:13px}.billing-upload-note strong{font-size:14px}.billing-upload-note p{font-size:12px}
+
+@media(max-width:900px){
+  .modal.wide,.simple-process-modal,.reception-process-modal,.picking-process-modal{width:calc(100vw - 20px)}
+  .picking-item-row{grid-template-columns:36px 1fr}.picking-mini-actions{grid-column:2}
+}
+@media(max-width:680px){
+  body{font-size:15px}
+  .modal-head h3{font-size:21px}.modal-head p{font-size:12px}.modal-body{padding:16px}
+  .simple-process-body{padding:14px}
+  .simple-order-top{padding:18px 16px 13px}.simple-order-stage,.simple-order-status{margin-left:16px;margin-right:16px}.simple-order-facts{padding-left:16px;padding-right:16px}.simple-order-foot{padding-left:16px;padding-right:16px}
+  .reception-stage-card,.picking-verification-card{padding:16px}
+  .reception-stage-heading h4,.picking-stage-head h4{font-size:20px}
+  .picking-item-row{padding:13px}.picking-item-data strong{font-size:13px}
+}
