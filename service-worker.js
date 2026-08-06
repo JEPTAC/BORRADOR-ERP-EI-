@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-9-1-botones-drive-20260806";
+const CACHE="erp-electroingenieria-v10-9-2-multi-pedidos-20260806";
 const ASSETS=[
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const ASSETS=[
   "./assets/js/main.js",
   "./assets/js/config.js",
   "./assets/js/core/icons.js",
+  "./assets/js/modules/active-work.js",
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",

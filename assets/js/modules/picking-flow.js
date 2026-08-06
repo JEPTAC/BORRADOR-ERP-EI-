@@ -1,6 +1,7 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
 import {toast} from "../core/ui.js";
+import {parallelWorkFooter} from "./active-work.js";
 
 const DRAFT_PREFIX="erp:alistamiento:v10.8:";
 const ACTIVE_STATUSES=new Set(["QUEUED","ASSIGNED","IN_PROGRESS","WAITING","BLOCKED"]);
@@ -171,7 +172,7 @@ function shell(data,content){
         ${content}
         <details class="simple-details"><summary>Ver información completa del pedido</summary>${details(data)}</details>
       </div>
-      <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+      ${parallelWorkFooter(data.order.current_step_code)}
     </section>
   </div>`;
 }

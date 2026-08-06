@@ -2,6 +2,7 @@ import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
 import {modal,toast} from "../core/ui.js";
 import {uploadOrderFile} from "../services/drive.js";
+import {parallelWorkFooter} from "./active-work.js";
 
 const RELEASE_STEPS=new Set(["CARTERA","CAJA"]);
 const BILLING_STEPS=new Set(["FACTURACION","CAJA_FACTURACION"]);
@@ -91,7 +92,7 @@ function renderReleaseManagement(host,data,{reload,refreshLists}){
           ${validation?`<section class="financial-last-update"><small>Última actualización</small><strong>${fmt.escape(validation.notes||"Gestión actualizada")}</strong><span>${fmt.date(validation.created_at)}</span></section>`:""}
           <details class="simple-details"><summary>Ver información completa del pedido</summary>${orderDetails(data)}</details>
         </div>
-        <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+        ${parallelWorkFooter(order.current_step_code)}
       </section>
     </div>`;
 
@@ -235,7 +236,7 @@ function renderLogisticsBilling(host,data,{reload,refreshLists}){
           ${document?billingDocumentSummary(document,{pvp}):""}
           <details class="simple-details"><summary>Ver información completa del pedido</summary>${orderDetails(data)}</details>
         </div>
-        <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+        ${parallelWorkFooter(order.current_step_code)}
       </section>
     </div>`;
 
@@ -277,7 +278,7 @@ function renderCashInvoice(host,data,{reload,refreshLists}){
           ${invoice?billingDocumentSummary(invoice,{pvp:false}):""}
           <details class="simple-details"><summary>Ver información completa del pedido</summary>${orderDetails(data)}</details>
         </div>
-        <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+        ${parallelWorkFooter(order.current_step_code)}
       </section>
     </div>`;
 

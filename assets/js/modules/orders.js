@@ -7,6 +7,7 @@ import {uploadOrderFile} from "../services/drive.js";
 import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
 import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
+import {parallelWorkFooter} from "./active-work.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
 let currentView="cards";
@@ -214,7 +215,7 @@ function renderSimpleOrder(host,data){
             ${simpleDetails(data)}
           </details>
         </div>
-        <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+        ${parallelWorkFooter(order.current_step_code)}
       </section>
     </div>`;
 

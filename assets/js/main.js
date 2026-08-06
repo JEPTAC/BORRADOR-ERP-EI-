@@ -16,6 +16,7 @@ import {renderAudit} from "./modules/audit.js";
 import {renderAdmin} from "./modules/admin.js";
 import {renderCredit} from "./modules/credit.js";
 import {renderReports} from "./modules/reports.js";
+import {initActiveWork,moduleForStep} from "./modules/active-work.js";
 
 const routes={dashboard:renderDashboard,orders:renderOrders,sales:renderOrders,credit:renderCredit,inventory:renderInventory,approvals:renderApprovals,vsm:renderVsm,imports:renderImports,qa:renderQa,audit:renderAudit,admin:renderAdmin,reports:renderReports};
 const queueModules={cartera:["CARTERA"],caja:["CAJA","CAJA_FACTURACION"],purchasing:["COMPRAS"],receiving:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"],picking:["ALISTAMIENTO"],cutting:["CORTE"],billing:["FACTURACION"],shipping:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]};
@@ -24,7 +25,7 @@ const titles={dashboard:["Centro de operación","Visibilidad ejecutiva, cargas y
 async function bootAuthenticated(){
   document.querySelector("#app").innerHTML=loading("Preparando tu espacio de trabajo…");
   try{
-    const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();
+    const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();initActiveWork();
     initRouter(async route=>{
       if(route.segments[0]==="order"&&route.segments[1]){navigate("orders");setTimeout(()=>openOrder(route.segments[1]),0);return}
       const moduleId=route.module;const [title,sub]=titles[moduleId]||["ERP Electroingeniería",""];updateShell(moduleId,title,sub);
@@ -47,5 +48,13 @@ async function start(){
   onAuthChange(async session=>{setState({session});if(session&&!state.profile)await bootAuthenticated();if(!session){setState({profile:null,modules:[],catalogs:{}});renderLogin();bindLogin()}});
 }
 window.addEventListener("erp:open-order",e=>openOrder(e.detail));
+document.addEventListener("click",event=>{
+  const button=event.target.closest?.("[data-take-another]");
+  if(!button)return;
+  const step=button.dataset.takeAnother||"";
+  document.querySelector("#modal-root")?.replaceChildren();
+  navigate(moduleForStep(step),{step,assignment:"ALL"});
+  toast("El pedido anterior continúa en Mis pedidos activos. Puedes tomar otro sin perder el avance.","success",6000);
+});
 start().catch(e=>{renderLogin(e.message);bindLogin()});
 if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}))}

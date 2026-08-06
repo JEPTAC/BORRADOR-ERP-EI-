@@ -4,6 +4,7 @@ import {fmt} from "../core/format.js";
 import {toast,loading} from "../core/ui.js";
 import {downloadDriveFile,uploadOrderFile} from "../services/drive.js";
 import {readOrderPdf} from "../services/pdf-order-reader.js";
+import {parallelWorkFooter} from "./active-work.js";
 
 const DRAFT_PREFIX="erp:recepcion-pedido:v10.6:";
 
@@ -94,7 +95,7 @@ function baseShell(data,content,showDetails){
         ${content}
         ${showDetails?`<details class="simple-details reception-full-details"><summary>Ver información completa del pedido</summary>${fullDetails(data)}</details>`:""}
       </div>
-      <footer class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></footer>
+      ${parallelWorkFooter(order.current_step_code)}
     </section>
   </div>`;
 }

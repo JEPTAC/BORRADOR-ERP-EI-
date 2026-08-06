@@ -59,7 +59,7 @@ export function renderShell(){
     <main class="main">
       <header class="topbar">
         <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" aria-label="Abrir menú">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operación</h1><p id="top-subtitle">Visibilidad y control de la operación</p></div></div>
-        <div class="top-actions"><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
+        <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
       </header>
       <div class="content" id="page-content"></div>
     </main>
