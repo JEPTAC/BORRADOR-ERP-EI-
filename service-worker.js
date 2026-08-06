@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-10-1-drive-institucional-20260806";
+const CACHE="erp-electroingenieria-v10-11-despachos-entregas-20260806";
 const ASSETS=[
   "./",
   "./index.html",
@@ -14,12 +14,12 @@ const ASSETS=[
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",
   "./assets/js/modules/cutting-flow.js",
+  "./assets/js/modules/shipping-flow.js",
   "./assets/js/modules/queue.js",
   "./assets/js/modules/orders.js",
   "./assets/js/services/api.js",
   "./assets/js/services/drive.js",
-  "./assets/js/services/drive-bridge.js",
-  "./assets/js/services/drive-oauth.js",
+  "./assets/js/services/location.js",
   "./assets/js/services/pdf-order-reader.js"
 ];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));

@@ -88,5 +88,12 @@ export const api={
   saveInvoice:(orderId,payload)=>mutationRpc("erp_x_save_invoice",{p_order_id:orderId,p_payload:payload}),
   routeBillingToCash:(orderId,reason=null)=>mutationRpc("erp_x_route_billing_to_cash",{p_order_id:orderId,p_reason:reason}),
   saveDelivery:(orderId,payload)=>mutationRpc("erp_x_save_delivery",{p_order_id:orderId,p_payload:payload}),
+  saveShippingGuide:(orderId,payload)=>mutationRpc("erp_x_shipping_save_guide",{p_order_id:orderId,p_payload:payload}),
+  saveShippingLocation:(orderId,payload)=>mutationRpc("erp_x_shipping_save_location",{p_order_id:orderId,p_payload:payload}),
+  sendShippingToClosure:(orderId,payload={})=>mutationRpc("erp_x_shipping_send_to_closure",{p_order_id:orderId,p_payload:payload}),
+  registerShippingEvidence:(orderId,payload)=>mutationRpc("erp_x_shipping_register_evidence",{p_order_id:orderId,p_payload:payload}),
+  finalizeShipping:(orderId,payload={})=>mutationRpc("erp_x_shipping_finalize",{p_order_id:orderId,p_payload:payload}),
+  shippingSentOrders:(search="",page=1,pageSize=30)=>rpc("erp_x_shipping_sent_orders",{p_search:search||null,p_page:page,p_page_size:pageSize}),
+  reportShippingNoDelivery:(orderId,payload)=>mutationRpc("erp_x_shipping_report_no_delivery",{p_order_id:orderId,p_payload:payload}),
   audit:(entityType=null,search="",page=1,pageSize=100)=>rpc("erp_x_audit",{p_entity_type:entityType,p_search:search||null,p_page:page,p_page_size:pageSize})
 };

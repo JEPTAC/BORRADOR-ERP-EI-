@@ -1,0 +1,27 @@
+V10.11 · VALIDACIÓN ESTÁTICA
+
+RESULTADO: CORRECTO
+
+- 33 archivos JavaScript revisados.
+- 25 migraciones incluidas en el repositorio.
+- 59 RPC públicos definidos y 59 RPC consumidos por el frontend.
+- Cero accesos directos a tablas desde el navegador.
+- Imports locales verificados.
+- Recursos del Service Worker existentes.
+- Migración 025 con BEGIN/COMMIT y bloques $$ balanceados.
+- Diez funciones públicas creadas o actualizadas por la migración 025.
+- Sin numeración duplicada de migraciones.
+- Prueba HTTP local: 200 para index, CSS, manifest, Service Worker, shipping-flow.js y location.js.
+
+VALIDACIÓN OPERATIVA RECOMENDADA
+
+1. Probar una orden por cada modalidad de entrega.
+2. Tomar el pedido y guardar guía.
+3. Buscar una dirección y revisar coordenadas.
+4. Probar también ubicación actual bajo HTTPS.
+5. Pasar a cierre.
+6. Subir una fotografía.
+7. Finalizar el pedido.
+8. Con un asesor de Ventas, reportar no entrega en otro pedido enviado.
+9. Confirmar que Logística no pueda registrar NO_DELIVERY.
+10. Revisar expediente, VSM y tiempos por etapa.

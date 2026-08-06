@@ -4,10 +4,13 @@ import {paginationHtml,empty,loading,toast,guide} from "../core/ui.js";
 import {orderVisualCards,viewSwitch} from "../core/guided.js";
 import {openOrder} from "./orders.js";
 import {openCutPickup} from "./picking-flow.js";
+import {renderSentOrdersPanel} from "./shipping-flow.js";
+import {hasRole} from "../core/state.js";
 
 export async function renderQueue(root,{moduleId,steps,params={}}){
   let selected=params.step&&steps.includes(params.step)?params.step:steps[0];
   let page=Number(params.page||1),assignment=params.assignment||"ALL",view="cards";
+  const showSentOrders=moduleId==="shipping"&&(hasRole("ventas")||hasRole("super_admin"));
   root.innerHTML=`
     <section class="page-head simple-page-head"><div><h2>${moduleTitle(moduleId)}</h2><p>Abre un pedido y marca su situación. El ERP te pedirá únicamente lo indispensable para avanzar.</p></div><div class="page-actions"><button class="btn btn-ghost" id="queue-help">¿Cómo funciona?</button></div></section>
     ${steps.length>1?`<section class="simple-stage-selector"><span>Etapa:</span>${steps.map(step=>`<button type="button" data-step="${step}" class="${step===selected?"active":""}">${fmt.escape(fmt.step(step))}</button>`).join("")}</section>`:""}
@@ -18,6 +21,7 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
         ${viewSwitch(view)}
       </div>
       <div class="simple-queue-message"><strong>Solo debes elegir un pedido</strong><span>Al abrirlo verás el estado actual, lo que falta y el siguiente paso recomendado.</span></div>
+      ${showSentOrders?`<section class="sent-orders-panel"><header><div><span>Seguimiento comercial</span><h3>Pedidos enviados</h3><p>Ventas y Superadministración pueden reportar una novedad de no entrega.</p></div></header><div id="sent-orders-result">${loading("Consultando pedidos enviados…")}</div></section>`:""}
       ${moduleId==="picking"?`<section class="cut-pickup-queue"><header><div><span>Entrega desde Corte</span><h3>Cortes por recoger</h3><p>Recoge primero las referencias terminadas y después continúa con la verificación normal del pedido.</p></div><span class="cut-pickup-queue-count" id="cut-pickup-count">0</span></header><div id="cut-pickup-result">${loading("Consultando cortes listos…")}</div></section>`:""}
       <div id="queue-result">${loading()}</div>
       ${moduleId==="picking"?`<section class="picking-partial-queue"><header><div><span>Continuidad del pedido</span><h3>Pedidos parciales pendientes</h3><p>El mismo pedido vuelve aquí cuando termina la primera salida y llega la mercancía faltante.</p></div></header><div id="picking-partial-result">${loading("Consultando parciales…")}</div></section>`:""}
@@ -41,6 +45,7 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
       target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
       target.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>load(Number(element.dataset.page)));
       if(moduleId==="picking")await loadPendingPartials();
+      if(showSentOrders){const sent=root.querySelector("#sent-orders-result");if(sent)await renderSentOrdersPanel(sent,{search,page:1,onOpen:openOrder});}
     }catch(error){
       target.innerHTML=`<div class="module-error"><strong>No fue posible consultar esta cola</strong><p>${fmt.escape(error.message)}</p><button class="btn btn-primary" id="retry-queue">Reintentar</button></div>`;
       target.querySelector("#retry-queue")?.addEventListener("click",()=>load(page));

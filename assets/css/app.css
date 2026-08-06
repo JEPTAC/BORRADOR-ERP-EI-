@@ -887,3 +887,108 @@ textarea.control{min-height:124px}
 @media(max-width:800px){.cutting-guide-strip{grid-template-columns:1fr}.cutting-group-grid,.cut-pickup-queue-grid{grid-template-columns:1fr}.cutting-item{grid-template-columns:34px 1fr}.cutting-item-quantity,.cutting-item-actions,.cutting-resolution-panel{grid-column:2}.cutting-item-actions{grid-template-columns:1fr 1fr}.cut-pickup-item{grid-template-columns:34px 1fr}.cut-pickup-toggle{grid-column:2;width:100%}.cut-pickup-summary{grid-template-columns:1fr}.picking-progress-strip.four-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.cutting-toolbar{flex-direction:column}.cutting-group-summary{grid-template-columns:1fr 1fr}.cutting-live-balance{grid-template-columns:1fr 1fr}.cutting-live-balance>span{display:none}.cutting-item-actions{grid-template-columns:1fr}.cut-pickup-stage-head{display:grid}.cut-pickup-counter{width:100%}.cut-pickup-data>div{display:grid;grid-template-columns:1fr 1fr}.cut-pickup-data>div>span{min-width:0}.picking-progress-strip.four-steps{grid-template-columns:1fr 1fr}}
 .cut-pickup-queue-card.early{border-color:#e0c75b;background:linear-gradient(145deg,#fffdf2,#fff)}.cut-pickup-queue-card.early header{background:#fff9dc}.cut-pickup-queue-card.early header span{color:#855600}.cut-pickup-early-banner{display:flex;align-items:flex-start;gap:13px;margin-bottom:14px;padding:15px 17px;border:1px solid #e4d37c;border-radius:15px;background:#fffbed}.cut-pickup-early-banner>span{flex:0 0 auto;padding:6px 8px;border-radius:99px;background:var(--yellow-500);color:#4d3500;font-size:8px;font-weight:950;letter-spacing:.06em}.cut-pickup-early-banner strong{display:block;color:var(--blue-950);font-size:15px}.cut-pickup-early-banner p{margin:4px 0 0;color:var(--gray-700);font-size:12px;line-height:1.5}.cut-pickup-standalone{width:min(1120px,calc(100vw - 28px));max-width:none}
+
+/* V10.11 · Despachos y entregas guiados */
+.shipping-process-overlay{padding:22px}
+.shipping-process-modal{width:min(1120px,96vw);max-height:94vh}
+.shipping-process-head{background:linear-gradient(135deg,#0c315d,#165aa0);color:#fff;border-bottom:0;padding:24px 28px}
+.shipping-process-head h3{font-size:1.65rem;margin:.25rem 0}
+.shipping-process-head p,.shipping-process-head .wizard-kicker{color:rgba(255,255,255,.82)}
+.shipping-process-head .icon-btn{color:#fff;border-color:rgba(255,255,255,.3)}
+.shipping-process-body{padding:26px;background:#f7f9fc}
+.shipping-take-card{min-height:380px;border:1px solid #dbe5f1;border-radius:24px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:44px 26px;box-shadow:0 16px 40px rgba(28,55,90,.08)}
+.shipping-take-card.closure{background:linear-gradient(180deg,#fff,#f1f7f4)}
+.shipping-route-chip{display:inline-flex;padding:7px 13px;border-radius:999px;background:#e9f2ff;color:#0d4e8e;font-size:.78rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.shipping-take-icon{width:78px;height:78px;border-radius:24px;display:grid;place-items:center;background:#0f5ca8;color:#fff;font-size:2.2rem;margin:22px 0 18px;box-shadow:0 15px 30px rgba(15,92,168,.2)}
+.shipping-take-card.closure .shipping-take-icon{background:#178653}
+.shipping-take-card h4{font-size:1.6rem;margin:0 0 10px;color:#17324f}
+.shipping-take-card p{max-width:620px;font-size:1.05rem;color:#5d6f83;margin:0 0 25px}
+.btn-hero{min-height:58px;padding:0 28px;font-size:1.06rem;border-radius:16px;font-weight:800}
+.shipping-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:20px}
+.shipping-progress-item{display:flex;align-items:center;gap:10px;padding:14px 15px;border:1px solid #dfe6ef;background:#fff;border-radius:15px;color:#7a8796}
+.shipping-progress-item span{width:30px;height:30px;border-radius:10px;background:#eef2f6;display:grid;place-items:center;font-weight:900;flex:none}
+.shipping-progress-item strong{font-size:.9rem}
+.shipping-progress-item.active{border-color:#83b5e4;background:#f2f8ff;color:#164f83}
+.shipping-progress-item.active span{background:#0f5ca8;color:#fff}
+.shipping-progress-item.done{border-color:#addbc5;background:#f3fbf7;color:#17633f}
+.shipping-progress-item.done span{background:#168653;color:#fff}
+.shipping-overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.shipping-overview-grid article{background:#fff;border:1px solid #e1e7ef;border-radius:16px;padding:15px 16px}
+.shipping-overview-grid small,.shipping-data-card small,.shipping-location-card small,.dispatch-recap-grid small{display:block;color:#748397;font-size:.76rem;text-transform:uppercase;letter-spacing:.045em;font-weight:700;margin-bottom:5px}
+.shipping-overview-grid strong{display:block;color:#203a56;font-size:1rem;overflow-wrap:anywhere}
+.shipping-action-stack{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.shipping-step-card{position:relative;border:1px solid #e0e7ef;background:#fff;border-radius:20px;padding:21px;min-height:250px;display:flex;flex-direction:column;gap:16px}
+.shipping-step-card.active{border-color:#8ab8e5;box-shadow:0 12px 28px rgba(35,90,145,.09)}
+.shipping-step-card.completed{border-color:#a9d9c2;background:#fbfffd}
+.shipping-step-card.locked{opacity:.7;background:#f4f6f8}
+.shipping-step-card>header{display:flex;align-items:flex-start;gap:12px}
+.shipping-step-card>header>span{width:36px;height:36px;border-radius:12px;background:#e8f1fb;color:#0c579c;display:grid;place-items:center;font-weight:900;flex:none}
+.shipping-step-card.completed>header>span{background:#dcf3e7;color:#16784a}
+.shipping-step-card header div{flex:1}
+.shipping-step-card h4{margin:0;color:#1c3854;font-size:1.2rem}
+.shipping-step-card p{margin:4px 0 0;color:#66778a;line-height:1.45}
+.shipping-step-card header b{font-size:.74rem;background:#dff4e9;color:#146d43;border-radius:999px;padding:6px 10px}
+.shipping-step-card .btn-large{margin-top:auto}
+.btn-compact{min-height:38px;padding:7px 13px;border-radius:11px;font-size:.86rem}
+.shipping-data-card{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;border-radius:15px;background:#f5f8fb;border:1px solid #e3e9f0}
+.shipping-data-card strong{font-size:1.05rem;color:#203b56}
+.shipping-data-card a{grid-column:1/-1;color:#0d5b9f;font-weight:700;text-decoration:none}
+.shipping-location-card{padding:16px;border-radius:15px;background:#f5f9fd;border:1px solid #dfe9f3}
+.shipping-location-card>div strong{font-size:1.1rem;color:#1c3e5f}
+.shipping-location-card>div p{margin:5px 0 13px;font-size:.9rem;color:#607286}
+.shipping-location-card dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0}
+.shipping-location-card dl div{background:#fff;border-radius:11px;padding:9px}
+.shipping-location-card dt,.shipping-location-card dd,.sent-order-card dt,.sent-order-card dd{margin:0}
+.shipping-location-card dt{font-size:.68rem;color:#7a8794;text-transform:uppercase}
+.shipping-location-card dd{font-weight:750;color:#274057;font-size:.84rem;overflow-wrap:anywhere}
+.shipping-closure-callout,.shipping-finalize-panel{margin-top:18px;border-radius:20px;padding:22px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px;border:1px solid #dfe6ee;background:#fff}
+.shipping-closure-callout.ready,.shipping-finalize-panel.ready{background:linear-gradient(135deg,#f1fbf6,#fff);border-color:#9fd4b8}
+.shipping-closure-callout.pending,.shipping-finalize-panel.pending{background:#f5f6f8;color:#6e7b88}
+.shipping-closure-callout span,.shipping-finalize-panel span,.delivery-photo-copy span,.dispatch-recap header span,.sent-orders-panel>header span{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;font-weight:850;color:#2a6f52}
+.shipping-closure-callout h4,.shipping-finalize-panel h4{margin:3px 0;font-size:1.25rem;color:#183a2d}
+.shipping-closure-callout p,.shipping-finalize-panel p{margin:0;color:#627568}
+.shipping-dialog-intro{padding:15px 17px;border-radius:14px;background:#edf5fd;border-left:4px solid #1765ac;margin-bottom:18px}
+.shipping-dialog-intro.danger{background:#fff1f1;border-color:#bd2b31}
+.shipping-dialog-intro strong{display:block;font-size:1.06rem;color:#1e405f}
+.shipping-dialog-intro p{margin:5px 0 0;color:#617487}
+.location-capture-button{width:100%;margin-bottom:12px}
+.location-status{padding:12px 14px;border-radius:12px;background:#f1f4f7;color:#526579;margin-bottom:16px;min-height:45px}
+.location-attribution{font-size:.78rem;color:#758394;margin:12px 0 0}
+.dispatch-recap{background:#fff;border:1px solid #dfe7ef;border-radius:20px;padding:20px;margin-bottom:18px}
+.dispatch-recap>header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
+.dispatch-recap h4{font-size:1.25rem;margin:3px 0 0;color:#1a3855}
+.dispatch-recap-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dispatch-recap-grid>div{padding:12px;border-radius:13px;background:#f6f8fb}
+.dispatch-recap-grid strong{font-size:.91rem;color:#27425d;overflow-wrap:anywhere}
+.delivery-photo-panel{display:grid;grid-template-columns:1fr auto;align-items:center;gap:20px;background:#fff;border:1px dashed #7ca9d2;border-radius:20px;padding:24px}
+.delivery-photo-panel.complete{border-style:solid;border-color:#9bd1b4;background:#fbfffd}
+.delivery-photo-copy h4{font-size:1.25rem;color:#1e3c57;margin:4px 0}
+.delivery-photo-copy p{margin:0;color:#66798b}
+.delivery-file-card{display:flex;align-items:center;gap:15px;background:#eef8f3;border-radius:14px;padding:13px 15px;min-width:320px}
+.delivery-file-card div{flex:1}.delivery-file-card strong,.delivery-file-card small{display:block}.delivery-file-card small{color:#6b7d70;margin-top:3px}
+.shipping-time-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.shipping-time-list article{padding:13px;border:1px solid #e2e7ed;border-radius:13px;background:#fff}
+.shipping-time-list span,.shipping-time-list strong,.shipping-time-list small{display:block}.shipping-time-list span{color:#627487;font-size:.8rem}.shipping-time-list strong{font-size:1.1rem;color:#20405e;margin:3px 0}.shipping-time-list small{color:#8190a0}
+.sent-orders-panel{margin-bottom:20px;border:1px solid #cfe0ef;border-radius:20px;background:#f7fbff;padding:19px}
+.sent-orders-panel>header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.sent-orders-panel h3{font-size:1.25rem;color:#173d61;margin:3px 0}.sent-orders-panel p{margin:0;color:#65798b}
+.sent-orders-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:13px}
+.sent-order-card{background:#fff;border:1px solid #dae4ed;border-radius:17px;padding:16px;display:flex;flex-direction:column;gap:13px}
+.sent-order-card.novelty{border-color:#e4a7aa;background:#fffafa}
+.sent-order-card>header{display:flex;justify-content:space-between;gap:10px}.sent-order-card>header span{font-size:.76rem;color:#0d5b9e;font-weight:850}.sent-order-card h4{margin:3px 0 0;color:#203d58;font-size:1.05rem}
+.sent-order-route{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.sent-order-card dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}.sent-order-card dl div{padding:9px;border-radius:10px;background:#f5f7fa}.sent-order-card dt{font-size:.68rem;color:#788695;text-transform:uppercase}.sent-order-card dd{font-size:.82rem;color:#30465b;font-weight:700;margin-top:3px;overflow-wrap:anywhere}
+.sent-order-card footer{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:auto}.sent-order-alert{margin-right:auto;color:#aa252d;font-weight:800;font-size:.82rem}
+.btn-danger{background:#b72c33;color:#fff;border-color:#b72c33}.btn-danger:hover{background:#992229;border-color:#992229}
+@media(max-width:850px){.shipping-progress,.shipping-overview-grid,.dispatch-recap-grid{grid-template-columns:1fr 1fr}.shipping-action-stack{grid-template-columns:1fr}.shipping-location-card dl{grid-template-columns:1fr 1fr}.shipping-closure-callout,.shipping-finalize-panel,.delivery-photo-panel{align-items:stretch;flex-direction:column;display:flex}.delivery-file-card{min-width:0;width:100%}}
+@media(max-width:520px){.shipping-process-overlay{padding:0}.shipping-process-modal{width:100vw;max-height:100vh;border-radius:0}.shipping-process-body{padding:17px}.shipping-progress{grid-template-columns:1fr 1fr}.shipping-overview-grid,.dispatch-recap-grid{grid-template-columns:1fr}.shipping-take-card{min-height:330px;padding:30px 18px}.shipping-step-card{padding:17px}.shipping-location-card dl{grid-template-columns:1fr}.sent-orders-grid{grid-template-columns:1fr}}
+
+/* V10.11 · Seguimiento comercial, búsqueda geográfica y tiempos */
+.location-search-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end;margin-bottom:12px;padding:16px;border:1px solid #d9e5f0;border-radius:16px;background:#f8fbfe}
+.location-search-panel .field{margin:0}.location-search-actions{display:flex;gap:9px;flex-wrap:wrap}.location-search-actions .btn{white-space:nowrap}
+.shipping-commercial-view>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:17px;padding:18px;border:1px solid #dbe5ee;border-radius:18px;background:linear-gradient(135deg,#f5f9fd,#fff)}
+.shipping-commercial-view>header span{display:block;color:#1f679d;font-size:.74rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.shipping-commercial-view>header h4{margin:4px 0;color:#1b3957;font-size:1.35rem}.shipping-commercial-view>header p{margin:0;color:#627589}
+.commercial-shipping-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:0 0 18px}.sent-order-closed{margin-right:auto;color:#386c55;font-size:.82rem;font-weight:800}
+.shipping-trace-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.shipping-trace-metrics article{padding:15px;border:1px solid #dce5ed;border-radius:14px;background:linear-gradient(180deg,#fff,#f7f9fb)}.shipping-trace-metrics small,.shipping-trace-metrics strong,.shipping-trace-metrics span{display:block}.shipping-trace-metrics small{color:#65778a;font-size:.75rem;font-weight:750}.shipping-trace-metrics strong{margin:5px 0 3px;color:#153d62;font-size:1.22rem}.shipping-trace-metrics span{color:#7c8997;font-size:.72rem}
+@media(max-width:850px){.location-search-panel{grid-template-columns:1fr}.location-search-actions .btn{flex:1}.shipping-trace-metrics{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.location-search-actions{display:grid;grid-template-columns:1fr}.shipping-trace-metrics{grid-template-columns:1fr}.shipping-commercial-view>header{flex-direction:column}.commercial-shipping-actions .btn{width:100%}}

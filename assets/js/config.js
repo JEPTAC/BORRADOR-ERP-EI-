@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.10.1-drive-institucional",
-  build: "2026-08-06.13",
+  version: "10.11-despachos-entregas",
+  build: "2026-08-06.10",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -8,11 +8,6 @@ export const CONFIG = Object.freeze({
     publishableKey: "sb_publishable_yxgyHILzQVDHrS2MYYkBkA_UfN77JtT"
   },
   drive: {
-    // bridge: sin inicio de sesión ni permisos Google para los trabajadores.
-    // oauth: respaldo temporal con autorización individual.
-    mode: "bridge",
-    bridgeUrl: "https://script.google.com/macros/s/AKfycbygBt_yd5vQXIIZKZux_YCqhm37VSR3tKG109e_ED8NvmZzrUp179jkKSA6DnHNf2N3/exec",
-    maxFileBytes: 15 * 1024 * 1024,
     clientId: "125993982318-gn2177d3muf2iip0co9pf9mii7d12cre.apps.googleusercontent.com",
     scope: "https://www.googleapis.com/auth/drive.file",
     rootFolderName: "ERP_SUPPLY_ENTERPRISE"

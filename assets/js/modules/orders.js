@@ -8,6 +8,7 @@ import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
 import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
 import {isCuttingFlow,renderCuttingOrder} from "./cutting-flow.js";
+import {isShippingFlow,renderShippingFlow} from "./shipping-flow.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
@@ -165,6 +166,7 @@ function renderSimpleOrder(host,data){
   if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   if(isCuttingFlow(data)){renderCuttingOrder(host,data);return;}
   if(isPickingFlow(data)){renderPickingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
+  if(isShippingFlow(data)){renderShippingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   const order=data.order;
   const task=activeTask(data);
   const status=simpleStatus(task?.status||order.status);
