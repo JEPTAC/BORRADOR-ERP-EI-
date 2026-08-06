@@ -110,7 +110,7 @@ function reviewStage(data){
       <article><small>Referencia externa</small><strong>${fmt.escape(data.order.external_reference||"—")}</strong></article>
       <article><small>Materiales informados</small><strong>${items.length}</strong></article>
     </div>
-    ${advisorFiles(data.files||[])}
+    ${advisorFiles(data.files||[],data.order.id)}
     <div class="reception-current-lines">${readOnlyLines(items)}</div>
     <div class="reception-decision-grid">
       <button type="button" class="reception-decision-card correct" data-info-correct>
@@ -171,6 +171,7 @@ function assignmentStage(data,draft,pickingPool,cutPool){
 }
 
 function bindStage(host,data,draft,callbacks){
+  bindDriveDownloads(host,data);
   host.querySelector("[data-info-correct]")?.addEventListener("click",()=>{
     draft.mode="CORRECT";
     draft.stage="ASSIGN";
@@ -197,7 +198,7 @@ function bindStage(host,data,draft,callbacks){
     if(!file)return toast("Selecciona un PDF válido.","error");
     draft.sourceFileId=file.drive_file_id;
     draft.sourceFileName=file.file_name;
-    await processPdf(host,data,draft,callbacks,()=>downloadDriveFile(file.drive_file_id));
+    await processPdf(host,data,draft,callbacks,()=>downloadDriveFile(file.drive_file_id,data.order.id));
   });
   host.querySelector("[data-local-pdf]")?.addEventListener("change",async event=>{
     const file=event.target.files?.[0];
@@ -209,6 +210,41 @@ function bindStage(host,data,draft,callbacks){
 
   if(draft.stage==="EDIT")bindLineEditor(host,data,draft,callbacks);
   if(draft.stage==="ASSIGN")loadAssignmentStage(host,data,draft,callbacks);
+}
+
+function bindDriveDownloads(host,data){
+  host.querySelectorAll("[data-download-drive-file]").forEach(button=>{
+    button.addEventListener("click",async()=>{
+      const fileId=button.dataset.downloadDriveFile;
+      const file=(data.files||[]).find(item=>String(item.drive_file_id)===String(fileId));
+      if(!file)return toast("No se encontró el archivo solicitado.","error");
+      const previous=button.textContent;
+      button.disabled=true;
+      button.textContent="Descargando…";
+      try{
+        const blob=await downloadDriveFile(fileId,data.order.id);
+        downloadBlob(blob,file.file_name||"archivo");
+        toast("Archivo descargado.","success");
+      }catch(error){
+        toast(error.message,"error",7500);
+      }finally{
+        button.disabled=false;
+        button.textContent=previous;
+      }
+    });
+  });
+}
+
+function downloadBlob(blob,fileName){
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=String(fileName||"archivo");
+  link.hidden=true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
 async function processPdf(host,data,draft,callbacks,getFile){
@@ -441,9 +477,9 @@ function readOnlyLines(items){
   return `<div class="reception-lines-preview">${items.map(item=>`<article><div><strong>${fmt.escape(item.reference||item.sku||item.description)}</strong><p>${fmt.escape(item.description)}</p></div><span>${fmt.number(item.quantity,3)} ${fmt.escape(item.unit||"UND")}</span>${item.requires_cut?'<b>Corte</b>':""}</article>`).join("")}</div>`;
 }
 
-function advisorFiles(files){
+function advisorFiles(files,orderId){
   if(!files.length)return '<div class="reception-file-warning"><strong>No hay archivos cargados.</strong><p>La información podrá asignarse manualmente o mediante un PDF local.</p></div>';
-  return `<section class="reception-files"><header><strong>Archivos enviados por el asesor</strong><span>${files.length} soporte(s)</span></header><div>${files.map(file=>`<article><span class="reception-file-icon">${isPdf(file)?"PDF":"DOC"}</span><div><strong>${fmt.escape(file.file_name)}</strong><small>${fmt.escape(file.file_category||"EVIDENCE")} · ${formatBytes(file.size_bytes)}</small></div>${file.web_view_link?`<a class="btn btn-ghost" href="${fmt.escape(file.web_view_link)}" target="_blank" rel="noopener">Abrir</a>`:""}</article>`).join("")}</div></section>`;
+  return `<section class="reception-files"><header><strong>Archivos enviados por el asesor</strong><span>${files.length} soporte(s)</span></header><div>${files.map(file=>`<article><span class="reception-file-icon">${isPdf(file)?"PDF":"DOC"}</span><div><strong>${fmt.escape(file.file_name)}</strong><small>${fmt.escape(file.file_category||"EVIDENCE")} · ${formatBytes(file.size_bytes)}</small></div>${file.drive_file_id?`<button type="button" class="btn btn-ghost" data-download-drive-file="${fmt.escape(file.drive_file_id)}" data-order-id="${fmt.escape(orderId)}">Descargar</button>`:""}</article>`).join("")}</div></section>`;
 }
 
 function fullDetails(data){
