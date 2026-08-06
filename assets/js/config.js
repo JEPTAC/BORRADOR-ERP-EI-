@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.11.2-drive-institucional",
-  build: "2026-08-06.12",
+  version: "10.11.4-ubicacion-maps",
+  build: "2026-08-06.14",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

@@ -2,7 +2,7 @@ import {api} from "../services/api.js";
 import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {modal,toast,loading,empty,paginationHtml} from "../core/ui.js";
 import {uploadOrderFile} from "../services/drive.js";
-import {geocodePlace,locateCurrentPlace} from "../services/location.js";
+import {createLocationMap,elevationFor,geocodeAddress,locateCurrentPlace,reverseGeocode} from "../services/location.js";
 import {hasRole} from "../core/state.js";
 import {parallelWorkFooter} from "./active-work.js";
 
@@ -117,28 +117,131 @@ function openGuideDialog(data,delivery,{reload,refreshLists}){
 }
 
 function openLocationDialog(data,current,{reload,refreshLists}){
-  const ref=modal({title:"Especificar lugar de entrega",confirmLabel:"Guardar lugar",size:"wide",body:`<div class="shipping-dialog-intro"><strong>Ubicación del despacho</strong><p>Busca el destino escrito o utiliza la ubicación actual. El ERP completará municipio, dirección, coordenadas y altitud cuando estén disponibles.</p></div><div class="location-search-panel"><div class="field"><label>Buscar lugar, municipio o dirección</label><input class="control" name="locationQuery" value="${fmt.escape(current.address||current.placeLabel||"")}" placeholder="Ejemplo: Parque Industrial Tuluá, Valle del Cauca"></div><div class="location-search-actions"><button type="button" class="btn btn-primary btn-large" data-search-location>Ubicar lugar escrito</button><button type="button" class="btn btn-ghost btn-large" data-capture-location>Usar ubicación actual</button></div></div><div class="location-status" data-location-status>Escribe el destino y pulsa “Ubicar lugar escrito”.</div><div class="form-grid location-form"><div class="field full"><label>Lugar o punto de referencia *</label><input class="control" name="placeLabel" value="${fmt.escape(current.placeLabel||"")}" placeholder="Ejemplo: bodega principal, portería o sede" required></div><div class="field"><label>Municipio *</label><input class="control" name="municipality" value="${fmt.escape(current.municipality||"")}" required></div><div class="field"><label>Departamento</label><input class="control" name="department" value="${fmt.escape(current.department||"")}"></div><div class="field full"><label>Dirección *</label><textarea class="control" name="address" required>${fmt.escape(current.address||"")}</textarea></div><div class="field"><label>Latitud *</label><input class="control" name="latitude" type="number" step="any" value="${fmt.escape(current.latitude??"")}" required></div><div class="field"><label>Longitud *</label><input class="control" name="longitude" type="number" step="any" value="${fmt.escape(current.longitude??"")}" required></div><div class="field"><label>Altitud estimada (m)</label><input class="control" name="altitude" type="number" step="any" value="${fmt.escape(current.altitude??"")}"></div><div class="field"><label>Precisión GPS (m)</label><input class="control" name="accuracy" type="number" step="any" value="${fmt.escape(current.accuracy??"")}" readonly></div></div><p class="location-attribution">Dirección estimada mediante OpenStreetMap y altitud aproximada mediante un modelo geográfico. Confirma los datos antes de guardar.</p>`,onConfirm:async dialog=>{
-    const value=name=>dialog.querySelector(`[name="${name}"]`).value.trim();
-    await api.saveShippingLocation(data.order.id,{placeLabel:value("placeLabel"),municipality:value("municipality"),department:value("department")||null,address:value("address"),latitude:Number(value("latitude")),longitude:Number(value("longitude")),altitude:value("altitude")===""?null:Number(value("altitude")),accuracy:value("accuracy")===""?null:Number(value("accuracy")),source:"GEOCODED_OR_DEVICE"});
-    toast("Lugar guardado.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
-  }});
-  const root=ref.root,status=root.querySelector("[data-location-status]");
-  const applyPlace=(place,{fromGps=false}={})=>{
-    for(const key of ["municipality","department","address","latitude","longitude","altitude","accuracy"]){const control=root.querySelector(`[name="${key}"]`);if(control&&place[key]!=null)control.value=place[key]}
-    const label=root.querySelector('[name="placeLabel"]');
-    if(!label.value)label.value=place.municipality?`Entrega en ${place.municipality}`:"Lugar de entrega";
-    status.textContent=place.geocodingWarning?`${place.geocodingWarning} Confirma manualmente municipio y dirección.`:fromGps?`Ubicación actual obtenida con precisión aproximada de ${Math.round(place.accuracy||0)} m.`:"Destino localizado. Confirma el resultado antes de guardar.";
+  let mapController=null;
+  let lastSelectedPlace=Number.isFinite(Number(current?.latitude))&&Number.isFinite(Number(current?.longitude))?current:null;
+  let selectedSource=current?.source||"STRUCTURED_ADDRESS";
+  const ref=modal({title:"Ubicar lugar de entrega",confirmLabel:"Guardar ubicación",size:"wide",body:`
+    <div class="shipping-dialog-intro location-intro"><strong>Ubicación tipo Maps</strong><p>Escribe departamento, municipio y dirección. El ERP localizará el punto, completará las coordenadas y lo mostrará en el mapa.</p></div>
+    <section class="maps-address-search">
+      <div class="maps-address-grid">
+        <div class="field"><label>Departamento *</label><input class="control" name="department" value="${fmt.escape(current.department||"")}" placeholder="Ejemplo: Valle del Cauca" required></div>
+        <div class="field"><label>Municipio *</label><input class="control" name="municipality" value="${fmt.escape(current.municipality||"")}" placeholder="Ejemplo: Tuluá" required></div>
+        <div class="field full"><label>Dirección *</label><input class="control" name="address" value="${fmt.escape(current.address||"")}" placeholder="Ejemplo: Carrera 40 # 28-15" required></div>
+      </div>
+      <div class="maps-search-actions">
+        <button type="button" class="btn btn-primary btn-large" data-search-address>Buscar y ubicar</button>
+        <button type="button" class="btn btn-ghost btn-large" data-capture-location>Usar ubicación actual</button>
+      </div>
+    </section>
+    <div class="location-status" data-location-status aria-live="polite">Completa los tres campos y pulsa “Buscar y ubicar”.</div>
+    <div class="maps-search-results" data-location-results hidden></div>
+    <section class="maps-workspace">
+      <div class="erp-location-map" data-location-map aria-label="Mapa de ubicación del pedido"><div class="map-loading">Preparando mapa…</div></div>
+      <aside class="maps-location-summary">
+        <span class="maps-summary-kicker">Punto seleccionado</span>
+        <strong data-selected-place>${fmt.escape(current.placeLabel||current.address||"Aún no ubicado")}</strong>
+        <p data-selected-address>${fmt.escape(current.address||"Busca la dirección para marcarla en el mapa.")}</p>
+        <dl>
+          <div><dt>Latitud</dt><dd data-map-lat>${fmt.escape(current.latitude??"—")}</dd></div>
+          <div><dt>Longitud</dt><dd data-map-lon>${fmt.escape(current.longitude??"—")}</dd></div>
+          <div><dt>Altitud</dt><dd data-map-alt>${current.altitude==null?"—":`${fmt.number(current.altitude,1)} m`}</dd></div>
+        </dl>
+        <small>Toca el mapa o arrastra el marcador para ajustar el punto exacto.</small>
+      </aside>
+    </section>
+    <div class="form-grid location-form maps-final-fields">
+      <div class="field full"><label>Lugar o punto de referencia *</label><input class="control" name="placeLabel" value="${fmt.escape(current.placeLabel||"")}" placeholder="Ejemplo: portería, bodega o sede del cliente" required></div>
+      <div class="field"><label>Latitud</label><input class="control coordinates-control" name="latitude" type="number" step="any" value="${fmt.escape(current.latitude??"")}" readonly required></div>
+      <div class="field"><label>Longitud</label><input class="control coordinates-control" name="longitude" type="number" step="any" value="${fmt.escape(current.longitude??"")}" readonly required></div>
+      <div class="field"><label>Altitud estimada (m)</label><input class="control coordinates-control" name="altitude" type="number" step="any" value="${fmt.escape(current.altitude??"")}" readonly></div>
+      <div class="field"><label>Precisión GPS (m)</label><input class="control coordinates-control" name="accuracy" type="number" step="any" value="${fmt.escape(current.accuracy??"")}" readonly></div>
+    </div>
+    <p class="location-attribution">Mapa y dirección basados en OpenStreetMap. Verifica el marcador antes de guardar.</p>`,onConfirm:async dialog=>{
+      const value=name=>dialog.querySelector(`[name="${name}"]`).value.trim();
+      const latitude=Number(value("latitude")),longitude=Number(value("longitude"));
+      if(!Number.isFinite(latitude)||!Number.isFinite(longitude))throw new Error("Primero debes buscar y ubicar la dirección en el mapa.");
+      await api.saveShippingLocation(data.order.id,{placeLabel:value("placeLabel"),municipality:value("municipality"),department:value("department"),address:value("address"),latitude,longitude,altitude:value("altitude")===""?null:Number(value("altitude")),accuracy:value("accuracy")===""?null:Number(value("accuracy")),source:selectedSource});
+      mapController?.destroy();
+      toast("Ubicación guardada.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
+    }});
+
+  const root=ref.root;
+  const status=root.querySelector("[data-location-status]");
+  const resultsHost=root.querySelector("[data-location-results]");
+  const mapHost=root.querySelector("[data-location-map]");
+  const control=name=>root.querySelector(`[name="${name}"]`);
+  const text=name=>control(name)?.value.trim()||"";
+
+  const setSummary=place=>{
+    root.querySelector("[data-selected-place]").textContent=place.placeLabel||text("placeLabel")||place.municipality||"Punto seleccionado";
+    root.querySelector("[data-selected-address]").textContent=place.address||text("address")||"Dirección seleccionada";
+    root.querySelector("[data-map-lat]").textContent=Number.isFinite(Number(place.latitude))?Number(place.latitude).toFixed(6):"—";
+    root.querySelector("[data-map-lon]").textContent=Number.isFinite(Number(place.longitude))?Number(place.longitude).toFixed(6):"—";
+    root.querySelector("[data-map-alt]").textContent=place.altitude==null?"—":`${fmt.number(place.altitude,1)} m`;
   };
-  root.querySelector("[data-search-location]")?.addEventListener("click",async button=>{
-    const query=root.querySelector('[name="locationQuery"]').value.trim();button.disabled=true;status.innerHTML=loading("Buscando destino…");
-    try{applyPlace(await geocodePlace(query));if(!root.querySelector('[name="placeLabel"]').value)root.querySelector('[name="placeLabel"]').value=query;}
-    catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
+
+  const applyPlace=(place,{moveMap=true,source="STRUCTURED_ADDRESS",preserveTypedAddress=false}={})=>{
+    selectedSource=source;
+    lastSelectedPlace=place;
+    for(const key of ["municipality","department","latitude","longitude","altitude","accuracy"]){
+      const field=control(key);if(field&&place[key]!=null)field.value=place[key];
+    }
+    if(!preserveTypedAddress&&place.address)control("address").value=place.address;
+    if(!text("placeLabel"))control("placeLabel").value=place.municipality?`Entrega en ${place.municipality}`:"Lugar de entrega";
+    const normalized={...place,placeLabel:text("placeLabel"),address:text("address")};
+    setSummary(normalized);
+    if(moveMap&&mapController)mapController.setPoint(place.latitude,place.longitude,{zoom:17});
+  };
+
+  const selectResult=async(place,index)=>{
+    status.innerHTML=loading("Ubicando dirección en el mapa…");
+    if(place.altitude==null)place.altitude=await elevationFor(place.latitude,place.longitude);
+    applyPlace(place,{source:"STRUCTURED_ADDRESS"});
+    resultsHost.querySelectorAll("[data-location-result]").forEach((button,buttonIndex)=>button.classList.toggle("selected",buttonIndex===index));
+    status.textContent="Dirección localizada. Ajusta el marcador si el punto exacto está en otra entrada o edificación.";
+  };
+
+  const renderResults=results=>{
+    resultsHost.hidden=false;
+    resultsHost.innerHTML=`<div class="maps-results-head"><strong>${results.length===1?"Dirección encontrada":"Selecciona la coincidencia correcta"}</strong><span>${results.length} resultado${results.length===1?"":"s"}</span></div>${results.map((place,index)=>`<button type="button" class="maps-result-option ${index===0?"selected":""}" data-location-result="${index}"><span>${index+1}</span><div><strong>${fmt.escape(place.municipality||text("municipality"))}</strong><small>${fmt.escape(place.displayName||place.address)}</small></div></button>`).join("")}`;
+    resultsHost.querySelectorAll("[data-location-result]").forEach(button=>button.addEventListener("click",()=>selectResult(results[Number(button.dataset.locationResult)],Number(button.dataset.locationResult))));
+  };
+
+  const resolveMapPoint=async({latitude,longitude,reason})=>{
+    status.innerHTML=loading(reason==="MARKER_DRAG"?"Ajustando marcador…":"Consultando el punto seleccionado…");
+    try{
+      const [addressInfo,altitude]=await Promise.all([reverseGeocode(latitude,longitude),elevationFor(latitude,longitude)]);
+      applyPlace({...addressInfo,latitude,longitude,altitude,accuracy:null},{moveMap:false,source:reason});
+      resultsHost.hidden=true;
+      status.textContent="Punto ajustado manualmente. Confirma la dirección y el lugar de referencia.";
+    }catch(error){
+      applyPlace({latitude,longitude,altitude:null,accuracy:null},{moveMap:false,source:reason,preserveTypedAddress:true});
+      status.textContent="El marcador fue ajustado, pero no se pudo normalizar la dirección. Conservamos la dirección escrita.";
+    }
+  };
+
+  createLocationMap(mapHost,{latitude:current.latitude,longitude:current.longitude,onPointChange:resolveMapPoint})
+    .then(controller=>{mapController=controller;mapHost.querySelector(".map-loading")?.remove();if(lastSelectedPlace&&Number.isFinite(Number(lastSelectedPlace.latitude))&&Number.isFinite(Number(lastSelectedPlace.longitude))){controller.setPoint(lastSelectedPlace.latitude,lastSelectedPlace.longitude,{zoom:17});setSummary(lastSelectedPlace);}})
+    .catch(error=>{mapHost.innerHTML=`<div class="map-unavailable"><strong>Mapa no disponible</strong><p>${fmt.escape(error.message)}</p></div>`;});
+
+  root.querySelector("[data-search-address]")?.addEventListener("click",async button=>{
+    button.disabled=true;resultsHost.hidden=true;status.innerHTML=loading("Buscando dirección…");
+    try{
+      const results=await geocodeAddress({department:text("department"),municipality:text("municipality"),address:text("address")});
+      renderResults(results);
+      await selectResult(results[0],0);
+    }catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
   });
+
   root.querySelector("[data-capture-location]")?.addEventListener("click",async button=>{
-    button.disabled=true;status.innerHTML=loading("Obteniendo ubicación actual…");
-    try{applyPlace(await locateCurrentPlace(),{fromGps:true});}
-    catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
+    button.disabled=true;resultsHost.hidden=true;status.innerHTML=loading("Obteniendo ubicación actual…");
+    try{
+      const place=await locateCurrentPlace();applyPlace(place,{source:"DEVICE_GPS"});
+      status.textContent=place.geocodingWarning?`${place.geocodingWarning} Confirma manualmente municipio y dirección.`:`Ubicación actual obtenida con precisión aproximada de ${Math.round(place.accuracy||0)} m.`;
+    }catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
   });
+
+  root.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>mapController?.destroy(),{once:true}));
 }
 
 function openEvidenceDialog(data,{reload,refreshLists}){
