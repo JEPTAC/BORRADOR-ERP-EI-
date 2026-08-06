@@ -9,11 +9,11 @@ export function orderVisualCards(rows,{queue=false}={}){
   return `<div class="${css} simple-order-grid">${rows.map(order=>{
     const status=simpleStatus(order.status);
     return `<button type="button" class="order-visual-card simple-order-card ${queue?"queue-order-card":""} ${order.slaExceeded?"overdue":""}" data-order="${fmt.escape(order.id)}">
-      <div class="simple-order-top"><div><span class="simple-order-number">${fmt.escape(order.orderNumber)}</span><span class="simple-order-client">${fmt.escape(order.clientName)}</span></div>${priorityBadge(order.priority)}</div>
+      <div class="simple-order-top"><div><span class="simple-order-number">${fmt.escape(order.orderNumber)}</span><span class="simple-order-client">${fmt.escape(order.clientName)}</span></div><div class="simple-order-tags">${order.fulfillmentStatus==="PARTIAL"||order.partialLabel?`<span class="order-partial-tag">Pedido parcial${Number(order.pendingItemCount||0)>0?` · ${fmt.number(order.pendingItemCount)} pendiente(s)`:""}</span>`:""}${priorityBadge(order.priority)}</div></div>
       <div class="simple-order-stage"><span>Etapa actual</span><strong>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</strong></div>
       <div class="simple-order-status ${status.tone}"><span class="simple-status-dot"></span><div><small>Situación</small><strong>${fmt.escape(status.label)}</strong></div></div>
       <div class="simple-order-facts"><span><small>Responsable</small><strong>${fmt.escape(order.assigneeName||"Sin asignar")}</strong></span><span><small>Tiempo</small><strong>${fmt.hours(order.ageBusinessSeconds)}</strong></span><span><small>Entrega</small><strong>${fmt.escape(fmt.route(order.route))}</strong></span></div>
-      <footer class="simple-order-foot"><span>${order.slaExceeded?"Requiere atención":"Listo para gestionar"}</span><strong>Gestionar pedido →</strong></footer>
+      <footer class="simple-order-foot"><span>${order.canResume===false?"Salida parcial en curso":order.slaExceeded?"Requiere atención":"Listo para gestionar"}</span><strong>${order.canResume===false?"Ver estado →":"Gestionar pedido →"}</strong></footer>
     </button>`;
   }).join("")}</div>`;
 }

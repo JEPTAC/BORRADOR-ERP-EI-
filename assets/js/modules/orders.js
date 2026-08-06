@@ -6,6 +6,7 @@ import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice,simpleStat
 import {uploadOrderFile} from "../services/drive.js";
 import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
+import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
 let currentView="cards";
@@ -82,7 +83,7 @@ function renderOrderResults(){
 }
 
 function ordersTable(rows){
-  return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Tipo y pago</th><th>Etapa</th><th>Estado</th><th>Responsable</th><th>Tiempo</th><th>Prioridad</th><th>Actualizado</th></tr></thead><tbody>${rows.map(order=>`<tr><td><span class="table-link" data-order="${order.id}">${fmt.escape(order.orderNumber)}</span><div class="cell-sub">${fmt.escape(order.externalReference||"")}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.route(order.route))}</div></td><td><span class="badge badge-blue">${fmt.escape(fmt.label(order.orderType))}</span><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td><div class="cell-main">${fmt.escape(fmt.step(order.stepName||order.currentStep))}</div></td><td>${statusBadge(order.status)}${order.slaExceeded?'<div class="cell-sub danger">Plazo excedido</div>':""}</td><td>${fmt.escape(order.assigneeName||"En cola")}<div class="cell-sub">${fmt.escape(fmt.role(order.roleCode||""))}</div></td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${priorityBadge(order.priority)}</td><td>${fmt.date(order.updatedAt)}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Tipo y pago</th><th>Etapa</th><th>Estado</th><th>Responsable</th><th>Tiempo</th><th>Prioridad</th><th>Actualizado</th></tr></thead><tbody>${rows.map(order=>`<tr><td><span class="table-link" data-order="${order.id}">${fmt.escape(order.orderNumber)}</span>${order.fulfillmentStatus==="PARTIAL"||order.partialLabel?`<div><span class="order-partial-tag">Pedido parcial · ${fmt.number(order.pendingItemCount||0)} pendiente(s)</span></div>`:""}<div class="cell-sub">${fmt.escape(order.externalReference||"")}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.route(order.route))}</div></td><td><span class="badge badge-blue">${fmt.escape(fmt.label(order.orderType))}</span><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td><div class="cell-main">${fmt.escape(fmt.step(order.stepName||order.currentStep))}</div></td><td>${statusBadge(order.status)}${order.slaExceeded?'<div class="cell-sub danger">Plazo excedido</div>':""}</td><td>${fmt.escape(order.assigneeName||"En cola")}<div class="cell-sub">${fmt.escape(fmt.role(order.roleCode||""))}</div></td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${priorityBadge(order.priority)}</td><td>${fmt.date(order.updatedAt)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function select(id,label,items=[],valueKey="code",labelKey="name",selected=""){
@@ -160,6 +161,7 @@ export async function openOrder(orderId){
 function renderSimpleOrder(host,data){
   if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
+  if(isPickingFlow(data)){renderPickingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   const order=data.order;
   const task=activeTask(data);
   const status=simpleStatus(task?.status||order.status);

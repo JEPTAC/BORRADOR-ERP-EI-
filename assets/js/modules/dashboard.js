@@ -6,10 +6,15 @@ import {navigate} from "../core/router.js";
 import {state,can} from "../core/state.js";
 
 export async function renderDashboard(root){
-  const data=await api.dashboard();
+  const today=new Date();
+  const to=today.toISOString().slice(0,10);
+  const from=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const [data,partialData]=await Promise.all([api.dashboard(),api.partialFulfillmentMetrics(from,to)]);
   const k=data.kpis||{};
   const queues=data.queues||[];
   const recent=data.recent||[];
+  const partialSummary=partialData.summary||{};
+  const partialOrders=partialData.orders||[];
   const cards=[];
   if(can("sales","canCreate")||can("orders","canCreate"))cards.push({id:"guide-new-order",title:"Crear un pedido",description:"El asistente te pedirá solo la información necesaria, paso a paso.",icon:"＋",tone:"accent"});
   if(state.modules.some(m=>["cartera","caja","purchasing","receiving","picking","cutting","billing","shipping"].includes(m.code)&&m.canRead))cards.push({id:"guide-my-work",title:"Ver mis tareas",description:"Abre los pedidos asignados a tu usuario y continúa la etapa correspondiente.",icon:"✓",tone:"primary"});
@@ -21,8 +26,9 @@ export async function renderDashboard(root){
     <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div></section>
     ${workspaceIntro({title:`Hola, ${state.profile?.name?.split(" ")[0]||"bienvenido"}`,description:"Aquí encuentras las opciones principales disponibles para tu rol. Selecciona una tarjeta y el ERP te guiará.",cards:actionCards(cards)})}
     <section class="grid grid-kpi">
-      ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",k.pendingApprovals,"Solicitudes por revisar")}
+      ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos parciales",partialSummary.partialPending||0,"Con mercancía pendiente","warning")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",k.pendingApprovals,"Solicitudes por revisar")}
     </section>
+    ${partialOrders.length?`<div class="section-gap"></div><section class="card partial-time-card"><header class="card-head"><div><h3>Pedidos parciales: tiempo parcial y tiempo real</h3><p class="muted">Cada fila corresponde al mismo pedido; no se crean pedidos duplicados.</p></div></header><div class="card-body">${partialTimesTable(partialOrders.slice(0,8))}</div></section>`:""}
     <div class="section-gap"></div>
     <section class="card"><header class="card-head"><h3>Carga de trabajo por etapa</h3><span class="muted">Actualizado ${fmt.date(data.generatedAt)}</span></header><div class="card-body"><div class="queue-grid">${queues.map(queueCard).join("")}</div></div></section>
     <div class="section-gap"></div>
@@ -45,3 +51,5 @@ function kpi(label,value,foot,tone=""){return `<article class="card kpi"><div cl
 function queueCard(q){const total=Number(q.quantity||0),overdue=Number(q.overdue||0);return `<article class="queue-card" data-step="${q.stepCode}"><div class="queue-top"><span class="queue-name">${fmt.escape(fmt.step(q.name||q.stepCode))}</span>${overdue?`<span class="badge badge-red"><span class="badge-dot"></span>${overdue} fuera de plazo</span>`:""}</div><div class="queue-number">${fmt.number(total)}</div><div class="progress"><span style="width:${Math.min(100,total?Number(q.inProgress||0)/total*100:0)}%"></span></div><div class="queue-meta"><span>${fmt.number(q.inProgress)} en proceso</span><span>${fmt.number(q.waiting)} en espera</span></div></article>`}
 function recentTable(rows){return `<div class="table-wrap"><table style="min-width:650px"><thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa actual</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr><td><span class="table-link" data-order="${row.id}">${fmt.escape(row.orderNumber)}</span><div class="cell-sub">${fmt.escape(fmt.label(row.orderType))}</div></td><td>${fmt.escape(row.clientName)}</td><td>${fmt.escape(fmt.step(row.currentStep))}</td><td>${statusBadge(row.status)}</td></tr>`).join("")}</tbody></table></div>`}
 function principle(title,text){return `<div class="timeline-item"><h4>${title}</h4><p>${text}</p></div>`}
+
+function partialTimesTable(rows){return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Rondas</th><th>Tiempo parcial</th><th>Tiempo real</th><th>Pendientes</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr><td><span class="table-link" data-order="${fmt.escape(row.id)}">${fmt.escape(row.orderNumber)}</span></td><td>${fmt.escape(row.clientName)}</td><td>${fmt.number(row.roundCount)}</td><td>${fmt.number(row.partialHours,2)} h</td><td>${fmt.number(row.realHours,2)} h</td><td>${fmt.number(row.pendingItemCount)}</td><td><span class="order-partial-tag">${row.status==="COMPLETE"?"Completado":"Pedido parcial"}</span></td></tr>`).join("")}</tbody></table></div>`}

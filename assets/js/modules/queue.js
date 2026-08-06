@@ -18,6 +18,7 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
       </div>
       <div class="simple-queue-message"><strong>Solo debes elegir un pedido</strong><span>Al abrirlo verás el estado actual, lo que falta y el siguiente paso recomendado.</span></div>
       <div id="queue-result">${loading()}</div>
+      ${moduleId==="picking"?`<section class="picking-partial-queue"><header><div><span>Continuidad del pedido</span><h3>Pedidos parciales pendientes</h3><p>El mismo pedido vuelve aquí cuando termina la primera salida y llega la mercancía faltante.</p></div></header><div id="picking-partial-result">${loading("Consultando parciales…")}</div></section>`:""}
     </section>`;
 
   async function load(newPage=1){
@@ -30,10 +31,26 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
       target.innerHTML=`<div class="queue-result-head"><div><strong>${fmt.number(data.pagination?.totalItems||0)} pedido(s)</strong><span>${fmt.step(selected)} · ${scopeLabel(assignment)}</span></div></div>${content}${data.items.length?paginationHtml(data.pagination):""}`;
       target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
       target.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>load(Number(element.dataset.page)));
+      if(moduleId==="picking")await loadPendingPartials();
     }catch(error){
       target.innerHTML=`<div class="module-error"><strong>No fue posible consultar esta cola</strong><p>${fmt.escape(error.message)}</p><button class="btn btn-primary" id="retry-queue">Reintentar</button></div>`;
       target.querySelector("#retry-queue")?.addEventListener("click",()=>load(page));
       toast(error.message,"error",8000);
+    }
+  }
+
+
+  async function loadPendingPartials(){
+    const target=root.querySelector("#picking-partial-result");
+    if(!target)return;
+    target.innerHTML=loading("Consultando pedidos parciales…");
+    try{
+      const data=await api.pickingPending(root.querySelector("#queue-search").value.trim(),1,50);
+      const rows=data.items||[];
+      target.innerHTML=rows.length?`${orderVisualCards(rows,{queue:true})}<div class="picking-partial-help"><strong>${rows.filter(row=>row.canResume).length} disponible(s) para retomar</strong><span>Los demás siguen en facturación o despacho de la salida anterior.</span></div>`:empty("No hay parciales pendientes","Cuando una salida quede incompleta, el mismo pedido aparecerá aquí sin duplicarse.");
+      target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
+    }catch(error){
+      target.innerHTML=`<div class="module-error"><strong>No fue posible consultar los pedidos parciales</strong><p>${fmt.escape(error.message)}</p></div>`;
     }
   }
 
@@ -61,4 +78,4 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
 
 function moduleTitle(moduleId){return({cartera:"Cartera",caja:"Caja",purchasing:"Compras",receiving:"Recepción",picking:"Alistamiento",cutting:"Corte",billing:"Facturación",shipping:"Despachos y entregas"})[moduleId]||"Cola de trabajo"}
 function scopeLabel(value){return value==="MINE"?"Mis pedidos":value==="UNASSIGNED"?"Sin asignar":"Toda la cola"}
-function table(rows){return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa</th><th>Situación</th><th>Responsable</th><th>Tiempo</th><th>Entrega</th></tr></thead><tbody>${rows.map(order=>`<tr data-order="${fmt.escape(order.id)}" class="clickable-row"><td><span class="table-link">${fmt.escape(order.orderNumber)}</span><div class="cell-sub">${priorityBadge(order.priority)}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</td><td>${statusBadge(order.status)}</td><td>${fmt.escape(order.assigneeName||"Sin asignar")}</td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${fmt.escape(fmt.route(order.route))}</td></tr>`).join("")}</tbody></table></div>`}
+function table(rows){return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa</th><th>Situación</th><th>Responsable</th><th>Tiempo</th><th>Entrega</th></tr></thead><tbody>${rows.map(order=>`<tr data-order="${fmt.escape(order.id)}" class="clickable-row"><td><span class="table-link">${fmt.escape(order.orderNumber)}</span>${order.fulfillmentStatus==="PARTIAL"||order.partialLabel?`<div><span class="order-partial-tag">Pedido parcial</span></div>`:""}<div class="cell-sub">${priorityBadge(order.priority)}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td>${fmt.escape(fmt.step(order.stepName||order.currentStep))}</td><td>${statusBadge(order.status)}</td><td>${fmt.escape(order.assigneeName||"Sin asignar")}</td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${fmt.escape(fmt.route(order.route))}</td></tr>`).join("")}</tbody></table></div>`}

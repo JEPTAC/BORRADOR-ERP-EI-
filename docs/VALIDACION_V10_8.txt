@@ -1,0 +1,19 @@
+V10.8 · VALIDACIÓN ESTÁTICA
+
+- 29 archivos JavaScript revisados.
+- 20 migraciones incluidas.
+- 44 RPC definidos y 44 consumidos.
+- Cero accesos directos a tablas desde el navegador.
+- Imports locales válidos.
+- Todos los recursos del Service Worker existen.
+- Prueba HTTP local correcta para inicio, CSS, módulo de Alistamiento, órdenes, manifest y Service Worker.
+
+PRUEBAS FUNCIONALES RECOMENDADAS
+
+1. Pedido con todas las líneas encontradas.
+2. Pedido con una línea no encontrada y novedad obligatoria.
+3. Confirmar que el pedido parcial avance a la siguiente etapa con su etiqueta.
+4. Completar facturación y despacho de la primera salida.
+5. Abrir Alistamiento y comprobar que el mismo pedido aparezca en Pedidos parciales pendientes.
+6. Retomar el pedido y verificar que solo aparezcan las líneas faltantes.
+7. Completar la segunda ronda y validar VSM/dashboard con tiempo parcial y tiempo real.
