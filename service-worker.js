@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-9-5-cierre-popup-diseno-20260806";
+const CACHE="erp-electroingenieria-v10-9-6-recuperacion-arranque-20260806";
 const ASSETS=[
   "./",
   "./index.html",
