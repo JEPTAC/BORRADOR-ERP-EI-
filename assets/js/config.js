@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.6.0-recepcion-pedidos",
-  build: "2026-08-05.8",
+  version: "10.7.0-flujo-financiero",
+  build: "2026-08-06.1",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -25,7 +25,7 @@ export const NAV_GROUPS = [
   ]},
   {label:"Operación de suministros",items:[
     {id:"cartera",label:"Cartera",icon:"wallet",step:"CARTERA"},
-    {id:"caja",label:"Caja",icon:"cash",step:"CAJA"},
+    {id:"caja",label:"Caja",icon:"cash",steps:["CAJA","CAJA_FACTURACION"]},
     {id:"purchasing",label:"Compras",icon:"purchasing",step:"COMPRAS"},
     {id:"receiving",label:"Recepción",icon:"receiving",steps:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"]},
     {id:"picking",label:"Alistamiento",icon:"picking",step:"ALISTAMIENTO"},

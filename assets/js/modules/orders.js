@@ -5,6 +5,7 @@ import {wizard,modal,toast,serializeForm,paginationHtml,empty,loading,actionCard
 import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice,simpleStatus} from "../core/guided.js";
 import {uploadOrderFile} from "../services/drive.js";
 import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
+import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
 let currentView="cards";
@@ -101,20 +102,48 @@ function openCreateOrder(){
     subtitle:"Solo necesitas registrar el pedido, el cliente y los materiales.",
     finishLabel:"Crear pedido",
     steps:[
-      {title:"Pedido y cliente",description:"Completa la información principal.",content:`<div class="form-grid"><div class="field"><label>Número de pedido *</label><input class="control" name="orderNumber" placeholder="Ejemplo: PVC-5001" required autofocus></div><div class="field"><label>Cliente *</label><input class="control" name="clientName" required></div><div class="field"><label>Tipo *</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div><div class="field"><label>Condición de pago *</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div><div class="field"><label>Entrega *</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div><div class="field"><label>Prioridad *</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div></div><details class="simple-details"><summary>Agregar más datos del cliente, si los tienes</summary><div class="form-grid" style="padding:14px"><div class="field"><label>NIT o documento</label><input class="control" name="clientDocument"></div><div class="field"><label>Ciudad</label><input class="control" name="clientCity"></div><div class="field"><label>Dirección</label><input class="control" name="clientAddress"></div><div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div><div class="field"><label>Referencia externa</label><input class="control" name="externalReference"></div><div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div></div></details>`},
+      {title:"Pedido y cliente",description:"Completa la información principal.",content:`<div class="form-grid"><div class="field"><label>Número de pedido *</label><input class="control" name="orderNumber" placeholder="Ejemplo: PVC-5001" required autofocus></div><div class="field"><label>Cliente *</label><input class="control" name="clientName" required></div><div class="field"><label>Tipo *</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div><div class="field"><label>Condición de pago *</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div><div class="field full order-routing-conditions" data-routing-conditions><div class="conditional-routing-card" data-credit-arrears hidden><label><input type="checkbox" name="hasCreditArrears"> <span><strong>Cliente con mora en crédito</strong><small>Solo al marcarlo, los pedidos PVC o PVP pasarán primero por Cartera.</small></span></label></div><div class="conditional-routing-card" data-cash-hold hidden><label><input type="checkbox" name="heldByCashier"> <span><strong>Pedido retenido por Caja</strong><small>Solo al marcarlo, el pedido PVN pasará primero por Caja.</small></span></label></div><div class="conditional-routing-direct" data-direct-reception><strong>Ruta inicial: Recepción de pedidos</strong><small>Si no existe una condición excepcional, el pedido no pasa por Cartera ni Caja.</small></div></div><div class="field"><label>Entrega *</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div><div class="field"><label>Prioridad *</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div></div><details class="simple-details"><summary>Agregar más datos del cliente, si los tienes</summary><div class="form-grid" style="padding:14px"><div class="field"><label>NIT o documento</label><input class="control" name="clientDocument"></div><div class="field"><label>Ciudad</label><input class="control" name="clientCity"></div><div class="field"><label>Dirección</label><input class="control" name="clientAddress"></div><div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div><div class="field"><label>Referencia externa</label><input class="control" name="externalReference"></div><div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div></div></details>`},
       {title:"Materiales",description:"Agrega los materiales y marca únicamente si requieren compra o corte.",content:`<div class="wizard-choice-grid"><label class="wizard-choice"><input type="checkbox" name="requiresCut"><span><strong>Requiere corte</strong><small>Algún material debe pasar por Corte.</small></span></label><label class="wizard-choice"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>El pedido depende de una orden de compra.</small></span></label></div><div class="items-wizard-head"><div><strong>Materiales del pedido</strong><p>Descripción y cantidad son obligatorias.</p></div><button class="btn btn-ghost" type="button" id="add-item">＋ Agregar material</button></div><div class="items-editor" id="items-editor"></div>`,validate:({root})=>{const rows=[...root.querySelectorAll(".item-row")];if(!rows.length)throw new Error("Agrega al menos un material.");let cutItems=0;for(const [index,row] of rows.entries()){const description=row.querySelector('[name="description"]').value.trim(),quantity=Number(row.querySelector('[name="quantity"]').value),requiresCut=row.querySelector('[name="itemCut"]').checked,cutLength=Number(row.querySelector('[name="cutLength"]').value);if(!description||!Number.isFinite(quantity)||quantity<=0)throw new Error(`El material ${index+1} debe tener descripción y cantidad.`);if(requiresCut){cutItems++;if(!Number.isFinite(cutLength)||cutLength<=0)throw new Error(`Registra la longitud del material ${index+1}.`)}}if(root.querySelector('[name="requiresCut"]')?.checked&&!cutItems)throw new Error("Marca al menos un material para corte y registra su longitud.");return true}},
-      {title:"Confirmar",description:"Revisa el resumen y crea el pedido.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>El ERP hará el resto</strong><p>El pedido se enviará automáticamente a la primera etapa que corresponda.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Materiales",String(count)),summaryItem("Proceso especial",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`)].join("")}}
+      {title:"Confirmar",description:"Revisa el resumen y crea el pedido.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>El ERP hará el resto</strong><p>El pedido se enviará automáticamente a la primera etapa que corresponda.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Materiales",String(count)),summaryItem("Proceso especial",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`),summaryItem("Ruta inicial",initialRouteLabel(d))].join("")}}
     ],
     onFinish:async({root,data})=>{
       const items=[...root.querySelectorAll(".item-row")].map((row,index)=>({lineNumber:index+1,sku:row.querySelector('[name="sku"]').value.trim()||null,reference:row.querySelector('[name="reference"]').value.trim()||null,description:row.querySelector('[name="description"]').value.trim(),quantity:Number(row.querySelector('[name="quantity"]').value),unit:row.querySelector('[name="unit"]').value.trim()||"UND",warehouseLocation:row.querySelector('[name="location"]').value.trim()||null,requiresCut:row.querySelector('[name="itemCut"]').checked,requestedCutLength:row.querySelector('[name="itemCut"]').checked?(Number(row.querySelector('[name="cutLength"]').value)||null):null}));
       const result=await api.createOrder({...data,items});toast(`Pedido ${result.orderNumber} creado y enviado a ${fmt.step(result.currentStep)}.`,"success",6500);await loadOrders(1);setTimeout(()=>openOrder(result.orderId),180);
     }
   });
+  const typeControl=assistant.root.querySelector('[name="orderType"]');
+  const syncRoutingConditions=()=>{
+    const type=typeControl?.value;
+    const arrears=assistant.root.querySelector('[data-credit-arrears]');
+    const cashHold=assistant.root.querySelector('[data-cash-hold]');
+    const arrearsInput=assistant.root.querySelector('[name="hasCreditArrears"]');
+    const cashInput=assistant.root.querySelector('[name="heldByCashier"]');
+    const isCreditType=["PVC","PVP"].includes(type);
+    const isPvn=type==="PVN";
+    if(arrears)arrears.hidden=!isCreditType;
+    if(cashHold)cashHold.hidden=!isPvn;
+    if(!isCreditType&&arrearsInput)arrearsInput.checked=false;
+    if(!isPvn&&cashInput)cashInput.checked=false;
+    const direct=assistant.root.querySelector('[data-direct-reception]');
+    const routing=initialRouteLabel({orderType:type,hasCreditArrears:Boolean(arrearsInput?.checked),heldByCashier:Boolean(cashInput?.checked)});
+    if(direct){direct.querySelector("strong").textContent=`Ruta inicial: ${routing}`;direct.querySelector("small").textContent=routing==="Recepción de pedidos"?"El pedido no pasará por Cartera ni Caja.":"Esta condición excepcional define la primera cola del pedido.";}
+  };
+  typeControl?.addEventListener("change",syncRoutingConditions);
+  assistant.root.querySelector('[name="hasCreditArrears"]')?.addEventListener("change",syncRoutingConditions);
+  assistant.root.querySelector('[name="heldByCashier"]')?.addEventListener("change",syncRoutingConditions);
+  syncRoutingConditions();
   const editor=assistant.root.querySelector("#items-editor");
   const add=()=>{const row=document.createElement("div");row.className="item-row item-row-guided";row.innerHTML=`<div class="item-row-number"></div><input class="control" name="sku" placeholder="SKU"><input class="control" name="reference" placeholder="Referencia"><input class="control item-description" name="description" placeholder="Descripción" required><input class="control" name="quantity" type="number" min="0.0001" step="any" placeholder="Cantidad" required><input class="control" name="unit" value="UND" placeholder="Unidad"><input class="control" name="location" placeholder="Ubicación"><label class="filter-pill"><input type="checkbox" name="itemCut"> Corte</label><input class="control" name="cutLength" type="number" step="any" placeholder="Longitud"><button type="button" class="icon-btn" title="Eliminar">×</button>`;const toggle=row.querySelector('[name="itemCut"]'),length=row.querySelector('[name="cutLength"]');const sync=()=>{length.disabled=!toggle.checked;length.required=toggle.checked;if(!toggle.checked)length.value=""};toggle.onchange=sync;sync();row.querySelector("button").onclick=()=>{row.remove();renumberItems(editor)};editor.append(row);renumberItems(editor)};
   assistant.root.querySelector("#add-item").onclick=add;add();
 }
 function renumberItems(editor){[...editor.querySelectorAll(".item-row-number")].forEach((element,index)=>element.textContent=String(index+1))}
+function initialRouteLabel(data){
+  if(["PVC","PVP"].includes(data.orderType)&&data.hasCreditArrears)return "Cartera · cliente con mora";
+  if(data.orderType==="PVN"&&data.heldByCashier)return "Caja · pedido retenido";
+  if(data.orderType==="PVE")return "Compras";
+  return "Recepción de pedidos";
+}
+
 
 export async function openOrder(orderId){
   const host=document.querySelector("#modal-root");
@@ -130,6 +159,7 @@ export async function openOrder(orderId){
 
 function renderSimpleOrder(host,data){
   if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
+  if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   const order=data.order;
   const task=activeTask(data);
   const status=simpleStatus(task?.status||order.status);

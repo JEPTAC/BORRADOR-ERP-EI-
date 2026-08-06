@@ -412,3 +412,60 @@ tbody tr:hover td{background:#eef5ff}
 .reception-lines-preview>article{display:grid;grid-template-columns:minmax(0,1fr) 105px 70px;gap:8px;align-items:center;padding:9px;border:1px solid #e4e9f0;border-radius:10px;background:#fff}.reception-lines-preview>article strong{display:block;overflow:hidden;color:#35455b;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.reception-lines-preview>article p{margin:2px 0 0;color:#69768a;font-size:8px}.reception-lines-preview>article span{color:#69768a;font-size:9px;text-align:right}.reception-lines-preview>article b{padding:4px 7px;border-radius:99px;background:#fff2cf;color:#805f00;font-size:7px;text-align:center}
 .reception-subdialog .modal-body{display:grid;gap:11px;padding:18px}.reception-subdialog .modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:13px 18px;border-top:1px solid #e2e8f0;background:#fafcff}
 @media(max-width:680px){.reception-lines-preview>article{grid-template-columns:1fr 80px}.reception-lines-preview>article b{grid-column:1/3}.reception-subdialog .modal-foot{display:grid;grid-template-columns:1fr}.reception-subdialog .modal-foot .btn{width:100%}}
+
+/* V10.7 · Enrutamiento financiero y popups simples de Cartera/Caja */
+.order-routing-conditions{display:grid;gap:10px;margin-top:4px}
+.conditional-routing-card,.conditional-routing-direct{border:1px solid var(--line,#dce3ea);border-radius:14px;padding:14px 16px;background:#fff}
+.conditional-routing-card[hidden]{display:none!important}
+.conditional-routing-card label{display:flex;align-items:flex-start;gap:12px;cursor:pointer}
+.conditional-routing-card input{width:20px;height:20px;margin-top:2px;accent-color:var(--primary,#155eef)}
+.conditional-routing-card span{display:grid;gap:4px}
+.conditional-routing-card strong,.conditional-routing-direct strong{font-size:14px;color:var(--ink,#152536)}
+.conditional-routing-card small,.conditional-routing-direct small{font-size:12px;line-height:1.45;color:var(--muted,#65758b)}
+.conditional-routing-direct{display:grid;gap:4px;background:linear-gradient(135deg,#f7faff,#f1f6ff);border-style:dashed}
+
+.financial-simple-modal{max-width:760px}
+.financial-reason,.cash-invoice-intro{display:grid;gap:5px;padding:15px 17px;border:1px solid #dbe6f1;border-radius:15px;background:#f7faff}
+.financial-reason span,.financial-last-update small,.invoice-confirmed span{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6b7a90}
+.financial-reason strong,.cash-invoice-intro strong{font-size:15px;color:#18324a}
+.cash-invoice-intro p{margin:0;color:#607086;line-height:1.5}
+.financial-current-state{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px;border:1px solid #dde5ed;border-radius:17px;background:#fff}
+.financial-current-state div{display:grid;gap:4px}
+.financial-current-state small{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#77859a;font-weight:800}
+.financial-current-state strong{font-size:23px;color:#172b3f}
+.financial-current-state p{margin:0;color:#67768a;font-size:13px}
+.financial-state-dot{width:17px;height:17px;border-radius:50%;box-shadow:0 0 0 7px rgba(21,94,239,.09);background:#155eef;flex:0 0 auto}
+.financial-current-state.waiting .financial-state-dot{background:#d79213;box-shadow:0 0 0 7px rgba(215,146,19,.11)}
+.financial-current-state.blocked .financial-state-dot{background:#c93838;box-shadow:0 0 0 7px rgba(201,56,56,.1)}
+.financial-current-state.done .financial-state-dot{background:#18864b;box-shadow:0 0 0 7px rgba(24,134,75,.1)}
+.financial-action-stack{display:grid;gap:11px}
+.financial-main-button{width:100%;min-height:76px;display:flex!important;align-items:center;justify-content:flex-start!important;text-align:left;gap:15px;padding:14px 17px!important;border-radius:16px!important}
+.financial-main-button>span{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.18);font-size:15px;font-weight:900;flex:0 0 auto}
+.financial-main-button.btn-ghost>span{background:#edf2f7;color:#52657a}
+.financial-main-button>div{display:grid;gap:3px}
+.financial-main-button strong{font-size:16px}
+.financial-main-button small{font-size:12px;line-height:1.4;opacity:.85;white-space:normal}
+.financial-main-button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.6)}
+.btn-success{background:#17834a!important;color:#fff!important;border-color:#17834a!important}
+.financial-last-update,.invoice-confirmed{display:grid;gap:4px;padding:14px 16px;border-left:4px solid #17834a;background:#f4fbf7;border-radius:10px}
+.financial-last-update strong,.invoice-confirmed strong{font-size:14px;color:#183b2a}
+.financial-last-update span,.invoice-confirmed small{font-size:12px;color:#66788a}
+.financial-status-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.financial-state-choice{position:relative;cursor:pointer}
+.financial-state-choice input{position:absolute;opacity:0;pointer-events:none}
+.financial-state-choice span{display:grid;gap:4px;padding:15px;border:1px solid #d9e2eb;border-radius:14px;background:#fff;min-height:76px}
+.financial-state-choice input:checked+span{border-color:#155eef;box-shadow:0 0 0 3px rgba(21,94,239,.1);background:#f6f9ff}
+.financial-state-choice strong{font-size:14px;color:#172d42}
+.financial-state-choice small{font-size:12px;line-height:1.4;color:#65758a}
+.cash-invoice-steps{display:grid;gap:12px}
+.cash-invoice-step{width:100%;display:flex;align-items:center;gap:15px;text-align:left;border:1px solid #dce4ed;border-radius:16px;padding:15px 17px;background:#fff;color:#1b3045;transition:.18s ease}
+.cash-invoice-step>span{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#edf2f7;font-weight:900;color:#53667b;flex:0 0 auto}
+.cash-invoice-step>div{display:grid;gap:3px}
+.cash-invoice-step strong{font-size:16px}
+.cash-invoice-step small{font-size:12px;line-height:1.4;color:#68788c}
+.cash-invoice-step.active{border-color:#155eef;background:#f6f9ff;cursor:pointer;box-shadow:0 8px 24px rgba(27,74,135,.08)}
+.cash-invoice-step.active>span{background:#155eef;color:#fff}
+.cash-invoice-step.done{border-color:#bfe1cd;background:#f4fbf7}
+.cash-invoice-step.done>span{background:#17834a;color:#fff}
+.cash-invoice-step.locked{opacity:.5;cursor:not-allowed}
+@media(max-width:680px){.financial-status-choices{grid-template-columns:1fr}.financial-main-button{min-height:72px}.financial-current-state strong{font-size:20px}}

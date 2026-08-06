@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-6-recepcion-pedidos-20260805";
+const CACHE="erp-electroingenieria-v10-7-flujo-financiero-20260806";
 const ASSETS=[
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const ASSETS=[
   "./assets/js/config.js",
   "./assets/js/core/icons.js",
   "./assets/js/modules/receiving-order.js",
+  "./assets/js/modules/financial-flow.js",
   "./assets/js/services/pdf-order-reader.js"
 ];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));

@@ -1,0 +1,18 @@
+VALIDACIÓN V10.7
+
+- 28 archivos JavaScript revisados sintácticamente.
+- 19 migraciones incluidas, sin numeración repetida.
+- 40 RPC definidos y 40 RPC consumidos por el frontend.
+- Cero accesos directos a tablas desde el navegador.
+- Recursos principales probados por servidor HTTP local con respuesta 200.
+- Verificado el contrato de rutas:
+  * PVC/PVP con mora → CARTERA.
+  * PVC/PVP sin mora → RECEPCION_PEDIDO.
+  * PVN retenido → CAJA.
+  * PVN no retenido → RECEPCION_PEDIDO.
+  * PVN después de ALISTAMIENTO/CORTE → CAJA_FACTURACION.
+  * CAJA_FACTURACION → modalidad logística del pedido.
+- La factura PDF es obligatoria en CAJA_FACTURACION.
+- Solicitudes de crédito permanece sin cambios.
+
+La prueba definitiva requiere recorrer pedidos reales en Supabase con los cuatro casos de enrutamiento.
