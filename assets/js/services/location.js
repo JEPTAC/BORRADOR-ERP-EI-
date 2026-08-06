@@ -1,11 +1,16 @@
 const reverseCache=new Map();
 const searchCache=new Map();
 const elevationCache=new Map();
+const municipalityCache=new Map();
 
 const NOMINATIM_BASE="https://nominatim.openstreetmap.org";
+const DIVIPOLA_BASE="https://www.datos.gov.co/resource/gdxc-w37w.json";
 const LEAFLET_JS="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const LEAFLET_CSS="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const DEFAULT_CENTER=[4.5709,-74.2973];
+const DEPARTMENTS=Object.freeze([
+  ["05","Antioquia"],["08","Atlántico"],["11","Bogotá, D.C."],["13","Bolívar"],["15","Boyacá"],["17","Caldas"],["18","Caquetá"],["19","Cauca"],["20","Cesar"],["23","Córdoba"],["25","Cundinamarca"],["27","Chocó"],["41","Huila"],["44","La Guajira"],["47","Magdalena"],["50","Meta"],["52","Nariño"],["54","Norte de Santander"],["63","Quindío"],["66","Risaralda"],["68","Santander"],["70","Sucre"],["73","Tolima"],["76","Valle del Cauca"],["81","Arauca"],["85","Casanare"],["86","Putumayo"],["88","Archipiélago de San Andrés, Providencia y Santa Catalina"],["91","Amazonas"],["94","Guainía"],["95","Guaviare"],["97","Vaupés"],["99","Vichada"]
+].map(([code,name])=>({code,name})));
 let lastNominatimRequestAt=0;
 let leafletPromise=null;
 
@@ -27,6 +32,7 @@ function addressParts(data={}){
     department:String(address.state||address.region||"").trim(),
     country:String(address.country||"").trim(),
     postalCode:String(address.postcode||"").trim(),
+    neighborhood:String(address.neighbourhood||address.suburb||address.quarter||"").trim(),
     source:"OpenStreetMap Nominatim",
     placeId:data.place_id||null,
     displayName:String(data.display_name||"").trim(),
@@ -35,8 +41,18 @@ function addressParts(data={}){
 }
 
 function normalizeText(value){return String(value||"").trim().replace(/\s+/g," ")}
-function finite(value){const parsed=Number(value);return Number.isFinite(parsed)?parsed:null}
+function normalizeComparable(value){return normalizeText(value).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/gi,"").toLowerCase()}
+function finite(value){const parsed=Number(String(value??"").replace(",","."));return Number.isFinite(parsed)?parsed:null}
 function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+function titlePlace(value){
+  const lowerWords=new Set(["de","del","la","las","los","y","e"]);
+  return normalizeText(value).toLocaleLowerCase("es-CO").split(/(\s+|-)/).map((part,index)=>{
+    if(/^\s+$|-$/.test(part))return part;
+    if(/^d\.?c\.?$/i.test(part))return "D.C.";
+    if(index>0&&lowerWords.has(part))return part;
+    return part.charAt(0).toLocaleUpperCase("es-CO")+part.slice(1);
+  }).join("").replace(/Bogotá, D\.c\./i,"Bogotá, D.C.");
+}
 
 async function nominatimJson(url){
   const elapsed=Date.now()-lastNominatimRequestAt;
@@ -44,6 +60,12 @@ async function nominatimJson(url){
   lastNominatimRequestAt=Date.now();
   const response=await fetch(url,{headers:{Accept:"application/json","Accept-Language":"es-CO,es;q=0.9"}});
   if(!response.ok)throw new Error("El servicio de ubicación no respondió. Inténtalo nuevamente.");
+  return response.json();
+}
+
+async function divipolaJson(url){
+  const response=await fetch(url,{headers:{Accept:"application/json"}});
+  if(!response.ok)throw new Error("No fue posible cargar la lista oficial de municipios.");
   return response.json();
 }
 
@@ -58,6 +80,70 @@ function resultFromRow(row){
     capturedAt:new Date().toISOString(),
     source:"ADDRESS_SEARCH"
   };
+}
+
+export function colombianDepartments(){return DEPARTMENTS.map(item=>({...item}))}
+
+export function findDepartmentByName(name){
+  const wanted=normalizeComparable(name);
+  return DEPARTMENTS.find(item=>normalizeComparable(item.name)===wanted)||null;
+}
+
+export async function colombianMunicipalities(departmentCode){
+  const code=String(departmentCode||"").replace(/\D/g,"").padStart(2,"0").slice(-2);
+  if(!DEPARTMENTS.some(item=>item.code===code))throw new Error("Selecciona un departamento válido.");
+  if(municipalityCache.has(code))return municipalityCache.get(code).map(item=>({...item}));
+  const storageKey=`erp_divipola_${code}_2024`;
+  try{
+    const cached=sessionStorage.getItem(storageKey);
+    if(cached){
+      const parsed=JSON.parse(cached);
+      if(Array.isArray(parsed)&&parsed.length){municipalityCache.set(code,parsed);return parsed.map(item=>({...item}));}
+    }
+  }catch{}
+
+  const url=new URL(DIVIPOLA_BASE);
+  url.searchParams.set("$select","cod_mpio,nom_mpio,tipo_municipio,latitud,longitud");
+  url.searchParams.set("$where",`cod_dpto='${code}'`);
+  url.searchParams.set("$order","nom_mpio");
+  url.searchParams.set("$limit","1500");
+  const rows=await divipolaJson(url);
+  const unique=new Map();
+  for(const row of rows||[]){
+    const municipality={
+      code:String(row.cod_mpio||"").trim(),
+      name:titlePlace(row.nom_mpio||""),
+      type:titlePlace(row.tipo_municipio||"Municipio"),
+      latitude:finite(row.latitud),
+      longitude:finite(row.longitud)
+    };
+    if(municipality.code&&municipality.name)unique.set(municipality.code,municipality);
+  }
+  const result=[...unique.values()].sort((a,b)=>a.name.localeCompare(b.name,"es"));
+  if(!result.length)throw new Error("El departamento seleccionado no devolvió municipios.");
+  municipalityCache.set(code,result);
+  try{sessionStorage.setItem(storageKey,JSON.stringify(result))}catch{}
+  return result.map(item=>({...item}));
+}
+
+export function findMunicipalityByName(items,name){
+  const wanted=normalizeComparable(name);
+  return (items||[]).find(item=>normalizeComparable(item.name)===wanted)||null;
+}
+
+export function buildColombianAddress({mode="URBAN",roadType,mainRoad,crossRoad,propertyNumber,neighborhood,complement,ruralType,ruralName,propertyName,ruralReference,landmarkName,landmarkDetail}={}){
+  const clean=value=>normalizeText(value).replace(/\s*,\s*/g,", ");
+  if(mode==="RURAL"){
+    if(!clean(ruralName))return "";
+    const first=[clean(ruralType)||"Vereda",clean(ruralName)].filter(Boolean).join(" ");
+    return [first,clean(propertyName),clean(ruralReference)].filter(Boolean).join(", ");
+  }
+  if(mode==="LANDMARK")return clean(landmarkName)?[clean(landmarkName),clean(landmarkDetail)].filter(Boolean).join(", "):"";
+  if(!clean(mainRoad))return "";
+  const principal=[clean(roadType)||"Calle",clean(mainRoad)].filter(Boolean).join(" ");
+  const plate=[clean(crossRoad),clean(propertyNumber)].filter(Boolean).join("-");
+  const nomenclature=plate?`${principal} # ${plate}`:principal;
+  return [nomenclature,clean(complement),clean(neighborhood)?`Barrio ${clean(neighborhood)}`:""].filter(Boolean).join(", ");
 }
 
 export async function captureCurrentLocation(){
@@ -110,31 +196,30 @@ export async function elevationFor(latitude,longitude){
   }catch{return null;}
 }
 
-/**
- * Busca una dirección colombiana usando campos estructurados. Devuelve varias
- * coincidencias para que el usuario seleccione la correcta antes de guardar.
- */
-export async function geocodeAddress({department,municipality,address,country="Colombia",limit=5}={}){
-  const state=normalizeText(department),city=normalizeText(municipality),street=normalizeText(address);
-  if(!state)throw new Error("Escribe el departamento.");
-  if(!city)throw new Error("Escribe el municipio.");
-  if(!street)throw new Error("Escribe la dirección.");
+/** Busca una dirección colombiana ya validada contra departamento y municipio. */
+export async function geocodeAddress({department,municipality,address,country="Colombia",limit=5,mode="URBAN"}={}){
+  const state=normalizeText(department),city=normalizeText(municipality),street=normalizeText(address),searchMode=String(mode||"URBAN").toUpperCase();
+  if(!state)throw new Error("Selecciona el departamento.");
+  if(!city)throw new Error("Selecciona el municipio o ciudad.");
+  if(!street)throw new Error("Completa la dirección o el lugar que deseas ubicar.");
   const safeLimit=Math.max(1,Math.min(Number(limit)||5,5));
-  const key=[street,city,state,country].join("|").toLocaleLowerCase("es");
+  const key=[searchMode,street,city,state,country].join("|").toLocaleLowerCase("es");
   if(searchCache.has(key))return searchCache.get(key);
 
-  const structured=new URL(`${NOMINATIM_BASE}/search`);
-  structured.searchParams.set("format","jsonv2");
-  structured.searchParams.set("street",street);
-  structured.searchParams.set("city",city);
-  structured.searchParams.set("state",state);
-  structured.searchParams.set("country",country);
-  structured.searchParams.set("countrycodes","co");
-  structured.searchParams.set("limit",String(safeLimit));
-  structured.searchParams.set("addressdetails","1");
-  structured.searchParams.set("accept-language","es");
-
-  let rows=await nominatimJson(structured);
+  let rows=[];
+  if(searchMode==="URBAN"){
+    const structured=new URL(`${NOMINATIM_BASE}/search`);
+    structured.searchParams.set("format","jsonv2");
+    structured.searchParams.set("street",street);
+    structured.searchParams.set("city",city);
+    structured.searchParams.set("state",state);
+    structured.searchParams.set("country",country);
+    structured.searchParams.set("countrycodes","co");
+    structured.searchParams.set("limit",String(safeLimit));
+    structured.searchParams.set("addressdetails","1");
+    structured.searchParams.set("accept-language","es");
+    rows=await nominatimJson(structured);
+  }
   if(!Array.isArray(rows)||!rows.length){
     const fallback=new URL(`${NOMINATIM_BASE}/search`);
     fallback.searchParams.set("format","jsonv2");
@@ -145,7 +230,7 @@ export async function geocodeAddress({department,municipality,address,country="C
     fallback.searchParams.set("accept-language","es");
     rows=await nominatimJson(fallback);
   }
-  if(!Array.isArray(rows)||!rows.length)throw new Error("No encontramos esa dirección. Revisa la nomenclatura, el municipio y el departamento.");
+  if(!Array.isArray(rows)||!rows.length)throw new Error("No encontramos una coincidencia exacta. El mapa se centrará en el municipio para que marques el punto manualmente.");
 
   const results=rows.map(resultFromRow).filter(row=>Number.isFinite(row.latitude)&&Number.isFinite(row.longitude));
   await Promise.all(results.slice(0,1).map(async row=>{row.altitude=await elevationFor(row.latitude,row.longitude)}));
@@ -153,7 +238,6 @@ export async function geocodeAddress({department,municipality,address,country="C
   return results;
 }
 
-// Compatibilidad con el formulario anterior.
 export async function geocodePlace(query){
   const text=normalizeText(query);
   if(text.length<4)throw new Error("Escribe un lugar, municipio o dirección más específica.");
@@ -201,10 +285,6 @@ async function loadLeaflet(){
   return leafletPromise;
 }
 
-/**
- * Crea un mapa ligero solo cuando se abre el popup. El usuario puede tocar el
- * mapa o arrastrar el marcador para corregir el punto exacto.
- */
 export async function createLocationMap(container,{latitude,longitude,onPointChange}={}){
   if(!container)throw new Error("No existe el contenedor del mapa.");
   const L=await loadLeaflet();
@@ -218,6 +298,11 @@ export async function createLocationMap(container,{latitude,longitude,onPointCha
 
   let marker=null;
   const notify=(latlng,reason)=>onPointChange?.({latitude:Number(latlng.lat),longitude:Number(latlng.lng),reason});
+  const setView=(lat,lon,zoom=13)=>{
+    const parsedLat=finite(lat),parsedLon=finite(lon);
+    if(parsedLat==null||parsedLon==null)return;
+    map.setView(L.latLng(parsedLat,parsedLon),zoom,{animate:true});
+  };
   const setPoint=(lat,lon,{zoom=17,notifyChange=false,reason="PROGRAMMATIC"}={})=>{
     const parsedLat=finite(lat),parsedLon=finite(lon);
     if(parsedLat==null||parsedLon==null)return;
@@ -236,6 +321,7 @@ export async function createLocationMap(container,{latitude,longitude,onPointCha
 
   return {
     map,
+    setView,
     setPoint,
     invalidate:()=>map.invalidateSize(),
     destroy:()=>{if(map){map.remove();marker=null;}}

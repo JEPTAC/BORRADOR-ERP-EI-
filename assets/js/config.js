@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  version: "10.11.4-ubicacion-maps",
+  version: "10.11.5-direccion-guiada",
   build: "2026-08-06.14",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",

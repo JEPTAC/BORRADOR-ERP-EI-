@@ -2,7 +2,7 @@ import {api} from "../services/api.js";
 import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {modal,toast,loading,empty,paginationHtml} from "../core/ui.js";
 import {uploadOrderFile} from "../services/drive.js";
-import {createLocationMap,elevationFor,geocodeAddress,locateCurrentPlace,reverseGeocode} from "../services/location.js";
+import {buildColombianAddress,colombianDepartments,colombianMunicipalities,createLocationMap,elevationFor,findDepartmentByName,findMunicipalityByName,geocodeAddress,locateCurrentPlace,reverseGeocode} from "../services/location.js";
 import {hasRole} from "../core/state.js";
 import {parallelWorkFooter} from "./active-work.js";
 
@@ -116,24 +116,61 @@ function openGuideDialog(data,delivery,{reload,refreshLists}){
   }});
 }
 
-function openLocationDialog(data,current,{reload,refreshLists}){
+function openLocationDialog(data,current={},{reload,refreshLists}){
   let mapController=null;
+  let municipalities=[];
   let lastSelectedPlace=Number.isFinite(Number(current?.latitude))&&Number.isFinite(Number(current?.longitude))?current:null;
-  let selectedSource=current?.source||"STRUCTURED_ADDRESS";
+  let selectedSource=current?.source||"DIVIPOLA_STRUCTURED_ADDRESS";
+  let addressManuallyEdited=Boolean(current?.address);
+  const departments=colombianDepartments();
   const ref=modal({title:"Ubicar lugar de entrega",confirmLabel:"Guardar ubicación",size:"wide",body:`
-    <div class="shipping-dialog-intro location-intro"><strong>Ubicación tipo Maps</strong><p>Escribe departamento, municipio y dirección. El ERP localizará el punto, completará las coordenadas y lo mostrará en el mapa.</p></div>
-    <section class="maps-address-search">
-      <div class="maps-address-grid">
-        <div class="field"><label>Departamento *</label><input class="control" name="department" value="${fmt.escape(current.department||"")}" placeholder="Ejemplo: Valle del Cauca" required></div>
-        <div class="field"><label>Municipio *</label><input class="control" name="municipality" value="${fmt.escape(current.municipality||"")}" placeholder="Ejemplo: Tuluá" required></div>
-        <div class="field full"><label>Dirección *</label><input class="control" name="address" value="${fmt.escape(current.address||"")}" placeholder="Ejemplo: Carrera 40 # 28-15" required></div>
+    <div class="shipping-dialog-intro location-intro"><strong>Dirección guiada y verificada</strong><p>Selecciona primero el departamento y el municipio. Después completa la nomenclatura; el ERP construirá la dirección, buscará el punto y lo marcará en el mapa.</p></div>
+    <section class="address-wizard-card">
+      <header class="address-wizard-head"><span>1</span><div><strong>Selecciona el territorio</strong><p>Las listas usan la codificación DIVIPOLA de Colombia para evitar municipios escritos de forma incorrecta.</p></div></header>
+      <div class="maps-address-grid territory-grid">
+        <div class="field"><label>País</label><input class="control" value="Colombia" readonly></div>
+        <div class="field"><label>Departamento *</label><select class="control" name="department" required><option value="">Selecciona un departamento</option></select></div>
+        <div class="field full"><label>Municipio, distrito o ciudad *</label><select class="control" name="municipality" required disabled><option value="">Primero selecciona el departamento</option></select><small class="field-help" data-municipality-help>La lista se habilitará al escoger el departamento.</small></div>
+      </div>
+    </section>
+    <section class="address-wizard-card">
+      <header class="address-wizard-head"><span>2</span><div><strong>Completa el tipo de dirección</strong><p>Escoge la forma que mejor describa el destino. Solo aparecerán los campos necesarios.</p></div></header>
+      <div class="field address-mode-field"><label>Tipo de ubicación *</label><select class="control" name="addressMode"><option value="URBAN">Dirección urbana</option><option value="RURAL">Vereda, corregimiento o zona rural</option><option value="LANDMARK">Empresa, sede o lugar conocido</option></select></div>
+      <div class="address-mode-panel" data-address-panel="URBAN">
+        <div class="maps-address-grid address-components-grid">
+          <div class="field"><label>Tipo de vía *</label><select class="control" name="roadType"><option>Calle</option><option>Carrera</option><option>Avenida</option><option>Avenida Calle</option><option>Avenida Carrera</option><option>Diagonal</option><option>Transversal</option><option>Circular</option><option>Autopista</option><option>Vía</option><option>Kilómetro</option><option>Otro</option></select></div>
+          <div class="field"><label>Número o nombre de vía *</label><input class="control" name="mainRoad" placeholder="Ejemplo: 40, 5A o Panamericana"></div>
+          <div class="field"><label>Vía que cruza / primer número</label><input class="control" name="crossRoad" placeholder="Ejemplo: 28"></div>
+          <div class="field"><label>Placa / segundo número</label><input class="control" name="propertyNumber" placeholder="Ejemplo: 15"></div>
+          <div class="field"><label>Barrio o urbanización</label><input class="control" name="neighborhood" placeholder="Ejemplo: El Centro"></div>
+          <div class="field"><label>Complemento</label><input class="control" name="complement" placeholder="Bodega 3, local 201, entrada norte..."></div>
+        </div>
+      </div>
+      <div class="address-mode-panel" data-address-panel="RURAL" hidden>
+        <div class="maps-address-grid address-components-grid">
+          <div class="field"><label>Tipo de zona *</label><select class="control" name="ruralType"><option>Vereda</option><option>Corregimiento</option><option>Inspección</option><option>Sector</option><option>Vía</option><option>Kilómetro</option></select></div>
+          <div class="field"><label>Nombre de la zona *</label><input class="control" name="ruralName" placeholder="Ejemplo: Vereda La Esperanza"></div>
+          <div class="field"><label>Finca, predio o establecimiento</label><input class="control" name="propertyName" placeholder="Ejemplo: Finca El Porvenir"></div>
+          <div class="field"><label>Referencia para llegar</label><input class="control" name="ruralReference" placeholder="Ejemplo: 500 m después del puente"></div>
+        </div>
+      </div>
+      <div class="address-mode-panel" data-address-panel="LANDMARK" hidden>
+        <div class="maps-address-grid address-components-grid">
+          <div class="field full"><label>Nombre de empresa, sede o lugar *</label><input class="control" name="landmarkName" placeholder="Ejemplo: Parque Industrial Tuluá"></div>
+          <div class="field full"><label>Detalle adicional</label><input class="control" name="landmarkDetail" placeholder="Portería, bloque, local, entrada o punto de referencia"></div>
+        </div>
+      </div>
+      <div class="address-built-box">
+        <div><label for="shipping-built-address">Dirección que se buscará *</label><small>Se construye automáticamente. Puedes corregir letras, BIS, norte, sur o cualquier detalle antes de buscar.</small></div>
+        <textarea id="shipping-built-address" class="control" name="address" rows="2" required placeholder="La dirección aparecerá aquí">${fmt.escape(current.address||"")}</textarea>
+        <button type="button" class="btn btn-ghost btn-compact" data-rebuild-address>Reconstruir desde los campos</button>
       </div>
       <div class="maps-search-actions">
-        <button type="button" class="btn btn-primary btn-large" data-search-address>Buscar y ubicar</button>
+        <button type="button" class="btn btn-primary btn-large" data-search-address>Buscar y ubicar en el mapa</button>
         <button type="button" class="btn btn-ghost btn-large" data-capture-location>Usar ubicación actual</button>
       </div>
     </section>
-    <div class="location-status" data-location-status aria-live="polite">Completa los tres campos y pulsa “Buscar y ubicar”.</div>
+    <div class="location-status" data-location-status aria-live="polite">Selecciona el departamento y el municipio para comenzar.</div>
     <div class="maps-search-results" data-location-results hidden></div>
     <section class="maps-workspace">
       <div class="erp-location-map" data-location-map aria-label="Mapa de ubicación del pedido"><div class="map-loading">Preparando mapa…</div></div>
@@ -146,20 +183,23 @@ function openLocationDialog(data,current,{reload,refreshLists}){
           <div><dt>Longitud</dt><dd data-map-lon>${fmt.escape(current.longitude??"—")}</dd></div>
           <div><dt>Altitud</dt><dd data-map-alt>${current.altitude==null?"—":`${fmt.number(current.altitude,1)} m`}</dd></div>
         </dl>
-        <small>Toca el mapa o arrastra el marcador para ajustar el punto exacto.</small>
+        <small>Confirma el marcador. Puedes tocar el mapa o arrastrarlo hasta la entrada exacta.</small>
       </aside>
     </section>
     <div class="form-grid location-form maps-final-fields">
-      <div class="field full"><label>Lugar o punto de referencia *</label><input class="control" name="placeLabel" value="${fmt.escape(current.placeLabel||"")}" placeholder="Ejemplo: portería, bodega o sede del cliente" required></div>
+      <div class="field full"><label>Lugar o punto de entrega *</label><input class="control" name="placeLabel" value="${fmt.escape(current.placeLabel||"")}" placeholder="Ejemplo: portería principal, bodega 4 o recepción" required></div>
       <div class="field"><label>Latitud</label><input class="control coordinates-control" name="latitude" type="number" step="any" value="${fmt.escape(current.latitude??"")}" readonly required></div>
       <div class="field"><label>Longitud</label><input class="control coordinates-control" name="longitude" type="number" step="any" value="${fmt.escape(current.longitude??"")}" readonly required></div>
       <div class="field"><label>Altitud estimada (m)</label><input class="control coordinates-control" name="altitude" type="number" step="any" value="${fmt.escape(current.altitude??"")}" readonly></div>
       <div class="field"><label>Precisión GPS (m)</label><input class="control coordinates-control" name="accuracy" type="number" step="any" value="${fmt.escape(current.accuracy??"")}" readonly></div>
     </div>
-    <p class="location-attribution">Mapa y dirección basados en OpenStreetMap. Verifica el marcador antes de guardar.</p>`,onConfirm:async dialog=>{
-      const value=name=>dialog.querySelector(`[name="${name}"]`).value.trim();
+    <p class="location-attribution">Municipios basados en DIVIPOLA. Mapa y geocodificación basados en OpenStreetMap. Verifica siempre el punto antes de guardar.</p>`,onConfirm:async dialog=>{
+      const value=name=>dialog.querySelector(`[name="${name}"]`)?.value.trim()||"";
       const latitude=Number(value("latitude")),longitude=Number(value("longitude"));
-      if(!Number.isFinite(latitude)||!Number.isFinite(longitude))throw new Error("Primero debes buscar y ubicar la dirección en el mapa.");
+      if(!value("department"))throw new Error("Selecciona el departamento.");
+      if(!value("municipality"))throw new Error("Selecciona el municipio, distrito o ciudad.");
+      if(!value("address"))throw new Error("Completa la dirección que se buscará.");
+      if(!Number.isFinite(latitude)||!Number.isFinite(longitude))throw new Error("Primero debes ubicar el destino en el mapa.");
       await api.saveShippingLocation(data.order.id,{placeLabel:value("placeLabel"),municipality:value("municipality"),department:value("department"),address:value("address"),latitude,longitude,altitude:value("altitude")===""?null:Number(value("altitude")),accuracy:value("accuracy")===""?null:Number(value("accuracy")),source:selectedSource});
       mapController?.destroy();
       toast("Ubicación guardada.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
@@ -171,39 +211,97 @@ function openLocationDialog(data,current,{reload,refreshLists}){
   const mapHost=root.querySelector("[data-location-map]");
   const control=name=>root.querySelector(`[name="${name}"]`);
   const text=name=>control(name)?.value.trim()||"";
+  const departmentSelect=control("department");
+  const municipalitySelect=control("municipality");
+  const modeSelect=control("addressMode");
+  const addressField=control("address");
+  const municipalityHelp=root.querySelector("[data-municipality-help]");
 
   const setSummary=place=>{
-    root.querySelector("[data-selected-place]").textContent=place.placeLabel||text("placeLabel")||place.municipality||"Punto seleccionado";
+    root.querySelector("[data-selected-place]").textContent=place.placeLabel||text("placeLabel")||text("municipality")||"Punto seleccionado";
     root.querySelector("[data-selected-address]").textContent=place.address||text("address")||"Dirección seleccionada";
     root.querySelector("[data-map-lat]").textContent=Number.isFinite(Number(place.latitude))?Number(place.latitude).toFixed(6):"—";
     root.querySelector("[data-map-lon]").textContent=Number.isFinite(Number(place.longitude))?Number(place.longitude).toFixed(6):"—";
     root.querySelector("[data-map-alt]").textContent=place.altitude==null?"—":`${fmt.number(place.altitude,1)} m`;
   };
 
-  const applyPlace=(place,{moveMap=true,source="STRUCTURED_ADDRESS",preserveTypedAddress=false}={})=>{
+  const generatedAddress=()=>buildColombianAddress({
+    mode:text("addressMode"),roadType:text("roadType"),mainRoad:text("mainRoad"),crossRoad:text("crossRoad"),propertyNumber:text("propertyNumber"),neighborhood:text("neighborhood"),complement:text("complement"),ruralType:text("ruralType"),ruralName:text("ruralName"),propertyName:text("propertyName"),ruralReference:text("ruralReference"),landmarkName:text("landmarkName"),landmarkDetail:text("landmarkDetail")
+  });
+  const syncAddress=(force=false)=>{
+    if(addressManuallyEdited&&!force)return;
+    const generated=generatedAddress();
+    if(generated)addressField.value=generated;
+    addressManuallyEdited=false;
+  };
+  const showAddressMode=()=>{
+    const mode=text("addressMode")||"URBAN";
+    root.querySelectorAll("[data-address-panel]").forEach(panel=>panel.hidden=panel.dataset.addressPanel!==mode);
+    syncAddress();
+  };
+
+  const populateDepartments=()=>{
+    departmentSelect.innerHTML=`<option value="">Selecciona un departamento</option>${departments.map(item=>`<option value="${fmt.escape(item.name)}" data-code="${item.code}">${fmt.escape(item.name)}</option>`).join("")}`;
+    const currentDepartment=findDepartmentByName(current.department);
+    if(currentDepartment)departmentSelect.value=currentDepartment.name;
+  };
+
+  const selectedDepartmentCode=()=>departmentSelect.selectedOptions[0]?.dataset.code||"";
+  const selectedMunicipality=()=>municipalities.find(item=>item.code===municipalitySelect.selectedOptions[0]?.dataset.code)||null;
+
+  const loadMunicipalities=async(preferredName="")=>{
+    const departmentCode=selectedDepartmentCode();
+    municipalities=[];
+    municipalitySelect.disabled=true;
+    municipalitySelect.innerHTML='<option value="">Cargando municipios…</option>';
+    municipalityHelp.textContent="Consultando la lista oficial del departamento seleccionado…";
+    if(!departmentCode){municipalitySelect.innerHTML='<option value="">Primero selecciona el departamento</option>';municipalityHelp.textContent="La lista se habilitará al escoger el departamento.";return null;}
+    try{
+      municipalities=await colombianMunicipalities(departmentCode);
+      municipalitySelect.innerHTML=`<option value="">Selecciona municipio, distrito o ciudad</option>${municipalities.map(item=>`<option value="${fmt.escape(item.name)}" data-code="${fmt.escape(item.code)}" data-lat="${item.latitude??""}" data-lon="${item.longitude??""}">${fmt.escape(item.name)}${item.type&&item.type!=="Municipio"?` · ${fmt.escape(item.type)}`:""}</option>`).join("")}`;
+      municipalitySelect.disabled=false;
+      const match=findMunicipalityByName(municipalities,preferredName);
+      if(match)municipalitySelect.value=match.name;
+      municipalityHelp.textContent=`${municipalities.length} territorios disponibles. Selecciona el que aparece en el pedido.`;
+      return match;
+    }catch(error){
+      municipalitySelect.innerHTML='<option value="">No fue posible cargar la lista</option>';
+      municipalityHelp.innerHTML=`${fmt.escape(error.message)} <button type="button" class="location-inline-link" data-retry-municipalities>Reintentar</button>`;
+      municipalityHelp.querySelector("[data-retry-municipalities]")?.addEventListener("click",()=>loadMunicipalities(preferredName));
+      throw error;
+    }
+  };
+
+  const selectTerritoryFromPlace=async place=>{
+    const department=findDepartmentByName(place.department);
+    if(!department)return false;
+    departmentSelect.value=department.name;
+    const municipality=await loadMunicipalities(place.municipality);
+    if(municipality){municipalitySelect.value=municipality.name;return true;}
+    return false;
+  };
+
+  const applyPlace=(place,{moveMap=true,source="DIVIPOLA_STRUCTURED_ADDRESS",preserveTypedAddress=false}={})=>{
     selectedSource=source;
     lastSelectedPlace=place;
-    for(const key of ["municipality","department","latitude","longitude","altitude","accuracy"]){
-      const field=control(key);if(field&&place[key]!=null)field.value=place[key];
-    }
-    if(!preserveTypedAddress&&place.address)control("address").value=place.address;
-    if(!text("placeLabel"))control("placeLabel").value=place.municipality?`Entrega en ${place.municipality}`:"Lugar de entrega";
-    const normalized={...place,placeLabel:text("placeLabel"),address:text("address")};
-    setSummary(normalized);
+    for(const key of ["latitude","longitude","altitude","accuracy"]){const field=control(key);if(field&&place[key]!=null)field.value=place[key];}
+    if(!preserveTypedAddress&&place.address){addressField.value=place.address;addressManuallyEdited=true;}
+    if(!text("placeLabel"))control("placeLabel").value=text("addressMode")==="LANDMARK"?(text("landmarkName")||`Entrega en ${text("municipality")}`):`Entrega en ${text("municipality")}`;
+    setSummary({...place,placeLabel:text("placeLabel"),address:text("address")});
     if(moveMap&&mapController)mapController.setPoint(place.latitude,place.longitude,{zoom:17});
   };
 
   const selectResult=async(place,index)=>{
     status.innerHTML=loading("Ubicando dirección en el mapa…");
     if(place.altitude==null)place.altitude=await elevationFor(place.latitude,place.longitude);
-    applyPlace(place,{source:"STRUCTURED_ADDRESS"});
+    applyPlace(place,{source:"DIVIPOLA_STRUCTURED_ADDRESS"});
     resultsHost.querySelectorAll("[data-location-result]").forEach((button,buttonIndex)=>button.classList.toggle("selected",buttonIndex===index));
-    status.textContent="Dirección localizada. Ajusta el marcador si el punto exacto está en otra entrada o edificación.";
+    status.textContent="Dirección localizada. Verifica la entrada exacta y ajusta el marcador si es necesario.";
   };
 
   const renderResults=results=>{
     resultsHost.hidden=false;
-    resultsHost.innerHTML=`<div class="maps-results-head"><strong>${results.length===1?"Dirección encontrada":"Selecciona la coincidencia correcta"}</strong><span>${results.length} resultado${results.length===1?"":"s"}</span></div>${results.map((place,index)=>`<button type="button" class="maps-result-option ${index===0?"selected":""}" data-location-result="${index}"><span>${index+1}</span><div><strong>${fmt.escape(place.municipality||text("municipality"))}</strong><small>${fmt.escape(place.displayName||place.address)}</small></div></button>`).join("")}`;
+    resultsHost.innerHTML=`<div class="maps-results-head"><strong>${results.length===1?"Dirección encontrada":"Selecciona la coincidencia correcta"}</strong><span>${results.length} resultado${results.length===1?"":"s"}</span></div>${results.map((place,index)=>`<button type="button" class="maps-result-option ${index===0?"selected":""}" data-location-result="${index}"><span>${index+1}</span><div><strong>${fmt.escape(text("municipality"))}</strong><small>${fmt.escape(place.displayName||place.address)}</small></div></button>`).join("")}`;
     resultsHost.querySelectorAll("[data-location-result]").forEach(button=>button.addEventListener("click",()=>selectResult(results[Number(button.dataset.locationResult)],Number(button.dataset.locationResult))));
   };
 
@@ -213,32 +311,63 @@ function openLocationDialog(data,current,{reload,refreshLists}){
       const [addressInfo,altitude]=await Promise.all([reverseGeocode(latitude,longitude),elevationFor(latitude,longitude)]);
       applyPlace({...addressInfo,latitude,longitude,altitude,accuracy:null},{moveMap:false,source:reason});
       resultsHost.hidden=true;
-      status.textContent="Punto ajustado manualmente. Confirma la dirección y el lugar de referencia.";
+      status.textContent="Punto ajustado manualmente. Confirma la dirección y el lugar de entrega.";
     }catch(error){
       applyPlace({latitude,longitude,altitude:null,accuracy:null},{moveMap:false,source:reason,preserveTypedAddress:true});
-      status.textContent="El marcador fue ajustado, pero no se pudo normalizar la dirección. Conservamos la dirección escrita.";
+      status.textContent="El punto quedó marcado, pero no se pudo normalizar la dirección. Conservamos la dirección construida.";
     }
   };
+
+  populateDepartments();
+  modeSelect.value=current.addressMode||"URBAN";
+  showAddressMode();
+  if(current.department)loadMunicipalities(current.municipality).catch(()=>{});
 
   createLocationMap(mapHost,{latitude:current.latitude,longitude:current.longitude,onPointChange:resolveMapPoint})
     .then(controller=>{mapController=controller;mapHost.querySelector(".map-loading")?.remove();if(lastSelectedPlace&&Number.isFinite(Number(lastSelectedPlace.latitude))&&Number.isFinite(Number(lastSelectedPlace.longitude))){controller.setPoint(lastSelectedPlace.latitude,lastSelectedPlace.longitude,{zoom:17});setSummary(lastSelectedPlace);}})
     .catch(error=>{mapHost.innerHTML=`<div class="map-unavailable"><strong>Mapa no disponible</strong><p>${fmt.escape(error.message)}</p></div>`;});
 
+  departmentSelect.addEventListener("change",async()=>{
+    control("latitude").value="";control("longitude").value="";resultsHost.hidden=true;
+    status.textContent=departmentSelect.value?"Cargando municipios del departamento…":"Selecciona el departamento.";
+    try{await loadMunicipalities();status.textContent="Ahora selecciona el municipio, distrito o ciudad.";}catch(error){status.textContent=error.message;}
+  });
+  municipalitySelect.addEventListener("change",()=>{
+    const municipality=selectedMunicipality();
+    if(municipality&&mapController&&Number.isFinite(municipality.latitude)&&Number.isFinite(municipality.longitude))mapController.setView(municipality.latitude,municipality.longitude,13);
+    status.textContent=municipality?"Municipio seleccionado. Completa la nomenclatura o el lugar de entrega.":"Selecciona el municipio, distrito o ciudad.";
+  });
+  modeSelect.addEventListener("change",()=>{addressManuallyEdited=false;showAddressMode();});
+  root.querySelectorAll("[data-address-panel] input,[data-address-panel] select").forEach(field=>field.addEventListener("input",()=>{addressManuallyEdited=false;syncAddress();}));
+  addressField.addEventListener("input",()=>{addressManuallyEdited=true;});
+  root.querySelector("[data-rebuild-address]")?.addEventListener("click",()=>{addressManuallyEdited=false;syncAddress(true);addressField.focus();});
+
   root.querySelector("[data-search-address]")?.addEventListener("click",async button=>{
-    button.disabled=true;resultsHost.hidden=true;status.innerHTML=loading("Buscando dirección…");
+    button.disabled=true;resultsHost.hidden=true;syncAddress();status.innerHTML=loading("Buscando la dirección dentro del municipio seleccionado…");
     try{
-      const results=await geocodeAddress({department:text("department"),municipality:text("municipality"),address:text("address")});
-      renderResults(results);
-      await selectResult(results[0],0);
-    }catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
+      if(!text("department"))throw new Error("Selecciona el departamento.");
+      if(!text("municipality"))throw new Error("Selecciona el municipio, distrito o ciudad.");
+      if(!text("address"))throw new Error("Completa los datos de la dirección.");
+      const results=await geocodeAddress({department:text("department"),municipality:text("municipality"),address:text("address"),mode:text("addressMode")});
+      renderResults(results);await selectResult(results[0],0);
+    }catch(error){
+      const municipality=selectedMunicipality();
+      if(municipality&&mapController&&Number.isFinite(municipality.latitude)&&Number.isFinite(municipality.longitude)){
+        mapController.setView(municipality.latitude,municipality.longitude,14);
+        status.textContent=`${error.message} El mapa quedó centrado en ${municipality.name}; toca el punto exacto para marcarlo.`;
+      }else status.textContent=error.message;
+      toast(error.message,"error",7000);
+    }finally{button.disabled=false;}
   });
 
   root.querySelector("[data-capture-location]")?.addEventListener("click",async button=>{
     button.disabled=true;resultsHost.hidden=true;status.innerHTML=loading("Obteniendo ubicación actual…");
     try{
-      const place=await locateCurrentPlace();applyPlace(place,{source:"DEVICE_GPS"});
-      status.textContent=place.geocodingWarning?`${place.geocodingWarning} Confirma manualmente municipio y dirección.`:`Ubicación actual obtenida con precisión aproximada de ${Math.round(place.accuracy||0)} m.`;
-    }catch(error){status.textContent=error.message;toast(error.message,"error",7000)}finally{button.disabled=false}
+      const place=await locateCurrentPlace();
+      try{await selectTerritoryFromPlace(place);}catch{}
+      applyPlace(place,{source:"DEVICE_GPS"});
+      status.textContent=place.geocodingWarning?`${place.geocodingWarning} Verifica las listas y la dirección.`:`Ubicación actual obtenida con precisión aproximada de ${Math.round(place.accuracy||0)} m.`;
+    }catch(error){status.textContent=error.message;toast(error.message,"error",7000);}finally{button.disabled=false;}
   });
 
   root.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>mapController?.destroy(),{once:true}));
