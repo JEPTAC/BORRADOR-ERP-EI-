@@ -73,6 +73,7 @@ export const api={
   stickers:orderId=>rpc("erp_x_stickers",{p_order_id:orderId}),
   saveCutJob:(orderId,payload)=>rpc("erp_x_save_cut_job",{p_order_id:orderId,p_payload:payload}),
   saveInvoice:(orderId,payload)=>rpc("erp_x_save_invoice",{p_order_id:orderId,p_payload:payload}),
+  routeBillingToCash:(orderId,reason=null)=>rpc("erp_x_route_billing_to_cash",{p_order_id:orderId,p_reason:reason}),
   saveDelivery:(orderId,payload)=>rpc("erp_x_save_delivery",{p_order_id:orderId,p_payload:payload}),
   audit:(entityType=null,search="",page=1,pageSize=100)=>rpc("erp_x_audit",{p_entity_type:entityType,p_search:search||null,p_page:page,p_page_size:pageSize})
 };

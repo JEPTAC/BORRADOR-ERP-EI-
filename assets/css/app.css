@@ -494,3 +494,25 @@ tbody tr:hover td{background:#eef5ff}
 .picking-item-row[data-result="MISSING"]{border-color:#e7aaaa;background:#fff8f8;box-shadow:inset 4px 0 0 #c74444}
 .picking-result:focus-visible{outline:3px solid rgba(21,94,239,.28);outline-offset:2px}
 @media(max-width:720px){.picking-mini-actions{grid-template-columns:1fr}.picking-result{min-height:42px}}
+
+/* V10.9 · Microproceso visual de Facturación */
+.billing-process-modal{max-width:780px}
+.billing-process-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid #dbe6f1;border-radius:16px;background:#f7faff}
+.billing-process-intro span{display:block;margin-bottom:4px;color:#6f7f92;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.billing-process-intro strong{display:block;color:#173755;font-size:15px}
+.billing-process-intro p{max-width:620px;margin:5px 0 0;color:#64758a;font-size:10px;line-height:1.55}
+.billing-process-intro.cash-warning{border-color:#e9d38a;background:#fff9e7}
+.billing-process-intro.cash-warning span,.billing-process-intro.cash-warning strong{color:#735712}
+.billing-entry-actions{display:grid;grid-template-columns:1fr;gap:12px}
+.billing-entry-actions.two-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+.billing-entry-card{display:grid;grid-template-columns:48px minmax(0,1fr);gap:13px;align-items:center;min-height:116px;padding:17px;border:1px solid #dbe4ed;border-radius:16px;background:#fff;text-align:left;cursor:pointer;transition:.18s ease}
+.billing-entry-card>span{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#eaf2ff;color:#155eef;font-size:17px;font-weight:950}
+.billing-entry-card>div{display:grid;gap:4px}.billing-entry-card strong{color:#193954;font-size:16px}.billing-entry-card small{color:#68798d;font-size:10px;line-height:1.45}
+.billing-entry-card.accept:hover{border-color:#79a5e8;background:#f6f9ff;box-shadow:0 10px 24px rgba(21,94,239,.09);transform:translateY(-1px)}
+.billing-entry-card.cash{border-color:#e6c86c;background:#fffaf0}.billing-entry-card.cash>span{background:#ffe7a0;color:#715200}.billing-entry-card.cash strong{color:#644b0b}
+.billing-entry-card.cash:hover{border-color:#c99e1a;background:#fff5d7;box-shadow:0 10px 24px rgba(170,126,0,.1);transform:translateY(-1px)}
+.billing-entry-card:disabled{opacity:.48;cursor:not-allowed;transform:none;box-shadow:none}
+.billing-document-steps{margin-top:2px}.billing-upload-note{margin-bottom:14px;padding:13px 15px;border-left:4px solid #155eef;border-radius:0 12px 12px 0;background:#f0f6ff}
+.billing-upload-note strong{display:block;color:#173c69;font-size:12px}.billing-upload-note p{margin:4px 0 0;color:#61758d;font-size:10px;line-height:1.5}
+.pvp-annex-confirmed{border-color:#d9c27a;background:#fff9e8}.pvp-annex-confirmed span,.pvp-annex-confirmed strong{color:#6e5310}
+@media(max-width:680px){.billing-entry-actions.two-options{grid-template-columns:1fr}.billing-entry-card{min-height:98px}.billing-process-intro{display:grid}}
