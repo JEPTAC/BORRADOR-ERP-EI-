@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-9-6-recuperacion-arranque-20260806";
+const CACHE="erp-electroingenieria-v10-10-corte-primero-20260806";
 const ASSETS=[
   "./",
   "./index.html",
@@ -13,6 +13,9 @@ const ASSETS=[
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",
+  "./assets/js/modules/cutting-flow.js",
+  "./assets/js/modules/queue.js",
+  "./assets/js/modules/orders.js",
   "./assets/js/services/api.js",
   "./assets/js/services/drive.js",
   "./assets/js/services/pdf-order-reader.js"

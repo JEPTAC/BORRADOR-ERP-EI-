@@ -301,7 +301,7 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
   openSubdialog(host,{
     title:"Confirmar recepción y asignación",
     confirmLabel:"Sí, confirmar y enviar",
-    body:`<div class="reception-confirm-dialog"><strong>Esta acción cerrará Recepción de pedidos.</strong><p>Se guardarán las líneas definitivas y el pedido pasará a Alistamiento. Las líneas con corte quedarán preparadas para el auxiliar seleccionado.</p><div>${summaryChip("Líneas",draft.lines.length)}${summaryChip("Con corte",draft.lines.filter(line=>line.requiresCut).length)}</div></div>`,
+    body:`<div class="reception-confirm-dialog"><strong>Esta acción cerrará Recepción de pedidos.</strong><p>Se guardarán las líneas definitivas. Si existe al menos un corte, el pedido pasará primero a Corte y después a Alistamiento; si no hay cortes, irá directamente a Alistamiento.</p><div>${summaryChip("Líneas",draft.lines.length)}${summaryChip("Con corte",draft.lines.filter(line=>line.requiresCut).length)}</div></div>`,
     onConfirm:async button=>{
       button.disabled=true;
       try{
@@ -329,7 +329,7 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
         clearDraft(data.order.id);
         host.replaceChildren();
         refreshLists?.();
-        toast("Recepción confirmada. El pedido fue asignado a Alistamiento.","success",7000);
+        toast(draft.lines.some(line=>line.requiresCut)?"Recepción confirmada. El pedido fue enviado primero a Corte.":"Recepción confirmada. El pedido fue asignado a Alistamiento.","success",7000);
       }catch(error){toast(error.message,"error",7500);button.disabled=false}
     }
   });

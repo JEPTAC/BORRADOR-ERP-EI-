@@ -1,0 +1,18 @@
+VALIDACIÓN V10.10
+================
+
+- 31 archivos JavaScript revisados con node --check.
+- 24 migraciones incluidas en el instalador consolidado.
+- 52 RPC definidos y 52 RPC consumidos por el frontend.
+- Cero accesos directos a tablas desde el navegador.
+- Imports locales válidos.
+- Recursos del Service Worker existentes.
+- CSS con llaves balanceadas.
+- Migración 024 con bloques $$, paréntesis y transacción balanceados.
+- Inicio y recursos críticos respondieron HTTP 200 en servidor local.
+- Paquete diferencial probado por superposición sobre V10.9.5.
+
+VALIDACIÓN REAL PENDIENTE
+-------------------------
+Debe ejecutarse en Supabase y recorrerse al menos un pedido real con múltiples referencias,
+carreto completo, corrección “No necesita corte”, recogida parcial y salida a Facturación.

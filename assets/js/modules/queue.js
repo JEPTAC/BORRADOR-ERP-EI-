@@ -3,6 +3,7 @@ import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {paginationHtml,empty,loading,toast,guide} from "../core/ui.js";
 import {orderVisualCards,viewSwitch} from "../core/guided.js";
 import {openOrder} from "./orders.js";
+import {openCutPickup} from "./picking-flow.js";
 
 export async function renderQueue(root,{moduleId,steps,params={}}){
   let selected=params.step&&steps.includes(params.step)?params.step:steps[0];
@@ -17,6 +18,7 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
         ${viewSwitch(view)}
       </div>
       <div class="simple-queue-message"><strong>Solo debes elegir un pedido</strong><span>Al abrirlo verás el estado actual, lo que falta y el siguiente paso recomendado.</span></div>
+      ${moduleId==="picking"?`<section class="cut-pickup-queue"><header><div><span>Entrega desde Corte</span><h3>Cortes por recoger</h3><p>Recoge primero las referencias terminadas y después continúa con la verificación normal del pedido.</p></div><span class="cut-pickup-queue-count" id="cut-pickup-count">0</span></header><div id="cut-pickup-result">${loading("Consultando cortes listos…")}</div></section>`:""}
       <div id="queue-result">${loading()}</div>
       ${moduleId==="picking"?`<section class="picking-partial-queue"><header><div><span>Continuidad del pedido</span><h3>Pedidos parciales pendientes</h3><p>El mismo pedido vuelve aquí cuando termina la primera salida y llega la mercancía faltante.</p></div></header><div id="picking-partial-result">${loading("Consultando parciales…")}</div></section>`:""}
     </section>`;
@@ -26,9 +28,16 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
     const target=root.querySelector("#queue-result");
     target.innerHTML=loading("Consultando pedidos…");
     try{
-      const data=await api.listOrders({step:selected,status:root.querySelector("#queue-status").value||null,search:root.querySelector("#queue-search").value.trim(),assignment,page,pageSize:50,includeHistory:false});
-      const content=data.items.length?(view==="cards"?orderVisualCards(data.items,{queue:true}):table(data.items)):empty("No hay pedidos en esta cola",assignment==="MINE"?"No tienes pedidos asignados. Consulta Toda la cola para tomar uno.":"No existen pedidos activos con estos filtros.");
-      target.innerHTML=`<div class="queue-result-head"><div><strong>${fmt.number(data.pagination?.totalItems||0)} pedido(s)</strong><span>${fmt.step(selected)} · ${scopeLabel(assignment)}</span></div></div>${content}${data.items.length?paginationHtml(data.pagination):""}`;
+      const search=root.querySelector("#queue-search").value.trim();
+      const pickupPromise=moduleId==="picking"?loadCutPickups(search):Promise.resolve(new Set());
+      const [data,pickupIds]=await Promise.all([
+        api.listOrders({step:selected,status:root.querySelector("#queue-status").value||null,search,assignment,page,pageSize:50,includeHistory:false}),
+        pickupPromise
+      ]);
+      const rows=moduleId==="picking"?data.items.filter(item=>!pickupIds.has(item.id)):data.items;
+      const content=rows.length?(view==="cards"?orderVisualCards(rows,{queue:true}):table(rows)):empty("No hay pedidos en esta cola",assignment==="MINE"?"No tienes pedidos asignados. Consulta Toda la cola para tomar uno.":"No existen pedidos activos con estos filtros.");
+      const countLabel=moduleId==="picking"&&pickupIds.size?`${rows.length} pedido(s) para alistar`:`${fmt.number(data.pagination?.totalItems||0)} pedido(s)`;
+      target.innerHTML=`<div class="queue-result-head"><div><strong>${countLabel}</strong><span>${fmt.step(selected)} · ${scopeLabel(assignment)}</span></div></div>${content}${rows.length?paginationHtml(data.pagination):""}`;
       target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
       target.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>load(Number(element.dataset.page)));
       if(moduleId==="picking")await loadPendingPartials();
@@ -39,6 +48,25 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
     }
   }
 
+
+  async function loadCutPickups(search){
+    const target=root.querySelector("#cut-pickup-result");
+    const counter=root.querySelector("#cut-pickup-count");
+    if(!target)return new Set();
+    target.innerHTML=loading("Consultando cortes listos…");
+    try{
+      const data=await api.cutPickupsPending(search,1,50);
+      const rows=data.items||[];
+      if(counter)counter.textContent=String(data.pagination?.totalItems||rows.length);
+      target.innerHTML=rows.length?`<div class="cut-pickup-queue-grid">${rows.map(cutPickupQueueCard).join("")}</div>`:empty("No hay cortes por recoger","Cuando Corte termine una referencia, el pedido aparecerá aquí antes de la verificación normal.");
+      target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>element.dataset.cutStage==="CORTE"?openCutPickup(element.dataset.order,{refreshLists:()=>load(page)}):openOrder(element.dataset.order));
+      return new Set(rows.map(row=>row.id));
+    }catch(error){
+      if(counter)counter.textContent="!";
+      target.innerHTML=`<div class="module-error compact"><strong>No fue posible consultar cortes por recoger</strong><p>${fmt.escape(error.message)}</p></div>`;
+      return new Set();
+    }
+  }
 
   async function loadPendingPartials(){
     const target=root.querySelector("#picking-partial-result");
@@ -74,6 +102,15 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
   window.__erpQueueRefresh=()=>load(page);
   root.querySelector("#queue-help").onclick=()=>guide({title:"Gestión sencilla de pedidos",description:"Cada pedido se trabaja desde una sola ventana.",items:[{title:"Abre la tarjeta",detail:"Verás el estado actual y el siguiente paso recomendado."},{title:"Marca la situación",detail:"Puedes dejarlo pendiente, iniciar la gestión, ponerlo en espera o finalizarlo."},{title:"Completa solo lo necesario",detail:"Cuando una etapa exige factura, validación, corte o recepción, el ERP mostrará únicamente ese formulario."},{title:"Vuelve cuando quieras",detail:"Si dejas el pedido en gestión o espera, aparecerá en la misma cola para continuar después."}]});
   await load(page);
+}
+
+function cutPickupQueueCard(order){
+  return `<button type="button" class="cut-pickup-queue-card ${order.pickupWhileCutting?"early":""}" data-order="${fmt.escape(order.id)}" data-cut-stage="${fmt.escape(order.currentStep||"ALISTAMIENTO")}">
+    <header><div><span>${order.pickupWhileCutting?"RECOGIDA ANTICIPADA":"CORTES LISTOS"}</span><strong>${fmt.escape(order.orderNumber)}</strong></div>${priorityBadge(order.priority)}</header>
+    <h4>${fmt.escape(order.clientName)}</h4>
+    <div class="cut-pickup-queue-metrics"><div><small>Referencias</small><strong>${fmt.number(order.cutPickupPendingCount)}</strong></div><div><small>Longitud</small><strong>${fmt.number(order.cutPickupTotalLength,3)} m</strong></div><div><small>Responsable</small><strong>${fmt.escape(order.assigneeName||"Sin asignar")}</strong></div></div>
+    <footer><span>${order.pickupWhileCutting?`${fmt.number(order.cutsStillPending)} corte(s) aún en proceso`:fmt.escape(fmt.route(order.route))}</span><strong>Recoger ahora →</strong></footer>
+  </button>`;
 }
 
 function moduleTitle(moduleId){return({cartera:"Cartera",caja:"Caja",purchasing:"Compras",receiving:"Recepción",picking:"Alistamiento",cutting:"Corte",billing:"Facturación",shipping:"Despachos y entregas"})[moduleId]||"Cola de trabajo"}

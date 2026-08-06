@@ -7,6 +7,7 @@ import {uploadOrderFile} from "../services/drive.js";
 import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
 import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
+import {isCuttingFlow,renderCuttingOrder} from "./cutting-flow.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
@@ -162,6 +163,7 @@ export async function openOrder(orderId){
 function renderSimpleOrder(host,data){
   if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
+  if(isCuttingFlow(data)){renderCuttingOrder(host,data);return;}
   if(isPickingFlow(data)){renderPickingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   const order=data.order;
   const task=activeTask(data);

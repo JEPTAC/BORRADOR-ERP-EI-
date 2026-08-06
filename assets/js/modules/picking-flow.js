@@ -10,6 +10,53 @@ export function isPickingFlow(data){
   return data?.order?.current_step_code==="ALISTAMIENTO"||hasPartialPending(data);
 }
 
+export async function openCutPickup(orderId,{refreshLists}={}){
+  const host=document.querySelector("#modal-root");
+  host.innerHTML='<div class="modal-overlay"><section class="modal cut-pickup-standalone"><div class="modal-body"><div class="loading">Consultando cortes listos…</div></div></section></div>';
+  try{
+    const data=await api.cutPickupDetail(orderId);
+    renderStandaloneCutPickup(host,data,{refreshLists});
+  }catch(error){
+    host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><div><h3>No fue posible abrir la recogida</h3></div><button class="icon-btn" data-close>×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
+    bindClose(host);
+  }
+}
+
+function renderStandaloneCutPickup(host,data,{refreshLists}={}){
+  const order=data.order||{};
+  const items=(data.items||[]).map(item=>({
+    id:item.requirementId,reference:item.reference,sku:item.sku,description:item.description,
+    units_required:item.unitsRequired,length_each:item.lengthEach,total_length:item.totalLength,
+    resolution_code:item.resolution,lot_number:item.lotNumber,location:item.location
+  }));
+  host.innerHTML=`<div class="modal-overlay simple-process-overlay">
+    <section class="modal simple-process-modal wide picking-process-modal cut-pickup-standalone">
+      <header class="modal-head simple-process-head picking-process-head"><div><span class="wizard-kicker">Alistamiento · Recogida desde Corte</span><h3>${fmt.escape(order.orderNumber)}</h3><p>${fmt.escape(order.clientName)} · ${fmt.escape(fmt.route(order.route))}</p></div><button class="icon-btn" data-close aria-label="Cerrar">×</button></header>
+      <div class="modal-body simple-process-body picking-process-body">
+        <section class="cut-pickup-early-banner"><span>LISTO PARA RECOGER</span><div><strong>${data.pickupWhileCutting?"Recogida anticipada":"Cortes terminados"}</strong><p>${data.pickupWhileCutting?`Puedes recoger estas referencias ahora. El pedido permanece en Corte porque todavía faltan ${fmt.number(data.cutsStillPending||0)} corte(s).`:"Confirma las referencias entregadas por Corte antes de iniciar la verificación normal."}</p></div></section>
+        <section class="cut-pickup-workbench">
+          <header class="cut-pickup-stage-head"><div><span class="picking-step-tag">Entrega física</span><h4>Cortes por recoger</h4><p>Marca únicamente lo que recibiste físicamente.</p></div><div class="cut-pickup-counter"><strong data-cut-pickup-selected>0</strong><span>de ${items.length} marcados</span></div></header>
+          <div class="cut-pickup-items">${items.map((item,index)=>cutPickupItem(item,index)).join("")}</div>
+          <button type="button" class="btn btn-primary cut-pickup-confirm" data-confirm-cut-pickup disabled>Confirmar recogida seleccionada</button>
+        </section>
+      </div>
+      ${parallelWorkFooter("ALISTAMIENTO")}
+    </section>
+  </div>`;
+  bindClose(host);
+  bindPickupSelection(host,items,async ids=>{
+    const result=await api.confirmCutPickup(order.id,ids);
+    toast(result.allCollected?"Recogida completada.":`Recogida registrada. Quedan ${result.remaining} referencia(s) listas por entregar.`,"success",6500);
+    refreshLists?.();
+    window.__erpQueueRefresh?.();
+    window.__erpCuttingRefresh?.();
+    if(result.remaining>0){
+      const latest=await api.cutPickupDetail(order.id);
+      renderStandaloneCutPickup(host,latest,{refreshLists});
+    }else host.replaceChildren();
+  });
+}
+
 export function renderPickingFlow(host,data,{reload,refreshLists}={}){
   if(data.order.current_step_code!=="ALISTAMIENTO"){
     renderPartialResume(host,data,{reload,refreshLists});
@@ -26,13 +73,14 @@ export function renderPickingFlow(host,data,{reload,refreshLists}={}){
   const actions=actionCodes(data);
   if(task.status!=="IN_PROGRESS"){
     const resumed=rounds(data).length>0;
-    const label=resumed?"Retomar pedido":"Tomar pedido";
+    const hasPickup=pendingCutPickups(data).length>0;
+    const label=hasPickup?"Tomar pedido para recoger cortes":resumed?"Retomar pedido":"Tomar pedido";
     const canStart=actions.has("CLAIM")||actions.has("START")||actions.has("RESUME");
     host.innerHTML=shell(data,`
-      <section class="picking-take-card">
-        <span class="picking-step-tag">${resumed?`Ronda ${rounds(data).length+1}`:"Paso 1"}</span>
+      <section class="picking-take-card ${hasPickup?"cut-pickup-take":""}">
+        <span class="picking-step-tag">${hasPickup?"Cortes listos":resumed?`Ronda ${rounds(data).length+1}`:"Paso 1"}</span>
         <h4>${label}</h4>
-        <p>${resumed?"Solo se verificarán las referencias que quedaron pendientes en la salida anterior.":"Al tomarlo quedará asignado a tu usuario y podrás verificar la mercancía línea por línea."}</p>
+        <p>${hasPickup?`Hay ${pendingCutPickups(data).length} referencia(s) terminada(s) por recoger antes de verificar el resto de la mercancía.`:resumed?"Solo se verificarán las referencias que quedaron pendientes en la salida anterior.":"Al tomarlo quedará asignado a tu usuario y podrás verificar la mercancía línea por línea."}</p>
         <button type="button" class="btn btn-primary picking-take-button" data-picking-take ${canStart?"":"disabled"}>${label}</button>
         ${canStart?"":`<div class="picking-warning">Responsable actual: <strong>${fmt.escape(assigneeName(data))}</strong></div>`}
       </section>`);
@@ -57,7 +105,90 @@ export function renderPickingFlow(host,data,{reload,refreshLists}={}){
     return;
   }
 
+  if(pendingCutPickups(data).length){
+    renderCutPickup(host,data,{reload,refreshLists});
+    return;
+  }
+
   renderVerification(host,data,{reload,refreshLists});
+}
+
+function renderCutPickup(host,data,{reload,refreshLists}){
+  const items=pendingCutPickups(data);
+  host.innerHTML=shell(data,`
+    ${pickingProgress(data,"PICKUP")}
+    <section class="cut-pickup-workbench">
+      <header class="cut-pickup-stage-head">
+        <div><span class="picking-step-tag">Paso previo al alistamiento</span><h4>Cortes por recoger</h4><p>Confirma físicamente cada referencia terminada. Puedes recoger una parte y volver después por las demás.</p></div>
+        <div class="cut-pickup-counter"><strong data-cut-pickup-selected>0</strong><span>de ${items.length} marcados</span></div>
+      </header>
+      <div class="cut-pickup-items">
+        ${items.map((item,index)=>cutPickupItem(item,index)).join("")}
+      </div>
+      <section class="cut-pickup-summary">
+        <div><small>Referencias listas</small><strong>${items.length}</strong></div>
+        <div><small>Longitud procesada</small><strong>${fmt.number(items.reduce((sum,item)=>sum+Number(item.total_length||0),0),3)} m</strong></div>
+        <div><small>Después de recoger</small><strong>Verificar mercancía</strong></div>
+      </section>
+      <button type="button" class="btn btn-primary cut-pickup-confirm" data-confirm-cut-pickup disabled>Confirmar recogida seleccionada</button>
+      <small class="picking-route-note">Los cortes recogidos quedan ligados a este mismo pedido y no vuelven a aparecer en la bandeja.</small>
+    </section>`);
+  bindClose(host);
+
+  bindPickupSelection(host,items,async ids=>{
+    const result=await api.confirmCutPickup(data.order.id,ids);
+    toast(result.allCollected?"Todos los cortes fueron recogidos. Continúa con la verificación de mercancía.":`Recogida registrada. Quedan ${result.remaining} corte(s) pendientes.`,"success",7000);
+    refreshLists?.();
+    await reload?.();
+  });
+}
+
+function cutPickupItem(item,index){
+  const resolution=String(item.resolution_code||"").toUpperCase();
+  const resolutionLabel=resolution==="FULL_REEL"?"Carreto completo":resolution==="NO_CUT"?"No requería corte":"Corte ejecutado";
+  return `<article class="cut-pickup-item" data-cut-pickup-item data-requirement-id="${fmt.escape(item.id)}">
+    <div class="cut-pickup-index">${index+1}</div>
+    <div class="cut-pickup-data">
+      <span class="cut-pickup-resolution ${fmt.escape(resolution.toLowerCase())}">${fmt.escape(resolutionLabel)}</span>
+      <strong>${fmt.escape(item.reference||item.sku||item.description)}</strong>
+      <p>${fmt.escape(item.description)}</p>
+      <div><span><small>Cantidad</small><b>${fmt.number(item.units_required,2)} × ${fmt.number(item.length_each,3)} m</b></span><span><small>Total</small><b>${fmt.number(item.total_length,3)} m</b></span><span><small>Carreto</small><b>${fmt.escape(cutLotLabel(item))}</b></span></div>
+    </div>
+    <button type="button" class="cut-pickup-toggle" data-toggle-cut-pickup aria-pressed="false"><span aria-hidden="true">○</span> Marcar como recogido</button>
+  </article>`;
+}
+
+function cutLotLabel(item){
+  const batch=(item.cut_batch_id||item.inventory_lot_id)?"Listo en Corte":"Sin carreto";
+  return item.lot_number||item.location||item.metadata?.lotNumber||item.metadata?.location||batch;
+}
+
+function bindPickupSelection(host,items,onConfirm){
+  const sync=()=>{
+    const selected=[...host.querySelectorAll("[data-cut-pickup-item].selected")];
+    const counter=host.querySelector("[data-cut-pickup-selected]");
+    if(counter)counter.textContent=String(selected.length);
+    const button=host.querySelector("[data-confirm-cut-pickup]");
+    if(button){
+      button.disabled=selected.length===0;
+      button.textContent=selected.length===items.length?"Confirmar todos como recogidos":`Confirmar ${selected.length} recogido(s)`;
+    }
+  };
+  host.querySelectorAll("[data-toggle-cut-pickup]").forEach(button=>button.addEventListener("click",()=>{
+    const row=button.closest("[data-cut-pickup-item]");
+    const selected=!row.classList.contains("selected");
+    row.classList.toggle("selected",selected);
+    button.setAttribute("aria-pressed",String(selected));
+    button.innerHTML=selected?'<span aria-hidden="true">✓</span> Marcado como recogido':'<span aria-hidden="true">○</span> Marcar como recogido';
+    sync();
+  }));
+  host.querySelector("[data-confirm-cut-pickup]")?.addEventListener("click",async event=>{
+    const ids=[...host.querySelectorAll("[data-cut-pickup-item].selected")].map(row=>row.dataset.requirementId);
+    if(!ids.length)return;
+    event.currentTarget.disabled=true;
+    try{await onConfirm(ids)}catch(error){toast(error.message,"error",7500);event.currentTarget.disabled=false}
+  });
+  sync();
 }
 
 function renderVerification(host,data,{reload,refreshLists}){
@@ -68,11 +199,7 @@ function renderVerification(host,data,{reload,refreshLists}){
   const previous=rounds(data).length;
 
   host.innerHTML=shell(data,`
-    <section class="picking-progress-strip">
-      <div class="done"><span>1</span><strong>Pedido tomado</strong></div>
-      <div class="active"><span>2</span><strong>Verificación de mercancía</strong></div>
-      <div><span>3</span><strong>Enviar a facturación</strong></div>
-    </section>
+    ${pickingProgress(data,"VERIFY")}
     ${partialBanner(data)}
     <section class="picking-verification-card">
       <header class="picking-stage-head">
@@ -84,7 +211,7 @@ function renderVerification(host,data,{reload,refreshLists}){
       </div>
       <section class="picking-result-summary" data-picking-summary></section>
       <button type="button" class="btn btn-primary picking-send-button" data-picking-send disabled>Enviar a facturación</button>
-      <small class="picking-route-note">${pending.some(item=>item.requires_cut)?"Las líneas encontradas que requieran corte pasarán primero por Corte y después continuarán a facturación.":"El pedido continuará directamente al proceso de facturación correspondiente."}</small>
+      <small class="picking-route-note">${hasCutHistory(data)?"Los cortes ya fueron procesados y recogidos. Al finalizar esta verificación, el pedido continuará al proceso de facturación correspondiente.":"El pedido continuará directamente al proceso de facturación correspondiente."}</small>
     </section>
     ${roundHistory(data)}
   `);
@@ -250,6 +377,13 @@ async function beginPicking(data){
   else if(actions.has("RESUME"))await api.executeAction(latest.order.id,"RESUME",{detail:"Verificación de mercancía retomada"},latest.order.version);
 }
 
+function pendingCutPickups(data){return (data.cutRequirements||[]).filter(item=>String(item.process_status||"").toUpperCase()==="READY"&&String(item.collection_status||"PENDING").toUpperCase()==="PENDING")}
+function hasCutHistory(data){return (data.cutRequirements||[]).length>0}
+function pickingProgress(data,stage){
+  const hasCuts=hasCutHistory(data);
+  if(!hasCuts)return `<section class="picking-progress-strip"><div class="done"><span>1</span><strong>Pedido tomado</strong></div><div class="${stage==="VERIFY"?"active":""}"><span>2</span><strong>Verificación de mercancía</strong></div><div><span>3</span><strong>Enviar a facturación</strong></div></section>`;
+  return `<section class="picking-progress-strip four-steps"><div class="done"><span>1</span><strong>Pedido tomado</strong></div><div class="${stage==="PICKUP"?"active":"done"}"><span>2</span><strong>Recoger cortes</strong></div><div class="${stage==="VERIFY"?"active":""}"><span>3</span><strong>Verificar mercancía</strong></div><div><span>4</span><strong>Enviar a facturación</strong></div></section>`;
+}
 function activeTask(data){return [...(data.tasks||[])].reverse().find(task=>ACTIVE_STATUSES.has(task.status))||null}
 function actionCodes(data){return new Set((data.actions?.actions||[]).map(action=>action.code))}
 function rounds(data){return data.pickingRounds||[]}

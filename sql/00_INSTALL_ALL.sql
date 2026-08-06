@@ -1,7 +1,10 @@
--- ============================================================
--- MIGRATION 001_core_schema.sql
--- ============================================================
+-- ERP Electroingeniería · Instalador consolidado
+-- Generado desde las migraciones versionadas. Para una base existente, ejecute únicamente la migración nueva correspondiente.
 
+
+-- ============================================================================
+-- 001_core_schema.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 001: isolated enterprise schema, security model and operational data model.
 
@@ -608,10 +611,10 @@ create trigger trg_credit_touch before update on erp_supply.credit_requests for 
 
 commit;
 
--- ============================================================
--- MIGRATION 002_seed_configuration.sql
--- ============================================================
 
+-- ============================================================================
+-- 002_seed_configuration.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 002: roles, modules, workflow, schedules and default organization.
 
@@ -785,10 +788,10 @@ on conflict (organization_id,holiday_date) do update set name=excluded.name,sour
 
 commit;
 
--- ============================================================
--- MIGRATION 003_workflow_engine.sql
--- ============================================================
 
+-- ============================================================================
+-- 003_workflow_engine.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 003: identity, calendar calculations, routing and transactional workflow engine.
 
@@ -942,12 +945,12 @@ with org as (
     select 1 from erp_supply.holidays h
     where h.organization_id=d.id and h.holiday_date=d.work_date
   )
-), clipped_segments as (
+), overlaps as (
   select greatest(seg_start,p_start) a, least(seg_end,p_end) b
   from segments where seg_end>p_start and seg_start<p_end
 )
 select coalesce(sum(greatest(0,extract(epoch from (b-a))))::bigint,0)
-from clipped_segments
+from overlaps
 $$;
 
 create or replace function erp_supply.initial_step(
@@ -1275,10 +1278,10 @@ $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 004_public_api.sql
--- ============================================================
 
+-- ============================================================================
+-- 004_public_api.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 004: browser-facing native Supabase RPC API.
 
@@ -1339,8 +1342,8 @@ begin
     ),
     'queues',(select coalesce(jsonb_agg(q order by (q->>'sortOrder')::int),'[]'::jsonb) from (
       select jsonb_build_object('stepCode',s.code,'name',s.name,'sortOrder',s.sort_order,'quantity',count(o.id),
-        'overdue',count(o.id) filter (where s.sla_hours is not null and erp_supply.business_seconds_between(v_org,o.updated_at,now())>s.sla_hours*3600),
-        'inProgress',count(o.id) filter (where o.status='IN_PROGRESS'),'waiting',count(o.id) filter (where o.status in('WAITING','BLOCKED'))
+        'overdue',count(o.id) filter(where s.sla_hours is not null and erp_supply.business_seconds_between(v_org,o.updated_at,now())>s.sla_hours*3600),
+        'inProgress',count(o.id) filter(where o.status='IN_PROGRESS'),'waiting',count(o.id) filter(where o.status in('WAITING','BLOCKED'))
       ) q
       from erp_supply.workflow_steps s left join erp_supply.orders o on o.current_step_code=s.code and o.organization_id=v_org and not o.is_test and erp_supply.can_view_order(o.id) and o.status not in('CLOSED','CANCELLED')
       where not s.terminal group by s.code,s.name,s.sort_order,s.sla_hours
@@ -1451,7 +1454,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_order erp_supply.orders%rowtype;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   select * into v_order from erp_supply.orders where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
   if not found then raise exception 'Pedido no encontrado'; end if;
   return jsonb_build_object(
@@ -1596,7 +1599,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_total bigint; v_items jsonb; v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),200);
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   select count(*) into v_total from erp_supply.inventory_items i where i.organization_id=v_org and i.active and (p_search is null or lower(i.sku||' '||i.description||' '||coalesce(i.reference,'')) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
     select i.id,i.sku,i.reference,i.description,i.unit,i.item_type "itemType",i.barcode,
@@ -1618,19 +1621,19 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   return jsonb_build_object(
     'steps',(select coalesce(jsonb_agg(to_jsonb(x) order by x.sort_order),'[]'::jsonb) from (
       select s.code,s.name,s.sort_order,count(o.id) tasks,
-        round(avg(t.business_seconds) filter (where o.id is not null)/3600.0,2) "avgBusinessHours",round(avg(t.raw_seconds) filter (where o.id is not null)/3600.0,2) "avgElapsedHours",
-        round(percentile_cont(.5) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0,2) "medianBusinessHours",
-        round(percentile_cont(.9) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0,2) "p90BusinessHours"
+        round(avg(t.business_seconds) filter(where o.id is not null)/3600.0,2) "avgBusinessHours",round(avg(t.raw_seconds) filter(where o.id is not null)/3600.0,2) "avgElapsedHours",
+        round(percentile_cont(.5) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0,2) "medianBusinessHours",
+        round(percentile_cont(.9) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0,2) "p90BusinessHours"
       from erp_supply.workflow_steps s left join erp_supply.order_tasks t on t.step_code=s.code and t.completed_at::date between p_date_from and p_date_to
       left join erp_supply.orders o on o.id=t.order_id and o.organization_id=v_org and not o.is_test
       group by s.code,s.name,s.sort_order
     ) x),
     'throughput',(select coalesce(jsonb_agg(to_jsonb(x) order by x.day),'[]'::jsonb) from (
-      select d::date as "day", count(o.id) filter (where o.created_at::date = d::date) as "created", count(o.id) filter (where o.closed_at::date = d::date) as "closed"
+      select d::date day,count(o.id) filter(where o.created_at::date=d::date) created,count(o.id) filter(where o.closed_at::date=d::date) closed
       from generate_series(p_date_from,p_date_to,'1 day') d left join erp_supply.orders o on o.organization_id=v_org and not o.is_test and (o.created_at::date=d::date or o.closed_at::date=d::date)
       group by d
     ) x),
@@ -1684,7 +1687,7 @@ declare v_org uuid:=erp_supply.current_org_id();
 begin
   if not (erp_supply.can_access_module('admin','read') or erp_supply.has_role('jefe_logistica')) then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.name),'[]'::jsonb) from (
-    select p.id,p.email,p.display_name name,p.employee_code "employeeCode",p.active,p.auth_user_id "authUserId",coalesce(array_agg(pr.role_code) filter (where pr.role_code is not null),'{}') roles
+    select p.id,p.email,p.display_name name,p.employee_code "employeeCode",p.active,p.auth_user_id "authUserId",coalesce(array_agg(pr.role_code) filter(where pr.role_code is not null),'{}') roles
     from erp_supply.profiles p left join erp_supply.profile_roles pr on pr.profile_id=p.id where p.organization_id=v_org group by p.id
   ) x);
 end;
@@ -1713,10 +1716,10 @@ grant execute on function public.erp_x_users() to authenticated;
 
 commit;
 
--- ============================================================
--- MIGRATION 005_qa_and_admin.sql
--- ============================================================
 
+-- ============================================================================
+-- 005_qa_and_admin.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 005: bootstrap, administration and deterministic 192-scenario QA bot.
 
@@ -1741,7 +1744,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_profile erp_supply.profiles%rowtype; v_role text;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede administrar usuarios' using errcode='42501'; end if;
   if p_payload->>'id' is null then
     insert into erp_supply.profiles(organization_id,auth_user_id,email,display_name,employee_code,active)
@@ -1766,7 +1769,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_count integer;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede sincronizar Auth' using errcode='42501'; end if;
   with inserted as (
     insert into erp_supply.profiles(organization_id,auth_user_id,email,display_name,active)
@@ -1790,7 +1793,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   return jsonb_build_object(
     'calendars',(select coalesce(jsonb_agg(to_jsonb(c)),'[]'::jsonb) from erp_supply.work_calendars c where c.organization_id=v_org),
     'segments',(select coalesce(jsonb_agg(to_jsonb(s) order by s.iso_weekday,s.start_time),'[]'::jsonb) from erp_supply.work_calendar_segments s join erp_supply.work_calendars c on c.id=s.calendar_id where c.organization_id=v_org),
@@ -1875,7 +1878,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('auditoria')) then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.started_at desc),'[]'::jsonb) from (
     select q.id,q.run_type "runType",q.status,q.total_scenarios "totalScenarios",q.passed_scenarios "passedScenarios",q.failed_scenarios "failedScenarios",q.started_at "startedAt",q.completed_at "completedAt",q.summary
@@ -1893,7 +1896,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_run erp_supply.qa_runs%rowtype;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   select * into v_run from erp_supply.qa_runs where id=p_run_id and organization_id=v_org;
   if not found then raise exception 'Ejecución QA no encontrada'; end if;
   return jsonb_build_object('run',to_jsonb(v_run),'scenarios',(select coalesce(jsonb_agg(to_jsonb(s) order by s.scenario_key),'[]'::jsonb) from erp_supply.qa_scenarios s where s.qa_run_id=p_run_id));
@@ -1915,10 +1918,10 @@ grant execute on function public.erp_x_qa_run_detail(uuid) to authenticated;
 
 commit;
 
--- ============================================================
--- MIGRATION 006_domain_services.sql
--- ============================================================
 
+-- ============================================================================
+-- 006_domain_services.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 006: credit, receiving, inventory, cutting, billing, delivery and audit services.
 
@@ -1933,7 +1936,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_total bigint;v_items jsonb;v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),200);
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('credit','read') then raise exception 'No autorizado' using errcode='42501'; end if;
   select count(*) into v_total from erp_supply.credit_requests c where c.organization_id=v_org and (p_status is null or c.status=p_status) and (p_search is null or lower(c.request_number||' '||c.client_name||' '||coalesce(c.client_document,'')) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
@@ -2026,7 +2029,7 @@ security definer
 set search_path=erp_supply,public,auth
 as $$
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   return (select coalesce(jsonb_agg(jsonb_build_object(
     'receiptNumber',r.receipt_number,'purchaseOrder',r.purchase_order,'supplier',r.supplier_name,'receivedAt',r.received_at,
     'sku',l.sku,'description',l.description,'quantity',l.accepted_quantity,'unit',l.unit,'location',l.location,'lotNumber',l.metadata->>'lotNumber','qualityStatus',l.quality_status
@@ -2125,7 +2128,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();v_page int:=greatest(p_page,1);v_size int:=least(greatest(p_page_size,1),250);v_total bigint;v_items jsonb;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('audit','read') then raise exception 'No autorizado' using errcode='42501'; end if;
   select count(*) into v_total from erp_supply.order_events e join erp_supply.orders o on o.id=e.order_id where e.organization_id=v_org and not o.is_test and (p_entity_type is null or e.event_type=p_entity_type) and (p_search is null or lower(o.order_number||' '||coalesce(e.action_code,'')||' '||e.payload::text) like '%'||lower(p_search)||'%');
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into v_items from (
@@ -2146,10 +2149,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 007_health_check.sql
--- ============================================================
 
+-- ============================================================================
+-- 007_health_check.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 007: operational health check and security audit.
 
@@ -2189,10 +2192,10 @@ grant execute on function public.erp_x_health_check() to authenticated;
 
 commit;
 
--- ============================================================
--- MIGRATION 008_enterprise_controls.sql
--- ============================================================
 
+-- ============================================================================
+-- 008_enterprise_controls.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 008: enterprise stage gates, mandatory checklists, assignment pools and domain controls.
 
@@ -2393,7 +2396,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.name),'[]'::jsonb) from (
     select distinct p.id,p.display_name name,p.email,array_agg(distinct pr.role_code) roles
     from erp_supply.profiles p
@@ -2477,7 +2480,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('inventory','read') and not erp_supply.can_access_module('cutting','read') and not erp_supply.has_role('super_admin') then raise exception 'No autorizado' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(to_jsonb(x) order by x.description,x.location,x.lot_number),'[]'::jsonb) from (
     select l.id,l.inventory_item_id "itemId",i.sku,i.reference,i.description,i.unit,l.lot_number "lotNumber",l.serial_number "serialNumber",l.location,l.quantity_available "available",l.quantity_reserved "reserved",l.quantity_blocked "blocked",l.expires_at "expiresAt"
@@ -2563,7 +2566,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id(); v_order erp_supply.orders%rowtype;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   select * into v_order from erp_supply.orders where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
   if not found then raise exception 'Pedido no encontrado'; end if;
   return jsonb_build_object(
@@ -2622,10 +2625,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 009_domain_hardening.sql
--- ============================================================
 
+-- ============================================================================
+-- 009_domain_hardening.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 009: harden domain services and cross-organization access.
 
@@ -2737,7 +2740,7 @@ security definer
 set search_path=erp_supply,public,auth
 as $$
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_view_order(p_order_id) then raise exception 'Pedido no disponible' using errcode='42501'; end if;
   return (select coalesce(jsonb_agg(jsonb_build_object(
     'receiptNumber',r.receipt_number,'purchaseOrder',r.purchase_order,'supplier',r.supplier_name,'receivedAt',r.received_at,
@@ -2858,10 +2861,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 010_identity_and_routing_bootstrap.sql
--- ============================================================
 
+-- ============================================================================
+-- 010_identity_and_routing_bootstrap.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 010: reuse Supabase Auth identities and established logistics routing without importing legacy orders.
 
@@ -2949,10 +2952,10 @@ where o.code='EI'
 
 commit;
 
--- ============================================================
--- MIGRATION 011_engine_hardening.sql
--- ============================================================
 
+-- ============================================================================
+-- 011_engine_hardening.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 011: transactional engine hardening and precise workflow audit.
 
@@ -3168,23 +3171,23 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if p_date_from is null or p_date_to is null or p_date_from>p_date_to then raise exception 'Rango de fechas inválido'; end if;
   return jsonb_build_object(
     'steps',(select coalesce(jsonb_agg(to_jsonb(x) order by x.sort_order),'[]'::jsonb) from (
       select s.code,s.name,s.sort_order,count(o.id) tasks,
-        round((avg(t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "avgBusinessHours",
-        round((avg(t.raw_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "avgElapsedHours",
-        round((percentile_cont(.5) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "medianBusinessHours",
-        round((percentile_cont(.9) within group(order by t.business_seconds) filter (where o.id is not null)/3600.0)::numeric,2) "p90BusinessHours",
-        round((avg(greatest(0,t.raw_seconds-t.business_seconds)) filter (where o.id is not null)/3600.0)::numeric,2) "avgWaitHours"
+        round((avg(t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "avgBusinessHours",
+        round((avg(t.raw_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "avgElapsedHours",
+        round((percentile_cont(.5) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "medianBusinessHours",
+        round((percentile_cont(.9) within group(order by t.business_seconds) filter(where o.id is not null)/3600.0)::numeric,2) "p90BusinessHours",
+        round((avg(greatest(0,t.raw_seconds-t.business_seconds)) filter(where o.id is not null)/3600.0)::numeric,2) "avgWaitHours"
       from erp_supply.workflow_steps s
       left join erp_supply.order_tasks t on t.step_code=s.code and t.completed_at::date between p_date_from and p_date_to
       left join erp_supply.orders o on o.id=t.order_id and o.organization_id=v_org and not o.is_test
       group by s.code,s.name,s.sort_order
     ) x),
     'throughput',(select coalesce(jsonb_agg(to_jsonb(x) order by x.day),'[]'::jsonb) from (
-      select d::date as "day", count(o.id) filter (where o.created_at::date = d::date) as "created", count(o.id) filter (where o.closed_at::date = d::date) as "closed"
+      select d::date day,count(o.id) filter(where o.created_at::date=d::date) created,count(o.id) filter(where o.closed_at::date=d::date) closed
       from generate_series(p_date_from,p_date_to,'1 day') d
       left join erp_supply.orders o on o.organization_id=v_org and not o.is_test and (o.created_at::date=d::date or o.closed_at::date=d::date)
       group by d
@@ -3202,10 +3205,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 012_enterprise_health_and_release_gate.sql
--- ============================================================
 
+-- ============================================================================
+-- 012_enterprise_health_and_release_gate.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 012: release-grade health audit for configuration, security, concurrency and operational integrity.
 
@@ -3453,10 +3456,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 013_history_import_hardening.sql
--- ============================================================
 
+-- ============================================================================
+-- 013_history_import_hardening.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 013: robust, resumable and auditable historical CSV import.
 
@@ -3614,10 +3617,10 @@ grant execute on function public.erp_x_import_history(text,jsonb,uuid) to authen
 
 commit;
 
--- ============================================================
--- MIGRATION 014_qa_control_suite.sql
--- ============================================================
 
+-- ============================================================================
+-- 014_qa_control_suite.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 014: cross-cutting QA suite for concurrency, gates, approvals, history and inventory.
 
@@ -3877,10 +3880,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 015_approval_lifecycle_hardening.sql
--- ============================================================
 
+-- ============================================================================
+-- 015_approval_lifecycle_hardening.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 015: strict approval lifecycle, canonical approvers and safe execution.
 
@@ -4087,10 +4090,10 @@ grant execute on function public.erp_x_decide_approval(uuid,text,text) to authen
 
 commit;
 
--- ============================================================
--- MIGRATION 016_domain_audit_triggers.sql
--- ============================================================
 
+-- ============================================================================
+-- 016_domain_audit_triggers.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 016: append-only audit coverage for every sensitive domain record.
 
@@ -4180,10 +4183,10 @@ end $$;
 
 commit;
 
--- ============================================================
--- MIGRATION 017_input_contract_hardening.sql
--- ============================================================
 
+-- ============================================================================
+-- 017_input_contract_hardening.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10
 -- Migration 017: strict and friendly input contracts for creation, administration and credit.
 
@@ -4403,7 +4406,7 @@ declare
   v_roles jsonb:=coalesce(p_payload->'roles','[]'::jsonb);
   v_role text;
 begin
-  perform erp_supply.require_profile();
+  erp_supply.require_profile();
   if not erp_supply.can_access_module('admin','admin') then raise exception 'Solo Super Admin puede administrar usuarios' using errcode='42501'; end if;
   if p_payload is null or jsonb_typeof(p_payload)<>'object' then raise exception 'Perfil inválido'; end if;
   if v_email is null or position('@' in v_email)<=1 then raise exception 'Correo inválido'; end if;
@@ -4492,9 +4495,9 @@ end $$;
 
 commit;
 
+
 -- ============================================================================
--- V10.6 · RECEPCIÓN DE PEDIDOS GUIADA
--- Fuente: sql/migrations/018_reception_order_v10_6.sql
+-- 018_reception_order_v10_6.sql
 -- ============================================================================
 -- ERP Electroingeniería V10.6
 -- Recepción de pedidos: líneas definitivas + asignación controlada de Alistamiento y Corte.
@@ -4942,7 +4945,7 @@ declare
   v_org uuid:=erp_supply.current_org_id();
   v_order erp_supply.orders%rowtype;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select * into v_order
   from erp_supply.orders
   where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
@@ -4978,9 +4981,10 @@ grant execute on function public.erp_x_get_order(uuid) to authenticated;
 
 commit;
 
--- ============================================================
--- MIGRATION 019_financial_routing_and_cash_invoice_v10_7.sql
--- ============================================================
+
+-- ============================================================================
+-- 019_financial_routing_and_cash_invoice_v10_7.sql
+-- ============================================================================
 -- ERP Supply Enterprise V10.7
 -- Enrutamiento condicional de Cartera/Caja y facturación PVN desde Caja.
 
@@ -5298,10 +5302,13 @@ before update of status on erp_supply.order_tasks
 for each row execute function erp_supply.validate_cash_invoice_completion();
 
 commit;
+
+
 -- ============================================================================
--- MIGRACIÓN 020 · V10.8 ALISTAMIENTO GUIADO Y RONDAS PARCIALES
+-- 020_picking_partial_rounds_v10_8.sql
 -- ============================================================================
--- ERP Electroingeniería V10.8
+-- ERP Electroingeniería V10.8.1
+-- Corrección: llamadas require_profile() ejecutadas mediante PERFORM en PL/pgSQL.
 -- Alistamiento guiado, verificación línea a línea y rondas parciales del mismo pedido.
 -- Ejecutar una sola vez en Supabase SQL Editor.
 
@@ -5742,7 +5749,7 @@ set search_path=erp_supply,public,auth
 as $$
 declare v_org uuid:=erp_supply.current_org_id();
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   if p_date_from is null or p_date_to is null or p_date_from>p_date_to then raise exception 'Rango de fechas inválido'; end if;
   return jsonb_build_object(
     'summary',jsonb_build_object(
@@ -5853,7 +5860,7 @@ declare
   v_org uuid:=erp_supply.current_org_id();
   v_order erp_supply.orders%rowtype;
 begin
-  erp_supply.require_profile();
+  perform erp_supply.require_profile();
   select * into v_order from erp_supply.orders
   where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
   if not found then raise exception 'Pedido no encontrado'; end if;
@@ -5894,5 +5901,2627 @@ grant execute on function public.erp_x_picking_pending(text,integer,integer) to 
 grant execute on function public.erp_x_partial_fulfillment_metrics(date,date) to authenticated;
 grant execute on function public.erp_x_list_orders(text,text,text,text,text,text,integer,integer,boolean) to authenticated;
 grant execute on function public.erp_x_get_order(uuid) to authenticated;
+
+commit;
+
+
+-- ============================================================================
+-- 021_billing_microprocess_v10_9.sql
+-- ============================================================================
+-- ERP Supply Enterprise V10.9
+-- Microproceso de Facturación: PVN/PNV a Caja, factura normal para PVC/PVE y Anexo PVP.
+
+begin;
+
+-- La lista de Facturación usa una denominación neutra porque PVP no carga factura.
+update erp_supply.checklist_templates
+set label='Factura o Anexo PVP cargado',required=true,active=true
+where step_code='FACTURACION' and item_code='INVOICE';
+
+update erp_supply.checklist_templates
+set label='Documento validado para envío a despacho',required=true,active=true
+where step_code='FACTURACION' and item_code='COMMERCIAL_MATCH';
+
+update erp_supply.task_checklist c
+set label=case c.item_code
+  when 'INVOICE' then 'Anexo PVP cargado'
+  when 'COMMERCIAL_MATCH' then 'Anexo PVP validado para despacho'
+  else c.label end
+from erp_supply.order_tasks t
+join erp_supply.orders o on o.id=t.order_id
+where c.task_id=t.id
+  and t.step_code='FACTURACION'
+  and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  and upper(o.order_type_code)='PVP'
+  and c.item_code in('INVOICE','COMMERCIAL_MATCH');
+
+-- El tipo operativo real es PVN. Se acepta PNV como alias defensivo para datos históricos.
+create or replace function erp_supply.next_step(
+  p_current_step text,
+  p_order_type text,
+  p_payment_condition text,
+  p_delivery_route text,
+  p_requires_cut boolean,
+  p_requires_purchase boolean
+)
+returns text
+language sql
+immutable
+as $$
+  select case p_current_step
+    when 'CARTERA' then 'RECEPCION_PEDIDO'
+    when 'CAJA' then 'RECEPCION_PEDIDO'
+    when 'COMPRAS' then 'RECEPCION_MERCANCIA'
+    when 'RECEPCION_MERCANCIA' then 'RECEPCION_PEDIDO'
+    when 'RECEPCION_PEDIDO' then 'ALISTAMIENTO'
+    when 'ALISTAMIENTO' then case
+      when p_requires_cut then 'CORTE'
+      when upper(p_order_type) in('PVN','PNV') then 'CAJA_FACTURACION'
+      else 'FACTURACION' end
+    when 'CORTE' then case
+      when upper(p_order_type) in('PVN','PNV') then 'CAJA_FACTURACION'
+      else 'FACTURACION' end
+    when 'CAJA_FACTURACION' then p_delivery_route
+    when 'FACTURACION' then p_delivery_route
+    when 'CLIENT_POINT' then 'CLOSURE'
+    when 'CLIENT_PICKUP' then 'CLOSURE'
+    when 'LOCAL_DISPATCH' then 'CLOSURE'
+    when 'NATIONAL_DISPATCH' then 'CLOSURE'
+    when 'CLOSURE' then 'CLOSED'
+    else 'CLOSED'
+  end
+$$;
+
+-- Toda factura nueva debe estar vinculada al archivo cargado en Google Drive
+-- y a la tarea activa de facturación de la ronda actual.
+create or replace function public.erp_x_save_invoice(p_order_id uuid,p_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_invoice erp_supply.invoices%rowtype;
+  v_file_id uuid:=erp_supply.safe_uuid(p_payload->>'driveFileRecordId');
+begin
+  select * into v_order
+  from erp_supply.orders
+  where id=p_order_id
+    and organization_id=erp_supply.current_org_id()
+    and erp_supply.can_view_order(id);
+  if not found then raise exception 'Pedido no disponible' using errcode='42501'; end if;
+
+  select * into v_task
+  from erp_supply.order_tasks
+  where order_id=p_order_id
+    and step_code=v_order.current_step_code
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc
+  limit 1;
+  if not found then raise exception 'El pedido no tiene una tarea activa de facturación'; end if;
+
+  if upper(v_order.order_type_code)='PVP' then
+    raise exception 'Los pedidos PVP deben cargar Anexo PVP, no factura';
+  end if;
+
+  if v_order.current_step_code='CAJA_FACTURACION' then
+    if not (erp_supply.has_role('caja') or erp_supply.has_role('super_admin')) then
+      raise exception 'Solo Caja puede registrar esta factura' using errcode='42501';
+    end if;
+    if upper(v_order.order_type_code) not in('PVN','PNV') then
+      raise exception 'La facturación en Caja solo aplica a pedidos pagados de contado';
+    end if;
+  else
+    if v_order.current_step_code<>'FACTURACION' and not erp_supply.has_role('super_admin') then
+      raise exception 'El pedido no está en Facturación';
+    end if;
+    if not (erp_supply.can_access_module('billing','create') or erp_supply.has_role('super_admin')) then
+      raise exception 'No autorizado para facturar' using errcode='42501';
+    end if;
+  end if;
+
+  if v_file_id is null or not exists(
+    select 1
+    from erp_supply.drive_files f
+    where f.id=v_file_id
+      and f.order_id=p_order_id
+      and f.task_id=v_task.id
+      and upper(f.file_category)='INVOICE'
+  ) then
+    raise exception 'Debe subir la factura mediante Google Drive antes de guardarla';
+  end if;
+
+  if nullif(trim(p_payload->>'invoiceNumber'),'') is null then
+    raise exception 'Número de factura requerido';
+  end if;
+
+  insert into erp_supply.invoices(
+    order_id,invoice_number,invoice_date,amount,currency,status,
+    drive_file_id,registered_by,metadata
+  ) values(
+    p_order_id,
+    trim(p_payload->>'invoiceNumber'),
+    coalesce(erp_supply.safe_date(p_payload->>'invoiceDate'),current_date),
+    erp_supply.safe_numeric(p_payload->>'amount'),
+    coalesce(nullif(trim(p_payload->>'currency'),''),'COP'),
+    'REGISTERED',v_file_id,v_actor,
+    (case when jsonb_typeof(coalesce(p_payload->'metadata','{}'::jsonb))='object'
+      then coalesce(p_payload->'metadata','{}'::jsonb) else '{}'::jsonb end)
+      ||jsonb_build_object('registeredStep',v_order.current_step_code,'taskId',v_task.id)
+  ) returning * into v_invoice;
+
+  insert into erp_supply.order_events(
+    organization_id,order_id,task_id,event_type,action_code,
+    actor_profile_id,actor_role_code,payload
+  ) values(
+    v_order.organization_id,p_order_id,v_task.id,'DOMAIN_RECORD','INVOICE',
+    v_actor,(erp_supply.current_roles())[1],
+    jsonb_build_object(
+      'invoiceId',v_invoice.id,
+      'invoiceNumber',v_invoice.invoice_number,
+      'step',v_order.current_step_code,
+      'taskId',v_task.id
+    )
+  );
+
+  return jsonb_build_object('success',true,'invoice',to_jsonb(v_invoice));
+end;
+$$;
+
+-- Corrige manualmente un PVN que haya llegado a Facturación de Logística.
+create or replace function public.erp_x_route_billing_to_cash(
+  p_order_id uuid,
+  p_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_new_task erp_supply.order_tasks%rowtype;
+  v_sequence integer;
+  v_now timestamptz:=now();
+  v_raw bigint:=0;
+  v_business bigint:=0;
+begin
+  if not (
+    erp_supply.can_access_module('billing','update')
+    or erp_supply.has_role('coordinador_logistico')
+    or erp_supply.has_role('despacho_nacional')
+    or erp_supply.has_role('jefe_logistica')
+    or erp_supply.has_role('super_admin')
+  ) then
+    raise exception 'No autorizado para enviar el pedido a Caja' using errcode='42501';
+  end if;
+
+  select * into v_order
+  from erp_supply.orders
+  where id=p_order_id
+    and organization_id=v_org
+    and erp_supply.can_view_order(id)
+  for update;
+  if not found then raise exception 'Pedido no disponible' using errcode='42501'; end if;
+  if v_order.current_step_code<>'FACTURACION' then
+    raise exception 'El pedido no está en Facturación de Logística';
+  end if;
+  if upper(v_order.order_type_code) not in('PVN','PNV') then
+    raise exception 'Solo los pedidos pagados de contado pueden enviarse a Caja';
+  end if;
+
+  select * into v_task
+  from erp_supply.order_tasks
+  where order_id=p_order_id
+    and step_code='FACTURACION'
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc
+  limit 1
+  for update;
+  if not found then raise exception 'No existe una tarea activa de Facturación'; end if;
+
+  update erp_supply.task_sessions s
+  set ended_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from (v_now-s.started_at)))::bigint,
+      business_seconds=erp_supply.business_seconds_between(v_org,s.started_at,v_now),
+      note=coalesce(nullif(trim(p_reason),''),'Reenrutado manualmente a Caja')
+  where s.task_id=v_task.id and s.ended_at is null;
+
+  select coalesce(sum(raw_seconds),0),coalesce(sum(business_seconds),0)
+  into v_raw,v_business
+  from erp_supply.task_sessions
+  where task_id=v_task.id;
+
+  update erp_supply.order_tasks
+  set status='CANCELLED',completed_at=v_now,
+      raw_seconds=v_raw,business_seconds=v_business,
+      result_code='ROUTED_TO_CASH',
+      result_detail=coalesce(nullif(trim(p_reason),''),'Pedido pagado de contado enviado a Caja'),
+      metadata=metadata||jsonb_build_object(
+        'routedToCashAt',v_now,
+        'routedToCashBy',v_actor,
+        'routingVersion','10.9'
+      )
+  where id=v_task.id;
+
+  select coalesce(max(sequence_no),0)+1 into v_sequence
+  from erp_supply.order_tasks where order_id=p_order_id;
+
+  select * into v_new_task
+  from erp_supply.create_task(v_order,'CAJA_FACTURACION',v_sequence);
+
+  update erp_supply.orders
+  set metadata=metadata||jsonb_build_object(
+        'billingRouting','CAJA_FACTURACION',
+        'billingRoutedManually',true,
+        'billingRoutedAt',v_now,
+        'billingRoutedBy',v_actor,
+        'routingVersion','10.9'
+      ),
+      updated_at=v_now
+  where id=p_order_id;
+
+  insert into erp_supply.order_events(
+    organization_id,order_id,task_id,event_type,action_code,
+    from_step_code,to_step_code,from_status,to_status,
+    actor_profile_id,actor_role_code,payload
+  ) values(
+    v_org,p_order_id,v_task.id,'ROUTE_CORRECTION','SEND_TO_CASH',
+    'FACTURACION','CAJA_FACTURACION',v_order.status,v_new_task.status,
+    v_actor,(erp_supply.current_roles())[1],
+    jsonb_build_object(
+      'reason',coalesce(nullif(trim(p_reason),''),'Pedido pagado de contado'),
+      'cancelledTaskId',v_task.id,
+      'newTaskId',v_new_task.id,
+      'routingVersion','10.9'
+    )
+  );
+
+  return jsonb_build_object(
+    'success',true,
+    'orderId',p_order_id,
+    'currentStep','CAJA_FACTURACION',
+    'taskId',v_new_task.id
+  );
+end;
+$$;
+
+-- Control transaccional por documento y por tarea/ronda.
+create or replace function erp_supply.validate_task_completion()
+returns trigger
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_order erp_supply.orders%rowtype;
+  v_missing integer;
+begin
+  if new.status<>'COMPLETED' or old.status='COMPLETED' then return new; end if;
+  select * into v_order from erp_supply.orders where id=new.order_id;
+  if v_order.is_test then return new; end if;
+
+  select count(*) into v_missing
+  from erp_supply.task_checklist
+  where task_id=new.id and required and not completed;
+  if v_missing>0 then
+    raise exception 'No puede finalizar: quedan % controles obligatorios sin completar',v_missing;
+  end if;
+
+  case new.step_code
+    when 'CARTERA' then
+      if not exists(select 1 from erp_supply.financial_validations where order_id=v_order.id and validation_type='CARTERA' and decision='APPROVED') then
+        raise exception 'Debe registrar una validación aprobada de Cartera';
+      end if;
+    when 'CAJA' then
+      if not exists(select 1 from erp_supply.financial_validations where order_id=v_order.id and validation_type='CAJA' and decision='APPROVED') then
+        raise exception 'Debe registrar una validación aprobada de Caja';
+      end if;
+    when 'COMPRAS' then
+      if not exists(select 1 from erp_supply.purchase_orders where order_id=v_order.id and status in('ISSUED','CONFIRMED','PARTIAL','RECEIVED')) then
+        raise exception 'Debe registrar una orden de compra válida';
+      end if;
+    when 'RECEPCION_MERCANCIA' then
+      if not exists(select 1 from erp_supply.receipts where order_id=v_order.id and status in('PARTIAL','CONFORMING','CLOSED')) then
+        raise exception 'Debe registrar la recepción física y su resultado de calidad';
+      end if;
+    when 'CORTE' then
+      if v_order.requires_cut and not exists(select 1 from erp_supply.cut_jobs where order_id=v_order.id and status='COMPLETED') then
+        raise exception 'Debe registrar al menos un corte completado';
+      end if;
+    when 'FACTURACION' then
+      if upper(v_order.order_type_code)='PVP' then
+        if not exists(
+          select 1 from erp_supply.drive_files f
+          where f.order_id=v_order.id and f.task_id=new.id and upper(f.file_category)='PVP_ANNEX'
+        ) then raise exception 'Debe cargar el Anexo PVP antes de enviar el pedido a despacho'; end if;
+      else
+        if not exists(
+          select 1
+          from erp_supply.invoices i
+          join erp_supply.drive_files f on f.id=i.drive_file_id
+          where i.order_id=v_order.id and i.status='REGISTERED' and f.task_id=new.id
+        ) then raise exception 'Debe cargar la factura antes de enviar el pedido a despacho'; end if;
+      end if;
+    when 'CLIENT_POINT' then
+      if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='DELIVERED') then raise exception 'Debe confirmar la entrega'; end if;
+    when 'CLIENT_PICKUP' then
+      if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='DELIVERED') then raise exception 'Debe confirmar la entrega'; end if;
+    when 'LOCAL_DISPATCH' then
+      if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='DELIVERED') then raise exception 'Debe confirmar la entrega'; end if;
+    when 'NATIONAL_DISPATCH' then
+      if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='DELIVERED') then raise exception 'Debe confirmar la entrega nacional'; end if;
+    when 'CLOSURE' then
+      if upper(v_order.order_type_code)='PVP' then
+        if not exists(select 1 from erp_supply.drive_files where order_id=v_order.id and upper(file_category)='PVP_ANNEX') then
+          raise exception 'El pedido no tiene Anexo PVP';
+        end if;
+      elsif not exists(select 1 from erp_supply.invoices where order_id=v_order.id and status='REGISTERED') then
+        raise exception 'El pedido no tiene factura registrada';
+      end if;
+      if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='DELIVERED') then
+        raise exception 'El pedido no tiene entrega confirmada';
+      end if;
+    else null;
+  end case;
+  return new;
+end;
+$$;
+
+create or replace function erp_supply.validate_cash_invoice_completion()
+returns trigger
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+begin
+  if new.step_code='CAJA_FACTURACION' and new.status='COMPLETED' and old.status<>'COMPLETED' then
+    if not exists(
+      select 1
+      from erp_supply.invoices i
+      join erp_supply.drive_files f on f.id=i.drive_file_id
+      where i.order_id=new.order_id and i.status='REGISTERED' and f.task_id=new.id
+    ) then
+      raise exception 'Debe subir la factura de esta gestión antes de enviar el pedido a despacho';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.erp_x_save_invoice(uuid,jsonb) from public,anon,authenticated;
+revoke all on function public.erp_x_route_billing_to_cash(uuid,text) from public,anon,authenticated;
+grant execute on function public.erp_x_save_invoice(uuid,jsonb) to authenticated;
+grant execute on function public.erp_x_route_billing_to_cash(uuid,text) to authenticated;
+
+commit;
+
+
+-- ============================================================================
+-- 022_multi_active_sessions_v10_9_3.sql
+-- ============================================================================
+-- ERP EI V10.9.3
+-- Permite que un mismo usuario mantenga varias sesiones de trabajo activas,
+-- conservando una sola sesión abierta por tarea/pedido.
+
+begin;
+
+-- Elimina únicamente la restricción global por usuario.
+drop index if exists erp_supply.uq_open_session_per_user;
+
+-- Conserva y reafirma el bloqueo por tarea.
+create unique index if not exists uq_open_session_per_task
+  on erp_supply.task_sessions(task_id)
+  where ended_at is null;
+
+create or replace function erp_supply.execute_action_internal(
+  p_order_id uuid,
+  p_action text,
+  p_payload jsonb,
+  p_actor uuid,
+  p_bypass_permissions boolean default false,
+  p_expected_version integer default null,
+  p_idempotency_key text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_action text := upper(trim(coalesce(p_action,'')));
+  v_next text;
+  v_new_task erp_supply.order_tasks%rowtype;
+  v_target uuid;
+  v_session erp_supply.task_sessions%rowtype;
+  v_now timestamptz := now();
+  v_business bigint := 0;
+  v_event_id bigint;
+  v_actor_role text;
+  v_from_step text;
+  v_from_status text;
+  v_scheduled_at timestamptz;
+begin
+  if v_action='' then raise exception 'Acción requerida'; end if;
+  if p_actor is null then raise exception 'Actor requerido' using errcode='42501'; end if;
+
+  select * into v_order from erp_supply.orders where id=p_order_id for update;
+  if not found then raise exception 'Pedido no encontrado'; end if;
+  v_from_step:=v_order.current_step_code;
+  v_from_status:=v_order.status;
+
+  if p_expected_version is not null and v_order.version<>p_expected_version then
+    raise exception 'El pedido cambió mientras estaba abierto. Actualice la pantalla.' using errcode='40001';
+  end if;
+  if p_idempotency_key is not null and exists(
+    select 1 from erp_supply.order_events where organization_id=v_order.organization_id and idempotency_key=p_idempotency_key
+  ) then
+    return jsonb_build_object('success',true,'idempotent',true,'orderId',v_order.id,'orderNumber',v_order.order_number,'status',v_order.status,'currentStep',v_order.current_step_code,'version',v_order.version);
+  end if;
+
+  select * into v_task from erp_supply.order_tasks
+  where order_id=v_order.id and status in ('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc limit 1 for update;
+
+  select pr.role_code into v_actor_role from erp_supply.profile_roles pr
+  where pr.profile_id=p_actor order by pr.is_primary desc,pr.role_code limit 1;
+
+  if v_action not in ('COMMENT','REQUEST_APPROVAL') and v_task.id is null and v_order.status not in ('CLOSED','CANCELLED') then
+    raise exception 'El pedido no tiene una tarea operativa activa';
+  end if;
+
+  if not p_bypass_permissions then
+    if v_action in ('CLAIM','ASSIGN','START','COMPLETE','WAIT','BLOCK','RESUME')
+       and not erp_supply.actor_can(p_actor,v_order.current_step_code,v_action,v_order.current_assignee_id) then
+      raise exception 'El usuario no está autorizado para ejecutar % en %',v_action,v_order.current_step_code using errcode='42501';
+    end if;
+    if v_action='NO_DELIVERY' and not erp_supply.actor_can(p_actor,v_order.current_step_code,'WAIT',v_order.current_assignee_id) then
+      raise exception 'El usuario no está autorizado para registrar no entrega' using errcode='42501';
+    end if;
+    if v_action='REPROGRAM' and not erp_supply.actor_can(p_actor,v_order.current_step_code,'RESUME',v_order.current_assignee_id) then
+      raise exception 'El usuario no está autorizado para reprogramar la entrega' using errcode='42501';
+    end if;
+  end if;
+
+  if v_action='CLAIM' then
+    if v_task.status not in ('QUEUED','ASSIGNED') then raise exception 'La tarea no puede reclamarse en su estado actual'; end if;
+    if v_task.assigned_profile_id is not null and v_task.assigned_profile_id<>p_actor and not p_bypass_permissions
+       and not exists(select 1 from erp_supply.profile_roles pr join erp_supply.step_roles sr on sr.role_code=pr.role_code and sr.step_code=v_task.step_code where pr.profile_id=p_actor and sr.can_override) then
+      raise exception 'La tarea ya está asignada a otro responsable';
+    end if;
+    update erp_supply.order_tasks set assigned_profile_id=p_actor,assigned_at=coalesce(assigned_at,v_now),status='ASSIGNED' where id=v_task.id returning * into v_task;
+    update erp_supply.orders set current_assignee_id=p_actor,status='ASSIGNED',version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='ASSIGN' then
+    begin v_target := nullif(p_payload->>'profileId','')::uuid; exception when others then raise exception 'profileId inválido'; end;
+    if v_target is null then raise exception 'Debe seleccionar un responsable'; end if;
+    if not exists(
+      select 1 from erp_supply.profiles p
+      join erp_supply.profile_roles pr on pr.profile_id=p.id
+      join erp_supply.step_roles sr on sr.role_code=pr.role_code and sr.step_code=v_order.current_step_code and sr.can_view
+      where p.id=v_target and p.organization_id=v_order.organization_id and p.active
+    ) then raise exception 'El responsable no está habilitado para la etapa %',v_order.current_step_code; end if;
+    if exists(select 1 from erp_supply.task_sessions where task_id=v_task.id and ended_at is null) then raise exception 'No puede reasignar una tarea con sesión de trabajo activa'; end if;
+    update erp_supply.order_tasks set assigned_profile_id=v_target,assigned_at=v_now,status='ASSIGNED' where id=v_task.id returning * into v_task;
+    update erp_supply.orders set current_assignee_id=v_target,status='ASSIGNED',version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='START' then
+    if v_task.status not in ('QUEUED','ASSIGNED') then raise exception 'La tarea no puede iniciarse en su estado actual'; end if;
+    if exists(select 1 from erp_supply.task_sessions where task_id=v_task.id and ended_at is null) then raise exception 'La tarea ya tiene una sesión de trabajo activa'; end if;
+    if v_task.assigned_profile_id is null then
+      update erp_supply.order_tasks set assigned_profile_id=p_actor,assigned_at=v_now where id=v_task.id;
+    end if;
+    insert into erp_supply.task_sessions(task_id,profile_id,started_at,note)
+    values(v_task.id,p_actor,v_now,p_payload->>'detail') returning * into v_session;
+    update erp_supply.order_tasks set status='IN_PROGRESS',started_at=coalesce(started_at,v_now),assigned_profile_id=coalesce(assigned_profile_id,p_actor) where id=v_task.id returning * into v_task;
+    update erp_supply.orders set status='IN_PROGRESS',current_assignee_id=coalesce(current_assignee_id,p_actor),version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action in ('WAIT','BLOCK') then
+    if v_task.status<>'IN_PROGRESS' then raise exception 'Solo una tarea en proceso puede ponerse en espera o bloqueo'; end if;
+    update erp_supply.task_sessions s set ended_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from(v_now-s.started_at))::bigint),
+      business_seconds=erp_supply.business_seconds_between(v_order.organization_id,s.started_at,v_now)
+    where s.task_id=v_task.id and s.ended_at is null;
+    update erp_supply.order_tasks set status=case when v_action='WAIT' then 'WAITING' else 'BLOCKED' end,
+      blocked_at=case when v_action='BLOCK' then v_now else blocked_at end,
+      result_detail=coalesce(nullif(p_payload->>'reason',''),nullif(p_payload->>'detail',''),result_detail)
+    where id=v_task.id returning * into v_task;
+    update erp_supply.orders set status=case when v_action='WAIT' then 'WAITING' else 'BLOCKED' end,version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='RESUME' then
+    if v_task.status not in ('WAITING','BLOCKED') then raise exception 'La tarea no está en espera o bloqueo'; end if;
+    if exists(select 1 from erp_supply.task_sessions where task_id=v_task.id and ended_at is null) then raise exception 'La tarea ya tiene una sesión activa'; end if;
+    insert into erp_supply.task_sessions(task_id,profile_id,started_at,note) values(v_task.id,p_actor,v_now,p_payload->>'detail') returning * into v_session;
+    update erp_supply.order_tasks set status='IN_PROGRESS',assigned_profile_id=coalesce(assigned_profile_id,p_actor) where id=v_task.id returning * into v_task;
+    update erp_supply.orders set status='IN_PROGRESS',current_assignee_id=coalesce(current_assignee_id,p_actor),version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='COMPLETE' then
+    if not p_bypass_permissions and v_task.status<>'IN_PROGRESS' then raise exception 'Debe iniciar la tarea antes de finalizarla'; end if;
+    if not p_bypass_permissions and not exists(select 1 from erp_supply.task_sessions where task_id=v_task.id and ended_at is null) then raise exception 'La tarea no tiene una sesión activa para finalizar'; end if;
+    update erp_supply.task_sessions s set ended_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from(v_now-s.started_at))::bigint),
+      business_seconds=erp_supply.business_seconds_between(v_order.organization_id,s.started_at,v_now)
+    where s.task_id=v_task.id and s.ended_at is null;
+    select coalesce(sum(business_seconds),0) into v_business from erp_supply.task_sessions where task_id=v_task.id;
+    update erp_supply.order_tasks set status='COMPLETED',completed_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from(v_now-coalesce(started_at,created_at)))::bigint),
+      business_seconds=v_business,result_code=coalesce(nullif(p_payload->>'resultCode',''),'COMPLETED'),result_detail=p_payload->>'detail',metadata=metadata||coalesce(p_payload,'{}'::jsonb)
+    where id=v_task.id returning * into v_task;
+
+    v_next:=erp_supply.next_step(v_order.current_step_code,v_order.order_type_code,v_order.payment_condition_code,v_order.delivery_route_code,v_order.requires_cut,v_order.requires_purchase);
+    if v_next='CLOSED' then
+      update erp_supply.orders set current_step_code='CLOSED',status='CLOSED',closed_at=v_now,current_assignee_id=null,current_role_code=null,version=version+1 where id=v_order.id returning * into v_order;
+    else
+      select * into v_new_task from erp_supply.create_task(v_order,v_next,v_task.sequence_no+1);
+      select * into v_order from erp_supply.orders where id=v_order.id;
+    end if;
+
+  elsif v_action='NO_DELIVERY' then
+    if v_order.current_step_code not in ('CLIENT_POINT','CLIENT_PICKUP','LOCAL_DISPATCH','NATIONAL_DISPATCH') then raise exception 'La no entrega solo aplica en despacho o entrega'; end if;
+    if nullif(trim(p_payload->>'reason'),'') is null then raise exception 'Debe registrar el motivo de no entrega'; end if;
+    update erp_supply.task_sessions s set ended_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from(v_now-s.started_at))::bigint),
+      business_seconds=erp_supply.business_seconds_between(v_order.organization_id,s.started_at,v_now)
+    where s.task_id=v_task.id and s.ended_at is null;
+    insert into erp_supply.deliveries(order_id,route_code,status,no_delivery_reason,assigned_profile_id,metadata)
+    values(v_order.id,v_order.delivery_route_code,'NOT_DELIVERED',trim(p_payload->>'reason'),p_actor,p_payload);
+    update erp_supply.order_tasks set status='WAITING',result_code='NO_DELIVERY',result_detail=trim(p_payload->>'reason') where id=v_task.id returning * into v_task;
+    update erp_supply.orders set status='WAITING',version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='REPROGRAM' then
+    begin v_scheduled_at:=nullif(p_payload->>'scheduledAt','')::timestamptz; exception when others then raise exception 'Fecha de reprogramación inválida'; end;
+    if v_scheduled_at is null or v_scheduled_at<=v_now then raise exception 'La nueva fecha debe ser futura'; end if;
+    if not exists(select 1 from erp_supply.deliveries where order_id=v_order.id and status='NOT_DELIVERED') then raise exception 'No existe una no entrega pendiente de reprogramación'; end if;
+    update erp_supply.deliveries set status='REPROGRAMMED',scheduled_at=v_scheduled_at,metadata=metadata||p_payload,updated_at=v_now
+    where id=(select id from erp_supply.deliveries where order_id=v_order.id and status='NOT_DELIVERED' order by created_at desc limit 1);
+    update erp_supply.order_tasks set status='ASSIGNED',result_detail=coalesce(nullif(p_payload->>'detail',''),'Entrega reprogramada') where id=v_task.id returning * into v_task;
+    update erp_supply.orders set status='ASSIGNED',version=version+1 where id=v_order.id returning * into v_order;
+
+  elsif v_action='COMMENT' then
+    if nullif(trim(p_payload->>'body'),'') is null then raise exception 'Debe escribir el comentario'; end if;
+    insert into erp_supply.order_comments(order_id,author_profile_id,comment_type,visibility,body,metadata)
+    values(v_order.id,p_actor,upper(coalesce(nullif(p_payload->>'commentType',''),'GENERAL')),upper(coalesce(nullif(p_payload->>'visibility',''),'ORDER')),trim(p_payload->>'body'),coalesce(p_payload->'metadata','{}'::jsonb));
+
+  elsif v_action='REQUEST_APPROVAL' then
+    insert into erp_supply.approval_requests(organization_id,order_id,request_type,requested_by,assigned_role_code,reason,request_payload)
+    values(v_order.organization_id,v_order.id,upper(p_payload->>'requestType'),p_actor,coalesce(nullif(p_payload->>'assignedRole',''),'jefe_logistica'),trim(p_payload->>'reason'),p_payload);
+
+  else
+    raise exception 'Acción no reconocida: %',v_action;
+  end if;
+
+  insert into erp_supply.order_events(organization_id,order_id,task_id,event_type,action_code,from_step_code,to_step_code,from_status,to_status,actor_profile_id,actor_role_code,idempotency_key,payload)
+  values(v_order.organization_id,v_order.id,coalesce(v_task.id,v_new_task.id),'WORKFLOW_ACTION',v_action,
+    v_from_step,v_order.current_step_code,v_from_status,v_order.status,p_actor,v_actor_role,p_idempotency_key,coalesce(p_payload,'{}'::jsonb))
+  returning id into v_event_id;
+
+  insert into erp_supply.system_audit(organization_id,actor_profile_id,action,entity_type,entity_id,before_data,after_data,metadata)
+  values(v_order.organization_id,p_actor,v_action,'ORDER',v_order.id::text,
+    jsonb_build_object('step',v_from_step,'status',v_from_status,'version',coalesce(p_expected_version,v_order.version-1)),
+    jsonb_build_object('step',v_order.current_step_code,'status',v_order.status,'version',v_order.version),
+    jsonb_build_object('eventId',v_event_id,'idempotencyKey',p_idempotency_key));
+
+  insert into erp_supply.outbox_events(organization_id,event_type,aggregate_type,aggregate_id,payload)
+  values(v_order.organization_id,'ORDER_ACTION','ORDER',v_order.id,jsonb_build_object('eventId',v_event_id,'action',v_action,'orderNumber',v_order.order_number));
+
+  return jsonb_build_object('success',true,'orderId',v_order.id,'orderNumber',v_order.order_number,'status',v_order.status,'currentStep',v_order.current_step_code,'version',v_order.version,'eventId',v_event_id);
+end;
+$$;
+
+create or replace function public.erp_x_health_check()
+returns table(section text,check_name text,ok boolean,detail text)
+language sql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+with
+required_api(name) as (
+  values
+    ('erp_x_session'),('erp_x_health_check'),('erp_x_dashboard'),('erp_x_list_orders'),
+    ('erp_x_get_order'),('erp_x_get_actions'),('erp_x_create_order'),('erp_x_execute_action'),
+    ('erp_x_list_approvals'),('erp_x_decide_approval'),('erp_x_register_drive_file'),
+    ('erp_x_inventory'),('erp_x_inventory_adjust'),('erp_x_inventory_lots'),('erp_x_vsm'),
+    ('erp_x_import_history'),('erp_x_users'),('erp_x_assignment_pool'),('erp_x_update_checklist'),
+    ('erp_x_save_financial_validation'),('erp_x_save_purchase_order'),('erp_x_admin_save_profile'),
+    ('erp_x_admin_sync_auth'),('erp_x_calendar'),('erp_x_run_qa_matrix'),('erp_x_qa_runs'),
+    ('erp_x_qa_run_detail'),('erp_x_run_qa_control_suite'),('erp_x_credit_list'),('erp_x_credit_create'),
+    ('erp_x_credit_transition'),('erp_x_save_receipt'),('erp_x_stickers'),('erp_x_save_cut_job'),
+    ('erp_x_save_invoice'),('erp_x_save_delivery'),('erp_x_audit')
+),
+public_api as (
+  select p.oid,p.proname,p.prosecdef,
+         has_function_privilege('authenticated',p.oid,'EXECUTE') auth_execute,
+         has_function_privilege('anon',p.oid,'EXECUTE') anon_execute
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public' and p.proname like 'erp_x_%'
+),
+calendar_stats as (
+  select c.id,c.timezone,count(s.id) segments,
+         coalesce(sum(extract(epoch from(s.end_time-s.start_time))),0)::bigint weekly_seconds
+  from erp_supply.work_calendars c
+  left join erp_supply.work_calendar_segments s on s.calendar_id=c.id
+  where c.code='OPERATIONS_CO' and c.active
+  group by c.id,c.timezone
+),
+active_task_issues as (
+  select o.id,o.order_number,count(t.id) task_count
+  from erp_supply.orders o
+  left join erp_supply.order_tasks t on t.order_id=o.id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  where not o.is_history and not o.is_test and o.status not in('DRAFT','CLOSED','CANCELLED')
+  group by o.id,o.order_number
+  having count(t.id)<>1
+),
+step_mismatches as (
+  select o.id
+  from erp_supply.orders o
+  join erp_supply.order_tasks t on t.order_id=o.id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  where not o.is_history and not o.is_test and o.current_step_code<>t.step_code
+),
+open_session_issues as (
+  select s.id
+  from erp_supply.task_sessions s
+  join erp_supply.order_tasks t on t.id=s.task_id
+  where s.ended_at is null and t.status<>'IN_PROGRESS'
+),
+latest_matrix as (
+  select q.* from erp_supply.qa_runs q where q.run_type='MATRIX' order by q.started_at desc limit 1
+),
+latest_controls as (
+  select q.* from erp_supply.qa_runs q where q.run_type='CONTROL_SUITE' order by q.started_at desc limit 1
+),
+checks as (
+  select '01_INSTALACION'::text section,'Organización activa'::text check_name,
+    exists(select 1 from erp_supply.organizations where code='EI' and active) ok,
+    (select count(*)||' organización(es) activas' from erp_supply.organizations where active) detail
+
+  union all select '01_INSTALACION','Tablas del núcleo instaladas',
+    to_regclass('erp_supply.orders') is not null and to_regclass('erp_supply.order_tasks') is not null
+      and to_regclass('erp_supply.inventory_movements') is not null and to_regclass('erp_supply.system_audit') is not null,
+    'Pedidos, tareas, inventario y auditoría'
+
+  union all select '01_INSTALACION','Roles empresariales configurados',
+    (select count(*)>=13 from erp_supply.roles where active),
+    (select count(*)||' roles activos' from erp_supply.roles where active)
+
+  union all select '01_INSTALACION','Módulos empresariales configurados',
+    (select count(*)>=20 from erp_supply.modules where active),
+    (select count(*)||' módulos activos' from erp_supply.modules where active)
+
+  union all select '01_INSTALACION','Catálogos comerciales completos',
+    (select count(*)=4 from erp_supply.order_types where active)
+      and (select count(*)=3 from erp_supply.payment_conditions where active)
+      and (select count(*)=4 from erp_supply.delivery_routes where active),
+    format('%s tipos · %s pagos · %s rutas',
+      (select count(*) from erp_supply.order_types where active),
+      (select count(*) from erp_supply.payment_conditions where active),
+      (select count(*) from erp_supply.delivery_routes where active))
+
+  union all select '01_INSTALACION','Flujo operativo completo',
+    (select count(*)>=14 from erp_supply.workflow_steps where active),
+    (select count(*)||' etapas activas' from erp_supply.workflow_steps where active)
+
+  union all select '02_IDENTIDAD','Perfil de la sesión vinculado',
+    exists(select 1 from erp_supply.profiles p where p.auth_user_id=auth.uid() and p.active),
+    coalesce((select p.display_name||' · '||p.email from erp_supply.profiles p where p.auth_user_id=auth.uid() and p.active limit 1),'Sesión sin perfil activo')
+
+  union all select '02_IDENTIDAD','Super Admin principal configurado',
+    exists(select 1 from erp_supply.profiles p join erp_supply.profile_roles pr on pr.profile_id=p.id
+      where lower(p.email)='j.perez@ei.com.co' and p.active and pr.role_code='super_admin'),
+    coalesce((select p.display_name||' · activo='||p.active from erp_supply.profiles p where lower(p.email)='j.perez@ei.com.co' limit 1),'Cuenta no encontrada')
+
+  union all select '02_IDENTIDAD','Usuarios activos vinculados a Supabase Auth',
+    not exists(select 1 from erp_supply.profiles where active and auth_user_id is null and not is_system),
+    (select count(*)||' activo(s) sin vínculo Auth' from erp_supply.profiles where active and auth_user_id is null and not is_system)
+
+  union all select '03_CALENDARIO','Zona horaria operativa',
+    exists(select 1 from calendar_stats where timezone='America/Bogota'),
+    coalesce((select timezone from calendar_stats),'Calendario no encontrado')
+
+  union all select '03_CALENDARIO','Horario exacto lunes a viernes',
+    exists(select 1 from calendar_stats where segments=10 and weekly_seconds=159000),
+    coalesce((select segments||' segmentos · '||round(weekly_seconds/3600.0,2)||' horas/semana' from calendar_stats),'Calendario no encontrado')
+
+  union all select '03_CALENDARIO','Festivos colombianos 2026',
+    (select count(*)>=19 from erp_supply.holidays where holiday_date between date '2026-01-01' and date '2026-12-31'),
+    (select count(*)||' festivos configurados, incluido el nuevo festivo de Chiquinquirá' from erp_supply.holidays where holiday_date between date '2026-01-01' and date '2026-12-31')
+
+  union all select '04_SEGURIDAD','Esquema interno oculto',
+    not has_schema_privilege('authenticated','erp_supply','USAGE') and not has_schema_privilege('anon','erp_supply','USAGE'),
+    'authenticated='||has_schema_privilege('authenticated','erp_supply','USAGE')||' · anon='||has_schema_privilege('anon','erp_supply','USAGE')
+
+  union all select '04_SEGURIDAD','API pública completa',
+    not exists(select 1 from required_api r where not exists(select 1 from public_api a where a.proname=r.name)),
+    coalesce((select string_agg(r.name,', ' order by r.name) from required_api r where not exists(select 1 from public_api a where a.proname=r.name)),'37 RPC requeridos disponibles')
+
+  union all select '04_SEGURIDAD','RPC protegidos con SECURITY DEFINER',
+    not exists(select 1 from public_api where not prosecdef),
+    coalesce((select string_agg(proname,', ' order by proname) from public_api where not prosecdef),'Todos los RPC erp_x_* protegidos')
+
+  union all select '04_SEGURIDAD','RPC disponibles para usuarios autenticados',
+    not exists(select 1 from public_api where not auth_execute),
+    coalesce((select string_agg(proname,', ' order by proname) from public_api where not auth_execute),'Todos los RPC erp_x_* habilitados para authenticated')
+
+  union all select '04_SEGURIDAD','Rol anónimo completamente bloqueado',
+    not exists(select 1 from public_api where anon_execute),
+    coalesce((select string_agg(proname,', ' order by proname) from public_api where anon_execute),'Ningún RPC erp_x_* expuesto a anon')
+
+  union all select '05_CONCURRENCIA','Una sola tarea activa por pedido',
+    to_regclass('erp_supply.uq_active_task_per_order') is not null and not exists(select 1 from active_task_issues),
+    (select count(*)||' pedido(s) con cantidad inválida de tareas activas' from active_task_issues)
+
+  union all select '05_CONCURRENCIA','Una sola sesión abierta por tarea',
+    to_regclass('erp_supply.uq_open_session_per_task') is not null,
+    'Índice parcial uq_open_session_per_task'
+
+  union all select '05_CONCURRENCIA','Múltiples pedidos activos por operario',
+    to_regclass('erp_supply.uq_open_session_per_user') is null,
+    'Sesiones simultáneas permitidas por usuario; el bloqueo se conserva por tarea'
+
+  union all select '05_CONCURRENCIA','Sesiones abiertas coherentes',
+    not exists(select 1 from open_session_issues),
+    (select count(*)||' sesión(es) abiertas fuera de una tarea IN_PROGRESS' from open_session_issues)
+
+  union all select '05_CONCURRENCIA','Etapa del pedido coincide con tarea activa',
+    not exists(select 1 from step_mismatches),
+    (select count(*)||' pedido(s) desalineados' from step_mismatches)
+
+  union all select '05_CONCURRENCIA','Idempotencia de eventos configurada',
+    to_regclass('erp_supply.uq_event_idempotency') is not null,
+    'Índice único por organización e idempotency_key'
+
+  union all select '06_CONTROLES','Puertas de cierre activas',
+    exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='erp_supply' and c.relname='order_tasks' and t.tgname='trg_validate_task_completion' and t.tgenabled<>'D'),
+    'Checklist y documentos obligatorios antes de completar cada etapa'
+
+  union all select '06_CONTROLES','Listas de verificación configuradas',
+    (select count(*)>=8 from erp_supply.checklist_templates where active and required),
+    (select count(*)||' controles obligatorios activos' from erp_supply.checklist_templates where active and required)
+
+  union all select '06_CONTROLES','Dominios operativos instalados',
+    to_regclass('erp_supply.financial_validations') is not null and to_regclass('erp_supply.purchase_orders') is not null
+      and to_regclass('erp_supply.receipts') is not null and to_regclass('erp_supply.cut_jobs') is not null
+      and to_regclass('erp_supply.invoices') is not null and to_regclass('erp_supply.deliveries') is not null,
+    'Finanzas, compras, recepción, corte, facturación y entrega'
+
+  union all select '06_CONTROLES','Auditoría automática de dominios sensibles',
+    (select count(*)>=16 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='erp_supply' and t.tgname like 'trg_audit_%' and not t.tgisinternal and t.tgenabled<>'D'),
+    (select count(*)||' disparadores de auditoría activos' from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='erp_supply' and t.tgname like 'trg_audit_%' and not t.tgisinternal and t.tgenabled<>'D')
+
+  union all select '07_ENRUTAMIENTO','Reglas locales y nacionales configuradas',
+    (select count(*)>=8 from erp_supply.routing_rules where active and metadata->>'source'='established-routing'),
+    (select count(*)||' reglas establecidas' from erp_supply.routing_rules where active and metadata->>'source'='established-routing')
+
+  union all select '07_ENRUTAMIENTO','Responsable local Duvan Díaz vinculado',
+    exists(select 1 from erp_supply.routing_rules rr join erp_supply.profiles p on p.id=rr.assigned_profile_id
+      where rr.active and lower(p.email)='d.diaz@ei.com.co' and rr.route_code in('CLIENT_POINT','CLIENT_PICKUP','LOCAL_DISPATCH')),
+    coalesce((select p.display_name||' · '||p.email from erp_supply.profiles p where lower(p.email)='d.diaz@ei.com.co' limit 1),'Perfil pendiente de vincular')
+
+  union all select '07_ENRUTAMIENTO','Responsable nacional Javier Laverde vinculado',
+    exists(select 1 from erp_supply.routing_rules rr join erp_supply.profiles p on p.id=rr.assigned_profile_id
+      where rr.active and lower(p.email)='j.laverde@ei.com.co' and rr.route_code='NATIONAL_DISPATCH'),
+    coalesce((select p.display_name||' · '||p.email from erp_supply.profiles p where lower(p.email)='j.laverde@ei.com.co' limit 1),'Perfil pendiente de vincular')
+
+  union all select '08_QA','Bot matricial de 192 escenarios instalado',
+    to_regprocedure('public.erp_x_run_qa_matrix(boolean)') is not null,
+    '4 tipos × 3 pagos × 4 rutas × 2 corte × 2 compra'
+
+  union all select '08_QA','Última matriz QA aprobada',
+    exists(select 1 from latest_matrix where status='PASSED' and total_scenarios=192 and passed_scenarios=192 and failed_scenarios=0),
+    coalesce((select status||' · '||passed_scenarios||'/'||total_scenarios||' aprobados · '||failed_scenarios||' fallidos' from latest_matrix),'Aún no se ha ejecutado la matriz QA')
+
+  union all select '08_QA','Última suite de controles empresariales aprobada',
+    exists(select 1 from latest_controls where status='PASSED' and total_scenarios=10 and passed_scenarios=10 and failed_scenarios=0),
+    coalesce((select status||' · '||passed_scenarios||'/'||total_scenarios||' aprobados · '||failed_scenarios||' fallidos' from latest_controls),'Aún no se ha ejecutado la suite de controles')
+
+  union all select '09_HISTORICO','Importador histórico aislado',
+    to_regprocedure('public.erp_x_import_history(text,jsonb,uuid)') is not null,
+    'Los pedidos CSV quedan como is_history=true y no generan tareas activas'
+
+  union all select '09_AUDITORIA','Auditoría y outbox instalados',
+    to_regclass('erp_supply.system_audit') is not null and to_regclass('erp_supply.outbox_events') is not null,
+    format('%s registros de auditoría · %s eventos outbox pendientes',
+      (select count(*) from erp_supply.system_audit),
+      (select count(*) from erp_supply.outbox_events where processed_at is null))
+)
+select section,check_name,ok,detail from checks order by section,check_name
+$$;
+
+create or replace function public.erp_x_run_qa_control_suite(p_cleanup boolean default true)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_run erp_supply.qa_runs%rowtype;
+  v_order_id uuid;v_order2_id uuid;v_task uuid;v_version integer;v_result jsonb;v_result2 jsonb;
+  v_ok boolean;v_error text;v_passed integer:=0;v_failed integer:=0;v_total integer:=0;
+  v_req uuid;v_hist_number text;v_item uuid;v_lot uuid;v_available numeric;
+  v_key text;
+begin
+  if not erp_supply.has_role('super_admin') then raise exception 'La suite integral solo puede ser ejecutada por Super Admin' using errcode='42501'; end if;
+  insert into erp_supply.qa_runs(organization_id,run_type,requested_by,total_scenarios,summary)
+  values(v_org,'CONTROL_SUITE',v_actor,10,jsonb_build_object('suite','enterprise-controls')) returning * into v_run;
+
+  -- 1. Idempotencia por doble envío.
+  v_total:=v_total+1;v_key:='CTRL-01-IDEMPOTENCY';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'IDEMPOTENCY','RECEPCION_PEDIDO',true);
+    select version into v_version from erp_supply.orders where id=v_order_id;
+    v_result:=erp_supply.execute_action_internal(v_order_id,'START','{"detail":"inicio"}',v_actor,true,v_version,v_key);
+    v_result2:=erp_supply.execute_action_internal(v_order_id,'START','{"detail":"reintento"}',v_actor,true,null,v_key);
+    v_ok:=coalesce((v_result2->>'idempotent')::boolean,false) and (select count(*)=1 from erp_supply.order_events where idempotency_key=v_key);
+    if not v_ok then v_error:='La acción duplicada creó más de un evento o no fue reconocida como idempotente'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('ONE_EVENT','IDEMPOTENT_RESPONSE'),jsonb_build_array(v_result,v_result2),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 2. Conflicto de versión optimista.
+  v_total:=v_total+1;v_key:='CTRL-02-OPTIMISTIC-VERSION';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'VERSION','RECEPCION_PEDIDO',true);
+    select version into v_version from erp_supply.orders where id=v_order_id;
+    perform erp_supply.execute_action_internal(v_order_id,'START','{}',v_actor,true,v_version,v_key||'-START');
+    begin
+      perform erp_supply.execute_action_internal(v_order_id,'WAIT','{"reason":"stale"}',v_actor,true,v_version,v_key||'-WAIT');
+      v_error:='No se bloqueó la versión desactualizada';
+    exception when sqlstate '40001' then v_ok:=true;
+    end;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('SQLSTATE_40001'),jsonb_build_array(case when v_ok then 'BLOCKED' else 'NOT_BLOCKED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 3. Múltiples sesiones activas por operario, una por tarea.
+  v_total:=v_total+1;v_key:='CTRL-03-MULTI-ORDER-SESSIONS';v_ok:=false;v_error:=null;v_order_id:=null;v_order2_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'SESSION-A','RECEPCION_PEDIDO',true);
+    v_order2_id:=erp_supply.qa_make_order(v_run.id,v_actor,'SESSION-B','RECEPCION_PEDIDO',true);
+    perform erp_supply.execute_action_internal(v_order_id,'START','{}',v_actor,true,null,v_key||'-A');
+    perform erp_supply.execute_action_internal(v_order2_id,'START','{}',v_actor,true,null,v_key||'-B');
+    v_ok=(select count(*)=2 from erp_supply.task_sessions s
+      join erp_supply.order_tasks t on t.id=s.task_id
+      where s.profile_id=v_actor and s.ended_at is null and t.order_id in(v_order_id,v_order2_id));
+    if not v_ok then v_error:='No se conservaron las dos sesiones simultáneas'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('TWO_ACTIVE_SESSIONS'),jsonb_build_array(case when v_ok then 'ACCEPTED' else 'REJECTED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup then delete from erp_supply.orders where id in(v_order_id,v_order2_id); end if;
+
+  -- 4. Espera, reanudación y sesiones de tiempo.
+  v_total:=v_total+1;v_key:='CTRL-04-WAIT-RESUME-TIME';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'TIMING','RECEPCION_PEDIDO',true);
+    perform erp_supply.execute_action_internal(v_order_id,'START','{}',v_actor,true,null,v_key||'-START');
+    perform erp_supply.execute_action_internal(v_order_id,'WAIT','{"reason":"espera control"}',v_actor,true,null,v_key||'-WAIT');
+    perform erp_supply.execute_action_internal(v_order_id,'RESUME','{}',v_actor,true,null,v_key||'-RESUME');
+    perform erp_supply.execute_action_internal(v_order_id,'COMPLETE','{"detail":"fin"}',v_actor,true,null,v_key||'-COMPLETE');
+    select id into v_task from erp_supply.order_tasks where order_id=v_order_id and step_code='RECEPCION_PEDIDO' order by sequence_no limit 1;
+    v_ok=(select count(*)=2 and bool_and(ended_at is not null) from erp_supply.task_sessions where task_id=v_task)
+      and exists(select 1 from erp_supply.order_tasks where id=v_task and status='COMPLETED');
+    if not v_ok then v_error:='Las sesiones de espera/reanudación no cerraron correctamente'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('TWO_CLOSED_SESSIONS','TASK_COMPLETED'),jsonb_build_array(case when v_ok then 'OK' else 'INVALID' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 5. Puerta real: checklist y validación financiera obligatorios.
+  v_total:=v_total+1;v_key:='CTRL-05-STAGE-GATE';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'GATE','CARTERA',false);
+    perform erp_supply.execute_action_internal(v_order_id,'START','{}',v_actor,true,null,v_key||'-START');
+    begin
+      perform erp_supply.execute_action_internal(v_order_id,'COMPLETE','{}',v_actor,true,null,v_key||'-BLOCKED');
+      v_error:='La etapa se completó sin checklist ni validación';
+    exception when others then
+      v_ok:=position('controles obligatorios' in lower(sqlerrm))>0 or position('validación aprobada' in lower(sqlerrm))>0;
+    end;
+    select id into v_task from erp_supply.order_tasks where order_id=v_order_id and step_code='CARTERA' and status='IN_PROGRESS';
+    update erp_supply.task_checklist set completed=true,completed_by=v_actor,completed_at=now() where task_id=v_task;
+    insert into erp_supply.financial_validations(order_id,validation_type,decision,notes,created_by)
+    values(v_order_id,'CARTERA','APPROVED','QA control',v_actor);
+    perform erp_supply.execute_action_internal(v_order_id,'COMPLETE','{"detail":"gate satisfied"}',v_actor,true,null,v_key||'-PASS');
+    v_ok:=v_ok and exists(select 1 from erp_supply.orders where id=v_order_id and current_step_code='RECEPCION_PEDIDO');
+    if not v_ok and v_error is null then v_error:='La puerta no bloqueó o no liberó correctamente'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('BLOCK_WITHOUT_CONTROLS','ADVANCE_WITH_CONTROLS'),jsonb_build_array(case when v_ok then 'OK' else 'FAILED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 6. No entrega y reprogramación futura.
+  v_total:=v_total+1;v_key:='CTRL-06-NO-DELIVERY-REPROGRAM';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'NODELIVERY','LOCAL_DISPATCH',true,'LOCAL_DISPATCH');
+    perform erp_supply.execute_action_internal(v_order_id,'START','{}',v_actor,true,null,v_key||'-START');
+    perform erp_supply.execute_action_internal(v_order_id,'NO_DELIVERY','{"reason":"cliente ausente"}',v_actor,true,null,v_key||'-NO');
+    perform erp_supply.execute_action_internal(v_order_id,'REPROGRAM',jsonb_build_object('scheduledAt',now()+interval '1 day'),v_actor,true,null,v_key||'-REPROGRAM');
+    v_ok:=exists(select 1 from erp_supply.deliveries where order_id=v_order_id and status='REPROGRAMMED')
+      and exists(select 1 from erp_supply.orders where id=v_order_id and status='ASSIGNED');
+    if not v_ok then v_error:='La no entrega no quedó reprogramada'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('NOT_DELIVERED','REPROGRAMMED'),jsonb_build_array(case when v_ok then 'REPROGRAMMED' else 'FAILED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 7. Solicitud y ejecución de prioridad.
+  v_total:=v_total+1;v_key:='CTRL-07-APPROVAL-PRIORITY';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'APPROVAL','RECEPCION_PEDIDO',true);
+    perform erp_supply.execute_action_internal(v_order_id,'REQUEST_APPROVAL','{"requestType":"PRIORITY","priority":"HIGH","reason":"QA"}',v_actor,true,null,v_key||'-REQUEST');
+    select id into v_req from erp_supply.approval_requests where order_id=v_order_id and request_type='PRIORITY' order by created_at desc limit 1;
+    perform public.erp_x_decide_approval(v_req,'APPROVED','Aprobación QA');
+    v_ok:=exists(select 1 from erp_supply.orders where id=v_order_id and priority='HIGH')
+      and exists(select 1 from erp_supply.approval_requests where id=v_req and status='EXECUTED');
+    if not v_ok then v_error:='La aprobación no actualizó prioridad o no quedó ejecutada'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('REQUESTED','EXECUTED','PRIORITY_HIGH'),jsonb_build_array(case when v_ok then 'OK' else 'FAILED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 8. Importación histórica sin tareas operativas.
+  v_total:=v_total+1;v_key:='CTRL-08-HISTORY-ISOLATION';v_ok:=false;v_error:=null;v_order_id:=null;
+  begin
+    v_hist_number:='QAH-'||substr(replace(v_run.id::text,'-',''),1,12);
+    perform public.erp_x_import_history('qa-history.csv',jsonb_build_array(jsonb_build_object(
+      'orderNumber',v_hist_number,'orderType','PVC','paymentCondition','CREDIT','deliveryRoute','LOCAL_DISPATCH',
+      'clientName','Histórico QA','status','CLOSED','createdAt',now()-interval '30 days','closedAt',now()-interval '29 days'
+    )),null);
+    select id into v_order_id from erp_supply.orders where organization_id=v_org and order_number=v_hist_number;
+    v_ok:=exists(select 1 from erp_supply.orders where id=v_order_id and is_history and status='CLOSED')
+      and not exists(select 1 from erp_supply.order_tasks where order_id=v_order_id);
+    if not v_ok then v_error:='El histórico creó tareas o no quedó aislado'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('HISTORY','NO_TASKS'),jsonb_build_array(case when v_ok then 'OK' else 'FAILED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then delete from erp_supply.orders where id=v_order_id; end if;
+
+  -- 9. Recepción publica inventario y movimiento.
+  v_total:=v_total+1;v_key:='CTRL-09-RECEIPT-INVENTORY';v_ok:=false;v_error:=null;v_order_id:=null;v_item:=null;
+  begin
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'RECEIPT','RECEPCION_MERCANCIA',true);
+    perform public.erp_x_save_receipt(v_order_id,jsonb_build_object('receiptNumber','QAR-'||substr(v_run.id::text,1,8),'status','CONFORMING','lines',jsonb_build_array(jsonb_build_object(
+      'sku','QA-RECEIPT-'||substr(v_run.id::text,1,8),'description','Material recepción QA','receivedQuantity',10,'acceptedQuantity',10,'rejectedQuantity',0,'unit','UND','location','QA','lotNumber','LOT-QA'
+    ))));
+    select inventory_item_id into v_item from erp_supply.inventory_movements where order_id=v_order_id and movement_type='RECEIPT' order by id desc limit 1;
+    v_ok:=v_item is not null and exists(select 1 from erp_supply.inventory_lots where inventory_item_id=v_item and quantity_available=10)
+      and exists(select 1 from erp_supply.inventory_movements where order_id=v_order_id and movement_type='RECEIPT' and quantity=10);
+    if not v_ok then v_error:='La recepción no publicó inventario correctamente'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('RECEIPT','LOT','MOVEMENT'),jsonb_build_array(case when v_ok then 'OK' else 'FAILED' end),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup and v_order_id is not null then
+    delete from erp_supply.inventory_movements where order_id=v_order_id;
+    if v_item is not null then delete from erp_supply.inventory_lots where inventory_item_id=v_item;delete from erp_supply.inventory_items where id=v_item;end if;
+    delete from erp_supply.orders where id=v_order_id;
+  end if;
+
+  -- 10. Corte consume lote y registra desperdicio.
+  v_total:=v_total+1;v_key:='CTRL-10-CUT-CONSUMPTION';v_ok:=false;v_error:=null;v_order_id:=null;v_item:=null;v_lot:=null;
+  begin
+    insert into erp_supply.inventory_items(organization_id,sku,description,unit,item_type)
+    values(v_org,'QA-CUT-'||substr(v_run.id::text,1,8),'Chipa QA','M','CABLE') returning id into v_item;
+    insert into erp_supply.inventory_lots(inventory_item_id,lot_number,location,quantity_available)
+    values(v_item,'LOT-CUT-QA','QA-CORTE',100) returning id into v_lot;
+    v_order_id:=erp_supply.qa_make_order(v_run.id,v_actor,'CUT','CORTE',true,'LOCAL_DISPATCH',true);
+    perform public.erp_x_save_cut_job(v_order_id,jsonb_build_object('inventoryLotId',v_lot,'requestedLength',10,'actualLength',10,'scrapLength',1));
+    select quantity_available into v_available from erp_supply.inventory_lots where id=v_lot;
+    v_ok:=v_available=89 and exists(select 1 from erp_supply.inventory_movements where order_id=v_order_id and movement_type='CUT_CONSUMPTION' and quantity=11);
+    if not v_ok then v_error:='El corte no descontó longitud y desperdicio correctamente'; end if;
+  exception when others then v_error:=sqlstate||' - '||sqlerrm;v_ok:=false;end;
+  perform erp_supply.qa_record(v_run.id,v_key,'{}',jsonb_build_array('AVAILABLE_89','MOVEMENT_11'),jsonb_build_array(coalesce(v_available,-1)),v_ok,v_error,v_order_id);
+  if v_ok then v_passed:=v_passed+1; else v_failed:=v_failed+1; end if;
+  if p_cleanup then
+    if v_order_id is not null then delete from erp_supply.inventory_movements where order_id=v_order_id;delete from erp_supply.orders where id=v_order_id;end if;
+    if v_lot is not null then delete from erp_supply.inventory_lots where id=v_lot;end if;
+    if v_item is not null then delete from erp_supply.inventory_items where id=v_item;end if;
+  end if;
+
+  update erp_supply.qa_runs set status=case when v_failed=0 then 'PASSED' else 'FAILED' end,
+    total_scenarios=v_total,passed_scenarios=v_passed,failed_scenarios=v_failed,completed_at=now(),
+    summary=summary||jsonb_build_object('cleanup',p_cleanup,'controls','idempotency,version,sessions,timing,gates,delivery,approval,history,receipt,cut')
+  where id=v_run.id returning * into v_run;
+
+  return jsonb_build_object('runId',v_run.id,'runType',v_run.run_type,'status',v_run.status,'total',v_total,'passed',v_passed,'failed',v_failed,'completedAt',v_run.completed_at);
+end;
+$$;
+
+-- Mantener acceso únicamente para usuarios autenticados.
+revoke all on function public.erp_x_health_check() from public,anon,authenticated;
+grant execute on function public.erp_x_health_check() to authenticated;
+revoke all on function public.erp_x_run_qa_control_suite(boolean) from public,anon,authenticated;
+grant execute on function public.erp_x_run_qa_control_suite(boolean) to authenticated;
+
+commit;
+
+
+-- ============================================================================
+-- 023_repair_reception_rpc_v10_9_4.sql
+-- ============================================================================
+-- ERP EI V10.9.4
+-- Reparación de Recepción: restaura el RPC transaccional para enviar a Alistamiento y Corte.
+-- Esta migración NO reemplaza erp_x_get_order, para conservar la versión posterior de pedidos parciales.
+-- Ejecutar una sola vez en Supabase SQL Editor.
+
+begin;
+
+create or replace function erp_supply.create_task(
+  p_order erp_supply.orders,
+  p_step text,
+  p_sequence integer
+)
+returns erp_supply.order_tasks
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_resolved record;
+  v_profile_id uuid;
+  v_role_code text;
+  v_preferred_text text;
+  v_task erp_supply.order_tasks;
+begin
+  if p_step='ALISTAMIENTO' then
+    v_preferred_text:=nullif(p_order.metadata#>>'{receptionAssignment,pickingProfileId}','');
+    v_role_code:='aux_logistica';
+  elsif p_step='CORTE' then
+    v_preferred_text:=nullif(p_order.metadata#>>'{receptionAssignment,cutProfileId}','');
+    v_role_code:='auxiliar_corte';
+  end if;
+
+  if v_preferred_text is not null then
+    begin
+      v_profile_id:=v_preferred_text::uuid;
+    exception when others then
+      v_profile_id:=null;
+    end;
+
+    if v_profile_id is not null and not exists(
+      select 1
+      from erp_supply.profiles p
+      join erp_supply.profile_roles pr on pr.profile_id=p.id
+      join erp_supply.step_roles sr
+        on sr.role_code=pr.role_code
+       and sr.step_code=p_step
+       and sr.can_view
+      where p.id=v_profile_id
+        and p.organization_id=p_order.organization_id
+        and p.active
+        and pr.role_code=v_role_code
+    ) then
+      v_profile_id:=null;
+    end if;
+  end if;
+
+  if v_profile_id is null then
+    select * into v_resolved
+    from erp_supply.resolve_assignment(
+      p_order.organization_id,
+      p_step,
+      p_order.delivery_route_code,
+      p_order.order_type_code
+    );
+    v_profile_id:=v_resolved.profile_id;
+    v_role_code:=v_resolved.role_code;
+  end if;
+
+  insert into erp_supply.order_tasks(
+    order_id,step_code,sequence_no,queue_code,status,
+    assigned_profile_id,assigned_role_code,assigned_at,metadata
+  )
+  select
+    p_order.id,p_step,p_sequence,s.queue_code,
+    case when v_profile_id is null then 'QUEUED' else 'ASSIGNED' end,
+    v_profile_id,v_role_code,
+    case when v_profile_id is null then null else now() end,
+    case
+      when v_preferred_text is not null and v_profile_id is not null
+        then jsonb_build_object('assignedFrom','RECEPCION_PEDIDO')
+      else '{}'::jsonb
+    end
+  from erp_supply.workflow_steps s
+  where s.code=p_step
+  returning * into v_task;
+
+  if v_task.id is null then
+    raise exception 'No existe la etapa %',p_step;
+  end if;
+
+  insert into erp_supply.task_checklist(task_id,item_code,label,required,sort_order)
+  select v_task.id,t.item_code,t.label,t.required,t.sort_order
+  from erp_supply.checklist_templates t
+  where t.step_code=p_step and t.active
+  on conflict(task_id,item_code) do nothing;
+
+  update erp_supply.orders
+  set current_step_code=p_step,
+      status=case when v_profile_id is null then 'QUEUED' else 'ASSIGNED' end,
+      current_assignee_id=v_profile_id,
+      current_role_code=v_role_code,
+      version=version+1,
+      updated_at=now()
+  where id=p_order.id;
+
+  return v_task;
+end;
+$$;
+
+-- Confirma toda la recepción en una transacción: líneas, cortes, responsables y avance.
+create or replace function public.erp_x_confirm_order_reception(
+  p_order_id uuid,
+  p_payload jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_line jsonb;
+  v_lines jsonb:=coalesce(p_payload->'lines','[]'::jsonb);
+  v_line_count integer:=0;
+  v_cut_count integer:=0;
+  v_picking uuid;
+  v_cut uuid;
+  v_item_id uuid;
+  v_candidate uuid;
+  v_used_ids uuid[]:='{}'::uuid[];
+  v_quantity numeric;
+  v_cut_length numeric;
+  v_requires_cut boolean;
+  v_description text;
+  v_unit text;
+  v_source_mode text:=upper(coalesce(nullif(trim(p_payload->>'sourceMode'),''),'CORRECT'));
+  v_new_version integer;
+  v_result jsonb;
+begin
+  if not (
+    erp_supply.can_access_module('receiving','update')
+    or erp_supply.has_role('super_admin')
+    or erp_supply.has_role('jefe_logistica')
+  ) then
+    raise exception 'No autorizado para confirmar Recepción de pedidos' using errcode='42501';
+  end if;
+
+  select * into v_order
+  from erp_supply.orders
+  where id=p_order_id and organization_id=v_org
+  for update;
+
+  if not found or not erp_supply.can_view_order(v_order.id) then
+    raise exception 'Pedido no disponible' using errcode='42501';
+  end if;
+  if v_order.current_step_code<>'RECEPCION_PEDIDO' then
+    raise exception 'El pedido ya no está en Recepción de pedidos';
+  end if;
+  if jsonb_typeof(v_lines)<>'array' or jsonb_array_length(v_lines)=0 then
+    raise exception 'Debe confirmar al menos una línea del pedido';
+  end if;
+  if v_source_mode not in('CORRECT','PDF','MANUAL') then
+    raise exception 'Origen de información inválido';
+  end if;
+
+  select * into v_task
+  from erp_supply.order_tasks
+  where order_id=v_order.id
+    and step_code='RECEPCION_PEDIDO'
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'El pedido no tiene una tarea activa de Recepción';
+  end if;
+  if v_task.status<>'IN_PROGRESS' then
+    raise exception 'Primero debes tomar e iniciar el pedido';
+  end if;
+  if v_task.assigned_profile_id is distinct from v_actor
+     and not erp_supply.has_role('super_admin')
+     and not erp_supply.has_role('jefe_logistica') then
+    raise exception 'El pedido está siendo gestionado por otro usuario' using errcode='42501';
+  end if;
+
+  begin
+    v_picking:=nullif(p_payload->>'pickingProfileId','')::uuid;
+  exception when others then
+    raise exception 'Auxiliar de alistamiento inválido';
+  end;
+  if v_picking is null or not exists(
+    select 1
+    from erp_supply.profiles p
+    join erp_supply.profile_roles pr on pr.profile_id=p.id
+    where p.id=v_picking
+      and p.organization_id=v_org
+      and p.active
+      and pr.role_code='aux_logistica'
+  ) then
+    raise exception 'Selecciona un auxiliar de logística activo';
+  end if;
+
+  begin
+    v_cut:=nullif(p_payload->>'cutProfileId','')::uuid;
+  exception when others then
+    raise exception 'Auxiliar de corte inválido';
+  end;
+
+  -- Mueve temporalmente los números para permitir reordenar sin colisiones únicas.
+  update erp_supply.order_items
+  set line_number=line_number+100000,
+      metadata=metadata||jsonb_build_object('receptionActive',false),
+      updated_at=now()
+  where order_id=v_order.id;
+
+  for v_line in select value from jsonb_array_elements(v_lines) loop
+    v_line_count:=v_line_count+1;
+    if jsonb_typeof(v_line)<>'object' then
+      raise exception 'La línea % no es válida',v_line_count;
+    end if;
+
+    v_description:=nullif(trim(v_line->>'description'),'');
+    begin
+      v_quantity:=nullif(v_line->>'quantity','')::numeric;
+    exception when others then
+      raise exception 'Cantidad inválida en la línea %',v_line_count;
+    end;
+    v_unit:=upper(coalesce(nullif(trim(v_line->>'unit'),''),'UND'));
+    v_requires_cut:=coalesce((v_line->>'requiresCut')::boolean,false);
+    begin
+      v_cut_length:=nullif(v_line->>'requestedCutLength','')::numeric;
+    exception when others then
+      raise exception 'Longitud de corte inválida en la línea %',v_line_count;
+    end;
+
+    if v_description is null then
+      raise exception 'La línea % necesita una descripción',v_line_count;
+    end if;
+    if v_quantity is null or v_quantity<=0 then
+      raise exception 'La línea % necesita una cantidad válida',v_line_count;
+    end if;
+    if v_requires_cut and (v_cut_length is null or v_cut_length<=0) then
+      raise exception 'La línea % necesita una longitud de corte válida',v_line_count;
+    end if;
+    if v_requires_cut then v_cut_count:=v_cut_count+1; end if;
+
+    v_item_id:=null;
+    begin
+      v_candidate:=nullif(v_line->>'orderItemId','')::uuid;
+    exception when others then
+      v_candidate:=null;
+    end;
+
+    if v_candidate is not null and exists(
+      select 1 from erp_supply.order_items
+      where id=v_candidate and order_id=v_order.id
+    ) and not (v_candidate=any(v_used_ids)) then
+      v_item_id:=v_candidate;
+    end if;
+
+    if v_item_id is null and nullif(trim(v_line->>'reference'),'') is not null then
+      select id into v_item_id
+      from erp_supply.order_items
+      where order_id=v_order.id
+        and reference=trim(v_line->>'reference')
+        and not (id=any(v_used_ids))
+      order by created_at
+      limit 1;
+    end if;
+
+    if v_item_id is null and nullif(trim(v_line->>'sku'),'') is not null then
+      select id into v_item_id
+      from erp_supply.order_items
+      where order_id=v_order.id
+        and sku=trim(v_line->>'sku')
+        and not (id=any(v_used_ids))
+      order by created_at
+      limit 1;
+    end if;
+
+    if v_item_id is null then
+      insert into erp_supply.order_items(
+        order_id,line_number,sku,reference,description,quantity,unit,
+        warehouse_location,requires_cut,requested_cut_length,dimensions,metadata
+      ) values(
+        v_order.id,v_line_count,nullif(trim(v_line->>'sku'),''),
+        nullif(trim(v_line->>'reference'),''),v_description,v_quantity,v_unit,
+        nullif(trim(v_line->>'warehouseLocation'),''),v_requires_cut,
+        case when v_requires_cut then v_cut_length else null end,
+        case when jsonb_typeof(coalesce(v_line->'dimensions','{}'::jsonb))='object'
+          then coalesce(v_line->'dimensions','{}'::jsonb) else '{}'::jsonb end,
+        case when jsonb_typeof(coalesce(v_line->'metadata','{}'::jsonb))='object'
+          then coalesce(v_line->'metadata','{}'::jsonb) else '{}'::jsonb end
+        || jsonb_build_object(
+          'receptionActive',true,
+          'receptionSource',v_source_mode,
+          'confirmedAt',now(),
+          'confirmedBy',v_actor
+        )
+      ) returning id into v_item_id;
+    else
+      update erp_supply.order_items
+      set line_number=v_line_count,
+          sku=nullif(trim(v_line->>'sku'),''),
+          reference=nullif(trim(v_line->>'reference'),''),
+          description=v_description,
+          quantity=v_quantity,
+          unit=v_unit,
+          warehouse_location=nullif(trim(v_line->>'warehouseLocation'),''),
+          requires_cut=v_requires_cut,
+          requested_cut_length=case when v_requires_cut then v_cut_length else null end,
+          dimensions=case when jsonb_typeof(coalesce(v_line->'dimensions','{}'::jsonb))='object'
+            then coalesce(v_line->'dimensions','{}'::jsonb) else dimensions end,
+          metadata=metadata
+            || case when jsonb_typeof(coalesce(v_line->'metadata','{}'::jsonb))='object'
+                 then coalesce(v_line->'metadata','{}'::jsonb) else '{}'::jsonb end
+            || jsonb_build_object(
+              'receptionActive',true,
+              'receptionSource',v_source_mode,
+              'confirmedAt',now(),
+              'confirmedBy',v_actor
+            ),
+          updated_at=now()
+      where id=v_item_id;
+    end if;
+
+    v_used_ids:=array_append(v_used_ids,v_item_id);
+  end loop;
+
+  if v_cut_count>0 then
+    if v_cut is null or not exists(
+      select 1
+      from erp_supply.profiles p
+      join erp_supply.profile_roles pr on pr.profile_id=p.id
+      where p.id=v_cut
+        and p.organization_id=v_org
+        and p.active
+        and pr.role_code='auxiliar_corte'
+    ) then
+      raise exception 'Selecciona un auxiliar de corte activo';
+    end if;
+  else
+    v_cut:=null;
+  end if;
+
+  -- Los registros antiguos con relaciones de recepción se conservan, pero dejan de formar parte del pedido operativo.
+  delete from erp_supply.order_items i
+  where i.order_id=v_order.id
+    and not (i.id=any(v_used_ids))
+    and not exists(select 1 from erp_supply.receipt_lines rl where rl.order_item_id=i.id)
+    and not exists(select 1 from erp_supply.cut_jobs cj where cj.order_item_id=i.id);
+
+  update erp_supply.task_checklist
+  set completed=true,
+      completed_by=v_actor,
+      completed_at=now(),
+      note=case item_code
+        when 'DOCUMENTS' then 'Información comercial validada en Recepción de pedidos'
+        when 'ASSIGNMENT' then 'Auxiliares asignados desde Recepción de pedidos'
+        else note end,
+      metadata=metadata||jsonb_build_object('source','RECEPCION_PEDIDO_V10_6')
+  where task_id=v_task.id and item_code in('DOCUMENTS','ASSIGNMENT');
+
+  update erp_supply.orders
+  set requires_cut=(v_cut_count>0),
+      metadata=metadata||jsonb_build_object(
+        'receptionAssignment',jsonb_build_object(
+          'pickingProfileId',v_picking,
+          'cutProfileId',v_cut,
+          'sourceMode',v_source_mode,
+          'sourceFileId',nullif(p_payload->>'sourceFileId',''),
+          'sourceFileName',nullif(p_payload->>'sourceFileName',''),
+          'readerVersion',nullif(p_payload->>'readerVersion',''),
+          'lineCount',v_line_count,
+          'cutLineCount',v_cut_count,
+          'confirmedAt',now(),
+          'confirmedBy',v_actor
+        )
+      ),
+      version=version+1,
+      updated_at=now()
+  where id=v_order.id
+  returning version into v_new_version;
+
+  insert into erp_supply.order_events(
+    organization_id,order_id,task_id,event_type,action_code,
+    from_step_code,to_step_code,from_status,to_status,
+    actor_profile_id,actor_role_code,payload
+  ) values(
+    v_org,v_order.id,v_task.id,'DOMAIN_RECORD','RECEPTION_ASSIGNMENT',
+    'RECEPCION_PEDIDO','RECEPCION_PEDIDO',v_order.status,v_order.status,
+    v_actor,(erp_supply.current_roles())[1],
+    jsonb_build_object(
+      'sourceMode',v_source_mode,
+      'lineCount',v_line_count,
+      'cutLineCount',v_cut_count,
+      'pickingProfileId',v_picking,
+      'cutProfileId',v_cut,
+      'sourceFileId',nullif(p_payload->>'sourceFileId',''),
+      'readerVersion',nullif(p_payload->>'readerVersion','')
+    )
+  );
+
+  v_result:=erp_supply.execute_action_internal(
+    v_order.id,
+    'COMPLETE',
+    jsonb_build_object(
+      'resultCode','RECEPTION_CONFIRMED',
+      'detail','Información validada y auxiliares asignados',
+      'pickingProfileId',v_picking,
+      'cutProfileId',v_cut,
+      'lineCount',v_line_count,
+      'cutLineCount',v_cut_count
+    ),
+    v_actor,
+    false,
+    v_new_version,
+    'RECEPTION-CONFIRM-'||v_order.id::text||'-'||v_new_version::text
+  );
+
+  return v_result||jsonb_build_object(
+    'receptionConfirmed',true,
+    'lines',v_line_count,
+    'cutLines',v_cut_count,
+    'pickingProfileId',v_picking,
+    'cutProfileId',v_cut
+  );
+end;
+$$;
+
+revoke all on function public.erp_x_confirm_order_reception(uuid,jsonb) from public;
+grant execute on function public.erp_x_confirm_order_reception(uuid,jsonb) to authenticated;
+
+do $$
+begin
+  if to_regprocedure('public.erp_x_confirm_order_reception(uuid,jsonb)') is null then
+    raise exception 'No fue posible instalar public.erp_x_confirm_order_reception(uuid,jsonb)';
+  end if;
+end;
+$$;
+
+commit;
+
+-- Fuerza a PostgREST/Supabase a reconocer inmediatamente la firma nueva.
+notify pgrst, 'reload schema';
+
+-- Debe devolver: public.erp_x_confirm_order_reception(uuid,jsonb)
+select to_regprocedure('public.erp_x_confirm_order_reception(uuid,jsonb)') as rpc_instalado;
+
+
+-- ============================================================================
+-- 024_cutting_first_and_collection_v10_10.sql
+-- ============================================================================
+-- ERP Electroingeniería V10.10
+-- Corte primero, agrupación por referencia, control de carreto e integración con Alistamiento.
+-- Ejecutar una sola vez en Supabase SQL Editor.
+
+begin;
+
+create table if not exists erp_supply.cut_batches (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  group_key text not null,
+  reference text,
+  description text not null,
+  inventory_item_id uuid references erp_supply.inventory_items(id),
+  inventory_lot_id uuid references erp_supply.inventory_lots(id),
+  resolution_code text not null check (resolution_code in ('CUT','FULL_REEL')),
+  reel_initial_length numeric(18,4) not null check (reel_initial_length > 0),
+  requested_length numeric(18,4) not null check (requested_length > 0),
+  scrap_length numeric(18,4) not null default 0 check (scrap_length >= 0),
+  remaining_length numeric(18,4) not null check (remaining_length >= 0),
+  executed_by uuid not null references erp_supply.profiles(id),
+  executed_at timestamptz not null default now(),
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists erp_supply.cut_requirements (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  order_id uuid not null references erp_supply.orders(id) on delete cascade,
+  order_item_id uuid not null references erp_supply.order_items(id) on delete cascade,
+  task_id uuid references erp_supply.order_tasks(id) on delete set null,
+  group_key text not null,
+  sku text,
+  reference text,
+  description text not null,
+  unit text not null default 'M',
+  units_required numeric(18,4) not null check (units_required > 0),
+  length_each numeric(18,4) not null check (length_each > 0),
+  total_length numeric(18,4) not null check (total_length > 0),
+  process_status text not null default 'PENDING' check (process_status in ('PENDING','IN_PROGRESS','READY')),
+  resolution_code text check (resolution_code in ('CUT','FULL_REEL','NO_CUT')),
+  collection_status text not null default 'PENDING' check (collection_status in ('PENDING','COLLECTED')),
+  assigned_profile_id uuid references erp_supply.profiles(id),
+  cut_batch_id uuid references erp_supply.cut_batches(id) on delete set null,
+  cut_job_id uuid references erp_supply.cut_jobs(id) on delete set null,
+  inventory_lot_id uuid references erp_supply.inventory_lots(id) on delete set null,
+  ready_at timestamptz,
+  ready_by uuid references erp_supply.profiles(id),
+  collected_at timestamptz,
+  collected_by uuid references erp_supply.profiles(id),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(order_item_id)
+);
+
+create index if not exists idx_cut_requirements_group
+  on erp_supply.cut_requirements(organization_id,group_key,process_status,created_at);
+create index if not exists idx_cut_requirements_order
+  on erp_supply.cut_requirements(order_id,collection_status,process_status);
+create index if not exists idx_cut_batches_group
+  on erp_supply.cut_batches(organization_id,group_key,executed_at desc);
+
+
+-- Ninguna ronda de Alistamiento puede cerrarse mientras haya cortes sin terminar o sin recoger.
+create or replace function erp_supply.enforce_cut_collection_before_picking()
+returns trigger
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+begin
+  if exists(
+    select 1 from erp_supply.cut_requirements r
+    where r.order_id=new.order_id and (r.process_status<>'READY' or r.collection_status<>'COLLECTED')
+  ) then
+    raise exception 'Debes terminar y recoger todos los cortes antes de verificar Alistamiento';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_cut_collection_before_picking on erp_supply.picking_rounds;
+create trigger trg_enforce_cut_collection_before_picking
+before insert on erp_supply.picking_rounds
+for each row execute function erp_supply.enforce_cut_collection_before_picking();
+
+create or replace function erp_supply.cut_group_key(
+  p_reference text,
+  p_sku text,
+  p_description text
+)
+returns text
+language sql
+immutable
+as $$
+  select md5(
+    lower(trim(coalesce(nullif(p_reference,''),nullif(p_sku,''),p_description,'')))
+    ||'|'||lower(trim(coalesce(p_description,'')))
+  )
+$$;
+
+-- Flujo definitivo: si hay corte, Recepción envía primero a Corte; Corte entrega a Alistamiento.
+create or replace function erp_supply.next_step(
+  p_current_step text,
+  p_order_type text,
+  p_payment_condition text,
+  p_delivery_route text,
+  p_requires_cut boolean,
+  p_requires_purchase boolean
+)
+returns text
+language sql
+immutable
+as $$
+  select case p_current_step
+    when 'CARTERA' then 'RECEPCION_PEDIDO'
+    when 'CAJA' then 'RECEPCION_PEDIDO'
+    when 'COMPRAS' then 'RECEPCION_MERCANCIA'
+    when 'RECEPCION_MERCANCIA' then 'RECEPCION_PEDIDO'
+    when 'RECEPCION_PEDIDO' then case when p_requires_cut then 'CORTE' else 'ALISTAMIENTO' end
+    when 'CORTE' then 'ALISTAMIENTO'
+    when 'ALISTAMIENTO' then case
+      when upper(p_order_type) in('PVN','PNV') then 'CAJA_FACTURACION'
+      else 'FACTURACION' end
+    when 'CAJA_FACTURACION' then p_delivery_route
+    when 'FACTURACION' then p_delivery_route
+    when 'CLIENT_POINT' then 'CLOSURE'
+    when 'CLIENT_PICKUP' then 'CLOSURE'
+    when 'LOCAL_DISPATCH' then 'CLOSURE'
+    when 'NATIONAL_DISPATCH' then 'CLOSURE'
+    when 'CLOSURE' then 'CLOSED'
+    else 'CLOSED'
+  end
+$$;
+
+create or replace function erp_supply.sync_cut_requirements(p_order_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_count integer:=0;
+  v_cut_first boolean;
+begin
+  select * into v_order from erp_supply.orders where id=p_order_id for update;
+  if not found then return 0; end if;
+
+  select * into v_task
+  from erp_supply.order_tasks
+  where order_id=p_order_id and step_code='CORTE'
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc limit 1;
+  if not found then return 0; end if;
+
+  v_cut_first:=not exists(
+    select 1 from erp_supply.order_tasks t
+    where t.order_id=p_order_id and t.step_code='ALISTAMIENTO'
+      and t.status='COMPLETED' and t.sequence_no<v_task.sequence_no
+  );
+
+  insert into erp_supply.cut_requirements(
+    organization_id,order_id,order_item_id,task_id,group_key,sku,reference,description,
+    unit,units_required,length_each,total_length,assigned_profile_id,metadata
+  )
+  select
+    v_order.organization_id,v_order.id,i.id,v_task.id,
+    erp_supply.cut_group_key(i.reference,i.sku,i.description),
+    i.sku,i.reference,i.description,'M',i.quantity,i.requested_cut_length,
+    round((i.quantity*i.requested_cut_length)::numeric,4),v_task.assigned_profile_id,
+    jsonb_build_object('lineNumber',i.line_number,'source','CUT_FIRST_V10_10')
+  from erp_supply.order_items i
+  where i.order_id=v_order.id
+    and coalesce(i.metadata->>'receptionActive','true')<>'false'
+    and i.requires_cut
+    and i.requested_cut_length is not null
+    and i.requested_cut_length>0
+  on conflict(order_item_id) do update set
+    task_id=excluded.task_id,
+    group_key=excluded.group_key,
+    sku=excluded.sku,
+    reference=excluded.reference,
+    description=excluded.description,
+    units_required=excluded.units_required,
+    length_each=excluded.length_each,
+    total_length=excluded.total_length,
+    assigned_profile_id=coalesce(erp_supply.cut_requirements.assigned_profile_id,excluded.assigned_profile_id),
+    metadata=erp_supply.cut_requirements.metadata||excluded.metadata,
+    updated_at=now();
+
+  get diagnostics v_count=row_count;
+
+  update erp_supply.orders
+  set metadata=metadata||jsonb_build_object(
+        'cutFlow',coalesce(metadata->'cutFlow','{}'::jsonb)||jsonb_build_object(
+          'version','10.10','cutFirst',v_cut_first,'syncedAt',now(),
+          'pendingRequirements',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id and r.process_status<>'READY')
+        )
+      ),updated_at=now()
+  where id=p_order_id;
+
+  return v_count;
+end;
+$$;
+
+create or replace function erp_supply.trg_sync_cut_requirements()
+returns trigger
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+begin
+  if new.step_code='CORTE' then
+    perform erp_supply.sync_cut_requirements(new.order_id);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_cut_requirements on erp_supply.order_tasks;
+create trigger trg_sync_cut_requirements
+after insert on erp_supply.order_tasks
+for each row execute function erp_supply.trg_sync_cut_requirements();
+
+create or replace function erp_supply.start_cut_task(p_order_id uuid,p_actor uuid)
+returns erp_supply.order_tasks
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_task erp_supply.order_tasks%rowtype;
+  v_org uuid;
+  v_now timestamptz:=now();
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+begin
+  select * into v_task
+  from erp_supply.order_tasks
+  where order_id=p_order_id and step_code='CORTE'
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc limit 1 for update;
+  if not found then raise exception 'El pedido no tiene una tarea activa de Corte'; end if;
+
+  select organization_id into v_org from erp_supply.orders where id=p_order_id;
+  if v_task.assigned_profile_id is not null and v_task.assigned_profile_id<>p_actor and not v_override then
+    raise exception 'Este corte está asignado a otro auxiliar' using errcode='42501';
+  end if;
+
+  if v_task.status='QUEUED' then
+    update erp_supply.order_tasks
+    set status='ASSIGNED',assigned_profile_id=p_actor,assigned_role_code='auxiliar_corte',assigned_at=v_now
+    where id=v_task.id returning * into v_task;
+  end if;
+
+  if v_task.status in('ASSIGNED','WAITING','BLOCKED') then
+    update erp_supply.order_tasks
+    set status='IN_PROGRESS',started_at=coalesce(started_at,v_now),blocked_at=null
+    where id=v_task.id returning * into v_task;
+  end if;
+
+  if v_task.status='IN_PROGRESS' then
+    insert into erp_supply.task_sessions(task_id,profile_id,started_at,note)
+    select v_task.id,p_actor,v_now,'Gestión de corte por referencia'
+    where not exists(select 1 from erp_supply.task_sessions s where s.task_id=v_task.id and s.ended_at is null);
+  end if;
+
+  update erp_supply.orders
+  set status='IN_PROGRESS',current_assignee_id=p_actor,current_role_code='auxiliar_corte',
+      version=version+1,updated_at=v_now
+  where id=p_order_id;
+
+  update erp_supply.cut_requirements
+  set task_id=v_task.id,assigned_profile_id=p_actor,
+      process_status=case when process_status='PENDING' then 'IN_PROGRESS' else process_status end,
+      updated_at=v_now
+  where order_id=p_order_id and process_status<>'READY';
+
+  return v_task;
+end;
+$$;
+
+create or replace function erp_supply.advance_cut_order_if_ready(p_order_id uuid,p_actor uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path=erp_supply,public
+as $$
+declare
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_new_task erp_supply.order_tasks%rowtype;
+  v_now timestamptz:=now();
+  v_raw bigint:=0;
+  v_business bigint:=0;
+  v_sequence integer;
+  v_next text;
+  v_cut_first boolean;
+begin
+  if exists(select 1 from erp_supply.cut_requirements r where r.order_id=p_order_id and r.process_status<>'READY') then
+    return false;
+  end if;
+
+  select * into v_order from erp_supply.orders where id=p_order_id for update;
+  if not found or v_order.current_step_code<>'CORTE' then return false; end if;
+
+  select * into v_task from erp_supply.order_tasks
+  where order_id=p_order_id and step_code='CORTE'
+    and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  order by sequence_no desc limit 1 for update;
+  if not found then return false; end if;
+
+  update erp_supply.task_checklist
+  set completed=true,completed_by=p_actor,completed_at=v_now,
+      note='Todos los cortes quedaron listos para recoger',
+      metadata=metadata||jsonb_build_object('source','CUT_FIRST_V10_10')
+  where task_id=v_task.id and required;
+
+  update erp_supply.task_sessions s
+  set ended_at=v_now,
+      raw_seconds=greatest(0,extract(epoch from(v_now-s.started_at)))::bigint,
+      business_seconds=erp_supply.business_seconds_between(v_order.organization_id,s.started_at,v_now),
+      note='Grupo de corte finalizado'
+  where s.task_id=v_task.id and s.ended_at is null;
+
+  select coalesce(sum(raw_seconds),0),coalesce(sum(business_seconds),0)
+  into v_raw,v_business from erp_supply.task_sessions where task_id=v_task.id;
+
+  update erp_supply.orders
+  set requires_cut=exists(
+        select 1 from erp_supply.cut_requirements r
+        where r.order_id=p_order_id and r.resolution_code in('CUT','FULL_REEL')
+      ),
+      metadata=metadata||jsonb_build_object(
+        'cutFlow',coalesce(metadata->'cutFlow','{}'::jsonb)||jsonb_build_object(
+          'completedAt',v_now,'completedBy',p_actor,
+          'pendingCollection',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id and r.collection_status='PENDING')
+        )
+      ),version=version+1,updated_at=v_now
+  where id=p_order_id returning * into v_order;
+
+  update erp_supply.order_tasks
+  set status='COMPLETED',completed_at=v_now,raw_seconds=v_raw,business_seconds=v_business,
+      result_code='CUT_READY_FOR_PICKING',result_detail='Cortes listos para recoger en Alistamiento',
+      metadata=metadata||jsonb_build_object('cutFlowVersion','10.10','readyForPickupAt',v_now)
+  where id=v_task.id;
+
+  v_cut_first=coalesce((v_order.metadata#>>'{cutFlow,cutFirst}')::boolean,true);
+  if v_cut_first then
+    v_next:='ALISTAMIENTO';
+  else
+    v_next:=case when upper(v_order.order_type_code) in('PVN','PNV') then 'CAJA_FACTURACION' else 'FACTURACION' end;
+  end if;
+
+  select coalesce(max(sequence_no),0)+1 into v_sequence from erp_supply.order_tasks where order_id=p_order_id;
+  select * into v_new_task from erp_supply.create_task(v_order,v_next,v_sequence);
+
+  insert into erp_supply.order_events(
+    organization_id,order_id,task_id,event_type,action_code,
+    from_step_code,to_step_code,from_status,to_status,
+    actor_profile_id,actor_role_code,payload
+  ) values(
+    v_order.organization_id,p_order_id,v_task.id,'WORKFLOW_ACTION','CUT_READY_FOR_PICKING',
+    'CORTE',v_next,'IN_PROGRESS',v_new_task.status,p_actor,(erp_supply.current_roles())[1],
+    jsonb_build_object(
+      'nextTaskId',v_new_task.id,'cutFirst',v_cut_first,
+      'requirements',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id),
+      'collectionPending',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id and r.collection_status='PENDING')
+    )
+  );
+
+  return true;
+end;
+$$;
+
+create or replace function public.erp_x_cutting_groups(
+  p_search text default null,
+  p_page integer default 1,
+  p_page_size integer default 50
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_org uuid:=erp_supply.current_org_id();
+  v_actor uuid:=erp_supply.require_profile();
+  v_page integer:=greatest(coalesce(p_page,1),1);
+  v_size integer:=least(greatest(coalesce(p_page_size,50),1),100);
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_total bigint;
+  v_items jsonb;
+begin
+  if not (erp_supply.can_access_module('cutting','read') or erp_supply.has_role('auxiliar_corte') or v_override) then
+    raise exception 'No autorizado para consultar Corte' using errcode='42501';
+  end if;
+
+  with eligible as (
+    select r.*
+    from erp_supply.cut_requirements r
+    join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+    join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+    where r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id)
+      and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)
+      and (p_search is null or p_search='' or lower(coalesce(r.reference,'')||' '||coalesce(r.sku,'')||' '||r.description) like '%'||lower(p_search)||'%')
+  ), grouped as (
+    select group_key from eligible group by group_key
+  ) select count(*) into v_total from grouped;
+
+  with eligible as (
+    select r.*,o.order_number,o.client_name,o.priority,t.status task_status,t.assigned_profile_id
+    from erp_supply.cut_requirements r
+    join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+    join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+    where r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id)
+      and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)
+      and (p_search is null or p_search='' or lower(coalesce(r.reference,'')||' '||coalesce(r.sku,'')||' '||r.description) like '%'||lower(p_search)||'%')
+  ), grouped as (
+    select group_key,max(reference) reference,max(sku) sku,max(description) description,
+      count(*)::integer item_count,count(distinct order_id)::integer order_count,
+      sum(units_required) cut_count,sum(total_length) total_length,
+      min(created_at) oldest_at,
+      bool_or(task_status='IN_PROGRESS') in_progress
+    from eligible group by group_key
+    order by in_progress desc,oldest_at
+    offset (v_page-1)*v_size limit v_size
+  ) select coalesce(jsonb_agg(jsonb_build_object(
+      'groupKey',group_key,'reference',reference,'sku',sku,'description',description,
+      'itemCount',item_count,'orderCount',order_count,'cutCount',cut_count,
+      'totalLength',total_length,'oldestAt',oldest_at,'inProgress',in_progress
+    )),'[]'::jsonb) into v_items from grouped;
+
+  return jsonb_build_object('items',v_items,'pagination',jsonb_build_object(
+    'page',v_page,'pageSize',v_size,'totalItems',v_total,'totalPages',ceil(v_total::numeric/v_size)::integer
+  ),'generatedAt',now());
+end;
+$$;
+
+create or replace function public.erp_x_cutting_group(p_group_key text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_org uuid:=erp_supply.current_org_id();
+  v_actor uuid:=erp_supply.require_profile();
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_reference text;
+  v_sku text;
+  v_description text;
+begin
+  if nullif(trim(p_group_key),'') is null then raise exception 'Grupo de corte requerido'; end if;
+  if not (erp_supply.can_access_module('cutting','read') or erp_supply.has_role('auxiliar_corte') or v_override) then
+    raise exception 'No autorizado para consultar Corte' using errcode='42501';
+  end if;
+
+  select max(r.reference),max(r.sku),max(r.description)
+  into v_reference,v_sku,v_description
+  from erp_supply.cut_requirements r
+  join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+  join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  where r.organization_id=v_org and r.group_key=p_group_key and r.process_status<>'READY'
+    and erp_supply.can_view_order(o.id)
+    and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor);
+  if v_description is null then raise exception 'El grupo ya no tiene cortes pendientes'; end if;
+
+  return jsonb_build_object(
+    'group',jsonb_build_object(
+      'groupKey',p_group_key,'reference',v_reference,'sku',v_sku,'description',v_description,
+      'itemCount',(select count(*) from erp_supply.cut_requirements r join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE' join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED') where r.group_key=p_group_key and r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id) and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)),
+      'orderCount',(select count(distinct r.order_id) from erp_supply.cut_requirements r join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE' join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED') where r.group_key=p_group_key and r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id) and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)),
+      'cutCount',(select coalesce(sum(r.units_required),0) from erp_supply.cut_requirements r join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE' join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED') where r.group_key=p_group_key and r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id) and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)),
+      'totalLength',(select coalesce(sum(r.total_length),0) from erp_supply.cut_requirements r join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE' join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED') where r.group_key=p_group_key and r.organization_id=v_org and r.process_status<>'READY' and erp_supply.can_view_order(o.id) and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor))
+    ),
+    'items',(select coalesce(jsonb_agg(jsonb_build_object(
+      'requirementId',r.id,'orderId',r.order_id,'orderNumber',o.order_number,'clientName',o.client_name,
+      'priority',o.priority,'orderItemId',r.order_item_id,'lineNumber',i.line_number,
+      'sku',r.sku,'reference',r.reference,'description',r.description,'unit',r.unit,
+      'unitsRequired',r.units_required,'lengthEach',r.length_each,'totalLength',r.total_length,
+      'processStatus',r.process_status,'taskStatus',t.status,'assigneeId',t.assigned_profile_id,'assigneeName',p.display_name
+    ) order by o.priority desc,o.order_number,i.line_number),'[]'::jsonb)
+      from erp_supply.cut_requirements r
+      join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+      join erp_supply.order_items i on i.id=r.order_item_id
+      join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+      left join erp_supply.profiles p on p.id=t.assigned_profile_id
+      where r.organization_id=v_org and r.group_key=p_group_key and r.process_status<>'READY'
+        and erp_supply.can_view_order(o.id)
+        and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)),
+    'reels',(select coalesce(jsonb_agg(jsonb_build_object(
+      'lotId',l.id,'inventoryItemId',ii.id,'lotNumber',l.lot_number,'location',l.location,
+      'quantityAvailable',l.quantity_available,'unit',ii.unit,'updatedAt',ii.updated_at
+    ) order by l.quantity_available desc),'[]'::jsonb)
+      from erp_supply.inventory_items ii join erp_supply.inventory_lots l on l.inventory_item_id=ii.id
+      where ii.organization_id=v_org and ii.active and l.quantity_available>0
+        and ((v_sku is not null and ii.sku=v_sku) or (v_reference is not null and ii.reference=v_reference)
+          or ii.metadata->>'cutGroupKey'=p_group_key)),
+    'recentBatches',(select coalesce(jsonb_agg(to_jsonb(b) order by b.executed_at desc),'[]'::jsonb)
+      from (select * from erp_supply.cut_batches where organization_id=v_org and group_key=p_group_key order by executed_at desc limit 5) b)
+  );
+end;
+$$;
+
+create or replace function public.erp_x_execute_cut_group(p_group_key text,p_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_reel numeric:=erp_supply.safe_numeric(p_payload->>'reelLength');
+  v_scrap numeric:=coalesce(erp_supply.safe_numeric(p_payload->>'scrapLength'),0);
+  v_needed numeric;
+  v_reference text;
+  v_sku text;
+  v_description text;
+  v_inventory_item erp_supply.inventory_items%rowtype;
+  v_lot erp_supply.inventory_lots%rowtype;
+  v_lot_id uuid:=erp_supply.safe_uuid(p_payload->>'inventoryLotId');
+  v_batch erp_supply.cut_batches%rowtype;
+  v_req erp_supply.cut_requirements%rowtype;
+  v_job erp_supply.cut_jobs%rowtype;
+  v_orders uuid[]:='{}'::uuid[];
+  v_order_id uuid;
+  v_difference numeric;
+  v_count integer:=0;
+begin
+  if not (erp_supply.can_access_module('cutting','update') or erp_supply.has_role('auxiliar_corte') or v_override) then
+    raise exception 'No autorizado para ejecutar cortes' using errcode='42501';
+  end if;
+  if nullif(trim(p_group_key),'') is null then raise exception 'Grupo de corte requerido'; end if;
+  if v_reel is null or v_reel<=0 then raise exception 'Indica cuánto tiene el carreto'; end if;
+  if v_scrap<0 then raise exception 'La merma no puede ser negativa'; end if;
+
+  select coalesce(sum(r.total_length),0),max(r.reference),max(r.sku),max(r.description)
+  into v_needed,v_reference,v_sku,v_description
+  from erp_supply.cut_requirements r
+  join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+  join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+  where r.organization_id=v_org and r.group_key=p_group_key and r.process_status<>'READY'
+    and erp_supply.can_view_order(o.id)
+    and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor);
+  if v_needed<=0 then raise exception 'El grupo ya no tiene cortes pendientes'; end if;
+  if v_reel<v_needed+v_scrap then
+    raise exception 'El carreto tiene % y se necesitan % incluyendo la merma',v_reel,v_needed+v_scrap;
+  end if;
+
+  select * into v_inventory_item
+  from erp_supply.inventory_items ii
+  where ii.organization_id=v_org
+    and ((v_sku is not null and ii.sku=v_sku) or (v_reference is not null and ii.reference=v_reference)
+      or ii.metadata->>'cutGroupKey'=p_group_key)
+  order by (ii.metadata->>'cutGroupKey'=p_group_key) desc limit 1 for update;
+
+  if not found then
+    insert into erp_supply.inventory_items(organization_id,sku,reference,description,unit,item_type,metadata)
+    values(v_org,coalesce(v_sku,v_reference,'CUT-'||substr(p_group_key,1,12)),v_reference,v_description,'M','CUT_REEL',jsonb_build_object('cutGroupKey',p_group_key,'source','CUT_FIRST_V10_10'))
+    returning * into v_inventory_item;
+  else
+    update erp_supply.inventory_items set metadata=metadata||jsonb_build_object('cutGroupKey',p_group_key),updated_at=now()
+    where id=v_inventory_item.id returning * into v_inventory_item;
+  end if;
+
+  if v_lot_id is not null then
+    select * into v_lot from erp_supply.inventory_lots
+    where id=v_lot_id and inventory_item_id=v_inventory_item.id for update;
+    if not found then raise exception 'El carreto seleccionado no corresponde a esta referencia'; end if;
+    v_difference:=v_reel-v_lot.quantity_available;
+    if abs(v_difference)>0.0001 then
+      update erp_supply.inventory_lots set quantity_available=v_reel where id=v_lot.id returning * into v_lot;
+      insert into erp_supply.inventory_movements(
+        organization_id,inventory_item_id,lot_id,movement_type,quantity,unit,from_location,to_location,
+        actor_profile_id,reference,metadata
+      ) values(
+        v_org,v_inventory_item.id,v_lot.id,case when v_difference>0 then 'ADJUSTMENT_IN' else 'ADJUSTMENT_OUT' end,
+        abs(v_difference),'M',v_lot.location,v_lot.location,v_actor,'RECUENTO-CARRETO',
+        jsonb_build_object('previousLength',v_reel-v_difference,'confirmedLength',v_reel,'source','CUT_FIRST_V10_10')
+      );
+    end if;
+  else
+    insert into erp_supply.inventory_lots(
+      inventory_item_id,lot_number,location,quantity_available,received_at,metadata
+    ) values(
+      v_inventory_item.id,
+      coalesce(nullif(trim(p_payload->>'lotNumber'),''),'CARRETO-'||to_char(clock_timestamp(),'YYYYMMDD-HH24MISS-MS')),
+      coalesce(nullif(trim(p_payload->>'location'),''),'CORTE'),v_reel,now(),
+      jsonb_build_object('cutGroupKey',p_group_key,'source','CUT_FIRST_V10_10')
+    ) returning * into v_lot;
+    insert into erp_supply.inventory_movements(
+      organization_id,inventory_item_id,lot_id,movement_type,quantity,unit,to_location,
+      actor_profile_id,reference,metadata
+    ) values(v_org,v_inventory_item.id,v_lot.id,'CUT_REEL_ENTRY',v_reel,'M',v_lot.location,v_actor,v_lot.lot_number,jsonb_build_object('source','CUT_FIRST_V10_10'));
+  end if;
+
+  insert into erp_supply.cut_batches(
+    organization_id,group_key,reference,description,inventory_item_id,inventory_lot_id,
+    resolution_code,reel_initial_length,requested_length,scrap_length,remaining_length,executed_by,metadata
+  ) values(
+    v_org,p_group_key,v_reference,v_description,v_inventory_item.id,v_lot.id,'CUT',
+    v_reel,v_needed,v_scrap,v_reel-v_needed-v_scrap,v_actor,
+    jsonb_build_object('lotNumber',v_lot.lot_number,'location',v_lot.location,'version','10.10')
+  ) returning * into v_batch;
+
+  for v_req in
+    select r.*
+    from erp_supply.cut_requirements r
+    join erp_supply.orders o on o.id=r.order_id and o.current_step_code='CORTE'
+    join erp_supply.order_tasks t on t.id=r.task_id and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+    where r.organization_id=v_org and r.group_key=p_group_key and r.process_status<>'READY'
+      and erp_supply.can_view_order(o.id)
+      and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)
+    order by r.created_at for update of r
+  loop
+    perform erp_supply.start_cut_task(v_req.order_id,v_actor);
+    insert into erp_supply.cut_jobs(
+      order_id,order_item_id,inventory_lot_id,requested_length,actual_length,scrap_length,
+      status,assigned_profile_id,started_at,completed_at,metadata
+    ) values(
+      v_req.order_id,v_req.order_item_id,v_lot.id,v_req.total_length,v_req.total_length,0,
+      'COMPLETED',v_actor,now(),now(),jsonb_build_object(
+        'mode','CUT','batchId',v_batch.id,'units',v_req.units_required,'lengthEach',v_req.length_each,'cutFlowVersion','10.10'
+      )
+    ) returning * into v_job;
+
+    update erp_supply.cut_requirements
+    set process_status='READY',resolution_code='CUT',collection_status='PENDING',
+        cut_batch_id=v_batch.id,cut_job_id=v_job.id,inventory_lot_id=v_lot.id,
+        ready_at=now(),ready_by=v_actor,assigned_profile_id=v_actor,updated_at=now()
+    where id=v_req.id;
+
+    update erp_supply.order_items
+    set metadata=metadata||jsonb_build_object(
+      'cutStatus','READY','cutResolution','CUT','cutRequirementId',v_req.id,
+      'cutBatchId',v_batch.id,'cutReadyAt',now(),'cutReadyBy',v_actor
+    ),updated_at=now() where id=v_req.order_item_id;
+
+    if not (v_req.order_id=any(v_orders)) then v_orders:=array_append(v_orders,v_req.order_id); end if;
+    v_count:=v_count+1;
+  end loop;
+
+  update erp_supply.inventory_lots
+  set quantity_available=v_reel-v_needed-v_scrap,
+      metadata=metadata||jsonb_build_object('lastCutBatchId',v_batch.id,'lastCutAt',now())
+  where id=v_lot.id;
+
+  insert into erp_supply.inventory_movements(
+    organization_id,inventory_item_id,lot_id,movement_type,quantity,unit,from_location,
+    actor_profile_id,reference,metadata
+  ) values(
+    v_org,v_inventory_item.id,v_lot.id,'CUT_CONSUMPTION',v_needed+v_scrap,'M',v_lot.location,
+    v_actor,v_batch.id::text,jsonb_build_object('requestedLength',v_needed,'scrapLength',v_scrap,'remainingLength',v_reel-v_needed-v_scrap,'groupKey',p_group_key)
+  );
+
+  foreach v_order_id in array v_orders loop
+    perform erp_supply.advance_cut_order_if_ready(v_order_id,v_actor);
+  end loop;
+
+  return jsonb_build_object('success',true,'batchId',v_batch.id,'processedItems',v_count,
+    'requestedLength',v_needed,'scrapLength',v_scrap,'remainingLength',v_reel-v_needed-v_scrap,
+    'inventoryLotId',v_lot.id,'lotNumber',v_lot.lot_number);
+end;
+$$;
+
+create or replace function public.erp_x_resolve_cut_requirement(
+  p_requirement_id uuid,
+  p_resolution text,
+  p_payload jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_resolution text:=upper(trim(coalesce(p_resolution,'')));
+  v_req erp_supply.cut_requirements%rowtype;
+  v_order erp_supply.orders%rowtype;
+  v_reason text:=nullif(trim(p_payload->>'reason'),'');
+  v_reel numeric:=erp_supply.safe_numeric(p_payload->>'reelLength');
+  v_inventory_item erp_supply.inventory_items%rowtype;
+  v_lot erp_supply.inventory_lots%rowtype;
+  v_lot_id uuid:=erp_supply.safe_uuid(p_payload->>'inventoryLotId');
+  v_batch erp_supply.cut_batches%rowtype;
+  v_job erp_supply.cut_jobs%rowtype;
+  v_difference numeric;
+begin
+  if not (erp_supply.can_access_module('cutting','update') or erp_supply.has_role('auxiliar_corte') or v_override) then
+    raise exception 'No autorizado para resolver cortes' using errcode='42501';
+  end if;
+  if v_resolution not in('FULL_REEL','NO_CUT') then raise exception 'Resolución de corte inválida'; end if;
+
+  select r.* into v_req
+  from erp_supply.cut_requirements r
+  join erp_supply.order_tasks t on t.id=r.task_id
+  where r.id=p_requirement_id and r.organization_id=v_org and r.process_status<>'READY'
+    and (v_override or t.assigned_profile_id is null or t.assigned_profile_id=v_actor)
+  for update of r;
+  if not found then raise exception 'El corte ya fue resuelto o no está disponible'; end if;
+
+  select * into v_order from erp_supply.orders where id=v_req.order_id and current_step_code='CORTE' for update;
+  if not found then raise exception 'El pedido ya no está en Corte'; end if;
+  perform erp_supply.start_cut_task(v_req.order_id,v_actor);
+
+  if v_resolution='NO_CUT' then
+    if v_reason is null then raise exception 'Explica por qué la referencia no necesita corte'; end if;
+
+    update erp_supply.cut_requirements
+    set process_status='READY',resolution_code='NO_CUT',collection_status='PENDING',
+        ready_at=now(),ready_by=v_actor,assigned_profile_id=v_actor,
+        metadata=metadata||jsonb_build_object('reason',v_reason),updated_at=now()
+    where id=v_req.id;
+
+    update erp_supply.order_items
+    set requires_cut=false,requested_cut_length=null,
+        metadata=metadata||jsonb_build_object(
+          'cutStatus','READY','cutResolution','NO_CUT','cutRequirementId',v_req.id,
+          'cutReadyAt',now(),'cutReadyBy',v_actor,'cutNoNeedReason',v_reason,
+          'originalRequestedCutLength',v_req.length_each
+        ),updated_at=now()
+    where id=v_req.order_item_id;
+
+    insert into erp_supply.order_comments(order_id,author_profile_id,comment_type,visibility,body,metadata)
+    values(v_req.order_id,v_actor,'NOVELTY','INTERNAL',
+      format('Corte corregido: la referencia %s no necesita corte. %s',coalesce(v_req.reference,v_req.sku,v_req.description),v_reason),
+      jsonb_build_object('source','CORTE','resolution','NO_CUT','requirementId',v_req.id));
+  else
+    if v_reel is null or v_reel<=0 then raise exception 'Indica la medida del carreto completo'; end if;
+    if abs(v_reel-v_req.total_length)>0.0001 then
+      raise exception 'Carreto completo solo aplica cuando la medida del carreto (%) coincide con lo solicitado (%)',v_reel,v_req.total_length;
+    end if;
+
+    select * into v_inventory_item from erp_supply.inventory_items ii
+    where ii.organization_id=v_org and ((v_req.sku is not null and ii.sku=v_req.sku)
+      or (v_req.reference is not null and ii.reference=v_req.reference)
+      or ii.metadata->>'cutGroupKey'=v_req.group_key)
+    order by (ii.metadata->>'cutGroupKey'=v_req.group_key) desc limit 1 for update;
+
+    if not found then
+      insert into erp_supply.inventory_items(organization_id,sku,reference,description,unit,item_type,metadata)
+      values(v_org,coalesce(v_req.sku,v_req.reference,'CUT-'||substr(v_req.group_key,1,12)),v_req.reference,v_req.description,'M','CUT_REEL',jsonb_build_object('cutGroupKey',v_req.group_key,'source','CUT_FIRST_V10_10'))
+      returning * into v_inventory_item;
+    end if;
+
+    if v_lot_id is not null then
+      select * into v_lot from erp_supply.inventory_lots where id=v_lot_id and inventory_item_id=v_inventory_item.id for update;
+      if not found then raise exception 'El carreto seleccionado no corresponde a esta referencia'; end if;
+      v_difference:=v_reel-v_lot.quantity_available;
+      if abs(v_difference)>0.0001 then
+        update erp_supply.inventory_lots set quantity_available=v_reel where id=v_lot.id returning * into v_lot;
+        insert into erp_supply.inventory_movements(organization_id,inventory_item_id,lot_id,movement_type,quantity,unit,from_location,to_location,actor_profile_id,reference,metadata)
+        values(v_org,v_inventory_item.id,v_lot.id,case when v_difference>0 then 'ADJUSTMENT_IN' else 'ADJUSTMENT_OUT' end,abs(v_difference),'M',v_lot.location,v_lot.location,v_actor,'RECUENTO-CARRETO',jsonb_build_object('confirmedLength',v_reel));
+      end if;
+    else
+      insert into erp_supply.inventory_lots(inventory_item_id,lot_number,location,quantity_available,received_at,metadata)
+      values(v_inventory_item.id,coalesce(nullif(trim(p_payload->>'lotNumber'),''),'CARRETO-'||to_char(clock_timestamp(),'YYYYMMDD-HH24MISS-MS')),coalesce(nullif(trim(p_payload->>'location'),''),'CORTE'),v_reel,now(),jsonb_build_object('cutGroupKey',v_req.group_key,'source','CUT_FIRST_V10_10'))
+      returning * into v_lot;
+      insert into erp_supply.inventory_movements(organization_id,inventory_item_id,lot_id,movement_type,quantity,unit,to_location,actor_profile_id,reference,metadata)
+      values(v_org,v_inventory_item.id,v_lot.id,'CUT_REEL_ENTRY',v_reel,'M',v_lot.location,v_actor,v_lot.lot_number,jsonb_build_object('source','CUT_FIRST_V10_10'));
+    end if;
+
+    insert into erp_supply.cut_batches(organization_id,group_key,reference,description,inventory_item_id,inventory_lot_id,resolution_code,reel_initial_length,requested_length,scrap_length,remaining_length,executed_by,metadata)
+    values(v_org,v_req.group_key,v_req.reference,v_req.description,v_inventory_item.id,v_lot.id,'FULL_REEL',v_reel,v_req.total_length,0,0,v_actor,jsonb_build_object('requirementId',v_req.id,'version','10.10'))
+    returning * into v_batch;
+
+    insert into erp_supply.cut_jobs(order_id,order_item_id,inventory_lot_id,requested_length,actual_length,scrap_length,status,assigned_profile_id,started_at,completed_at,metadata)
+    values(v_req.order_id,v_req.order_item_id,v_lot.id,v_req.total_length,v_req.total_length,0,'COMPLETED',v_actor,now(),now(),jsonb_build_object('mode','FULL_REEL','batchId',v_batch.id,'cutFlowVersion','10.10'))
+    returning * into v_job;
+
+    update erp_supply.inventory_lots set quantity_available=0,metadata=metadata||jsonb_build_object('issuedCompleteAt',now(),'cutBatchId',v_batch.id) where id=v_lot.id;
+    insert into erp_supply.inventory_movements(organization_id,inventory_item_id,lot_id,order_id,movement_type,quantity,unit,from_location,actor_profile_id,reference,metadata)
+    values(v_org,v_inventory_item.id,v_lot.id,v_req.order_id,'FULL_REEL_ISSUE',v_req.total_length,'M',v_lot.location,v_actor,v_batch.id::text,jsonb_build_object('requirementId',v_req.id));
+
+    update erp_supply.cut_requirements
+    set process_status='READY',resolution_code='FULL_REEL',collection_status='PENDING',
+        cut_batch_id=v_batch.id,cut_job_id=v_job.id,inventory_lot_id=v_lot.id,
+        ready_at=now(),ready_by=v_actor,assigned_profile_id=v_actor,updated_at=now()
+    where id=v_req.id;
+
+    update erp_supply.order_items
+    set metadata=metadata||jsonb_build_object(
+      'cutStatus','READY','cutResolution','FULL_REEL','cutRequirementId',v_req.id,
+      'cutBatchId',v_batch.id,'cutReadyAt',now(),'cutReadyBy',v_actor
+    ),updated_at=now() where id=v_req.order_item_id;
+  end if;
+
+  insert into erp_supply.order_events(organization_id,order_id,task_id,event_type,action_code,from_step_code,to_step_code,actor_profile_id,actor_role_code,payload)
+  values(v_org,v_req.order_id,v_req.task_id,'DOMAIN_RECORD',v_resolution,'CORTE','CORTE',v_actor,(erp_supply.current_roles())[1],jsonb_build_object('requirementId',v_req.id,'reason',v_reason));
+
+  perform erp_supply.advance_cut_order_if_ready(v_req.order_id,v_actor);
+  return jsonb_build_object('success',true,'requirementId',v_req.id,'resolution',v_resolution,'orderId',v_req.order_id);
+end;
+$$;
+
+create or replace function public.erp_x_cut_pickups_pending(
+  p_search text default null,
+  p_page integer default 1,
+  p_page_size integer default 50
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_org uuid:=erp_supply.current_org_id();
+  v_actor uuid:=erp_supply.require_profile();
+  v_page integer:=greatest(coalesce(p_page,1),1);
+  v_size integer:=least(greatest(coalesce(p_page_size,50),1),100);
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_is_picker boolean:=erp_supply.has_role('aux_logistica');
+  v_total bigint;
+  v_items jsonb;
+begin
+  if not (erp_supply.can_access_module('picking','read') or v_is_picker or v_override) then
+    raise exception 'No autorizado para consultar cortes por recoger' using errcode='42501';
+  end if;
+
+  with eligible as (
+    select o.id
+    from erp_supply.orders o
+    left join lateral (
+      select t.* from erp_supply.order_tasks t
+      where t.order_id=o.id and t.step_code='ALISTAMIENTO'
+        and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+      order by t.sequence_no desc limit 1
+    ) pt on true
+    where o.organization_id=v_org and o.current_step_code in('CORTE','ALISTAMIENTO')
+      and exists(select 1 from erp_supply.cut_requirements r where r.order_id=o.id and r.process_status='READY' and r.collection_status='PENDING')
+      and (
+        v_override
+        or (o.current_step_code='ALISTAMIENTO' and pt.id is not null and (pt.assigned_profile_id is null or pt.assigned_profile_id=v_actor) and erp_supply.can_view_order(o.id))
+        or (o.current_step_code='CORTE' and v_is_picker and (
+          erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}') is null
+          or erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}')=v_actor
+        ))
+      )
+      and (p_search is null or p_search='' or lower(o.order_number||' '||o.client_name) like '%'||lower(p_search)||'%')
+  ) select count(*) into v_total from eligible;
+
+  with eligible as (
+    select o.*,
+      coalesce(pt.assigned_profile_id,erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}')) pickup_assignee_id,
+      coalesce(tp.display_name,rp.display_name) assignee_name,
+      (select count(*) from erp_supply.cut_requirements r where r.order_id=o.id and r.process_status='READY' and r.collection_status='PENDING') pickup_count,
+      (select coalesce(sum(r.total_length),0) from erp_supply.cut_requirements r where r.order_id=o.id and r.process_status='READY' and r.collection_status='PENDING') pickup_length,
+      (select count(*) from erp_supply.cut_requirements r where r.order_id=o.id and r.process_status<>'READY') cuts_still_pending,
+      erp_supply.business_seconds_between(v_org,o.updated_at,now()) age_seconds
+    from erp_supply.orders o
+    left join lateral (
+      select t.* from erp_supply.order_tasks t
+      where t.order_id=o.id and t.step_code='ALISTAMIENTO'
+        and t.status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+      order by t.sequence_no desc limit 1
+    ) pt on true
+    left join erp_supply.profiles tp on tp.id=pt.assigned_profile_id
+    left join erp_supply.profiles rp on rp.id=erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}')
+    where o.organization_id=v_org and o.current_step_code in('CORTE','ALISTAMIENTO')
+      and exists(select 1 from erp_supply.cut_requirements r where r.order_id=o.id and r.process_status='READY' and r.collection_status='PENDING')
+      and (
+        v_override
+        or (o.current_step_code='ALISTAMIENTO' and pt.id is not null and (pt.assigned_profile_id is null or pt.assigned_profile_id=v_actor) and erp_supply.can_view_order(o.id))
+        or (o.current_step_code='CORTE' and v_is_picker and (
+          erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}') is null
+          or erp_supply.safe_uuid(o.metadata#>>'{receptionAssignment,pickingProfileId}')=v_actor
+        ))
+      )
+      and (p_search is null or p_search='' or lower(o.order_number||' '||o.client_name) like '%'||lower(p_search)||'%')
+    order by case o.priority when 'CRITICAL' then 1 when 'URGENT' then 2 when 'HIGH' then 3 else 4 end,o.updated_at
+    offset (v_page-1)*v_size limit v_size
+  ) select coalesce(jsonb_agg(jsonb_build_object(
+    'id',id,'orderNumber',order_number,'clientName',client_name,'orderType',order_type_code,
+    'paymentCondition',payment_condition_code,'route',delivery_route_code,'currentStep',current_step_code,
+    'stepName',case when current_step_code='CORTE' then 'Recogida anticipada desde Corte' else 'Cortes por recoger' end,
+    'status',status,'priority',priority,'assigneeName',assignee_name,'pickupAssigneeId',pickup_assignee_id,
+    'ageBusinessSeconds',age_seconds,'cutPickupPendingCount',pickup_count,'cutPickupTotalLength',pickup_length,
+    'cutsStillPending',cuts_still_pending,'cutPickupLabel',true,'pickupWhileCutting',(current_step_code='CORTE'),'version',version
+  )),'[]'::jsonb) into v_items from eligible;
+
+  return jsonb_build_object('items',v_items,'pagination',jsonb_build_object(
+    'page',v_page,'pageSize',v_size,'totalItems',v_total,'totalPages',ceil(v_total::numeric/v_size)::integer
+  ),'generatedAt',now());
+end;
+$$;
+
+create or replace function public.erp_x_cut_pickup_detail(p_order_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_org uuid:=erp_supply.current_org_id();
+  v_actor uuid:=erp_supply.require_profile();
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_is_picker boolean:=erp_supply.has_role('aux_logistica');
+  v_picking_profile uuid;
+begin
+  select * into v_order from erp_supply.orders where id=p_order_id and organization_id=v_org;
+  if not found or v_order.current_step_code not in('CORTE','ALISTAMIENTO') then raise exception 'El pedido no tiene cortes disponibles para recoger'; end if;
+  v_picking_profile:=erp_supply.safe_uuid(v_order.metadata#>>'{receptionAssignment,pickingProfileId}');
+
+  if v_order.current_step_code='ALISTAMIENTO' then
+    select * into v_task from erp_supply.order_tasks
+    where order_id=p_order_id and step_code='ALISTAMIENTO' and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+    order by sequence_no desc limit 1;
+    if not found then raise exception 'No existe tarea activa de Alistamiento'; end if;
+    if v_task.assigned_profile_id is not null and v_task.assigned_profile_id<>v_actor and not v_override then raise exception 'El pedido está asignado a otro auxiliar' using errcode='42501'; end if;
+    if not erp_supply.can_view_order(v_order.id) and not v_override then raise exception 'No autorizado para consultar el pedido' using errcode='42501'; end if;
+  elsif not v_override then
+    if not v_is_picker then raise exception 'No autorizado para recoger cortes' using errcode='42501'; end if;
+    if v_picking_profile is not null and v_picking_profile<>v_actor then raise exception 'La recogida está asignada a otro auxiliar' using errcode='42501'; end if;
+  end if;
+
+  if not exists(select 1 from erp_supply.cut_requirements r where r.order_id=p_order_id and r.process_status='READY' and r.collection_status='PENDING') then
+    raise exception 'No quedan cortes pendientes de recoger';
+  end if;
+
+  return jsonb_build_object(
+    'order',jsonb_build_object('id',v_order.id,'orderNumber',v_order.order_number,'clientName',v_order.client_name,'priority',v_order.priority,'route',v_order.delivery_route_code,'currentStep',v_order.current_step_code),
+    'task',case when v_task.id is null then null else to_jsonb(v_task) end,
+    'pickupWhileCutting',(v_order.current_step_code='CORTE'),
+    'cutsStillPending',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id and r.process_status<>'READY'),
+    'items',(select coalesce(jsonb_agg(jsonb_build_object(
+      'requirementId',r.id,'orderItemId',r.order_item_id,'lineNumber',i.line_number,
+      'sku',r.sku,'reference',r.reference,'description',r.description,
+      'unitsRequired',r.units_required,'lengthEach',r.length_each,'totalLength',r.total_length,
+      'resolution',r.resolution_code,'readyAt',r.ready_at,'lotNumber',l.lot_number,'location',l.location
+    ) order by i.line_number),'[]'::jsonb)
+      from erp_supply.cut_requirements r
+      join erp_supply.order_items i on i.id=r.order_item_id
+      left join erp_supply.inventory_lots l on l.id=r.inventory_lot_id
+      where r.order_id=p_order_id and r.process_status='READY' and r.collection_status='PENDING'),
+    'remaining',(select count(*) from erp_supply.cut_requirements r where r.order_id=p_order_id and r.process_status='READY' and r.collection_status='PENDING')
+  );
+end;
+$$;
+
+create or replace function public.erp_x_confirm_cut_pickup(p_order_id uuid,p_requirement_ids jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_order erp_supply.orders%rowtype;
+  v_task erp_supply.order_tasks%rowtype;
+  v_id uuid;
+  v_value jsonb;
+  v_count integer:=0;
+  v_remaining integer;
+  v_override boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica');
+  v_is_picker boolean:=erp_supply.has_role('aux_logistica');
+  v_picking_profile uuid;
+begin
+  if jsonb_typeof(coalesce(p_requirement_ids,'[]'::jsonb))<>'array' or jsonb_array_length(coalesce(p_requirement_ids,'[]'::jsonb))=0 then
+    raise exception 'Marca al menos un corte como recogido';
+  end if;
+
+  select * into v_order from erp_supply.orders
+  where id=p_order_id and organization_id=v_org and current_step_code in('CORTE','ALISTAMIENTO') for update;
+  if not found then raise exception 'El pedido ya no tiene cortes disponibles para recoger'; end if;
+  v_picking_profile:=erp_supply.safe_uuid(v_order.metadata#>>'{receptionAssignment,pickingProfileId}');
+
+  if v_order.current_step_code='ALISTAMIENTO' then
+    select * into v_task from erp_supply.order_tasks
+    where order_id=p_order_id and step_code='ALISTAMIENTO' and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED')
+    order by sequence_no desc limit 1 for update;
+    if not found then raise exception 'No existe tarea activa de Alistamiento'; end if;
+    if v_task.status<>'IN_PROGRESS' then raise exception 'Primero debes tomar el pedido'; end if;
+    if v_task.assigned_profile_id is distinct from v_actor and not v_override then raise exception 'El pedido está siendo gestionado por otro auxiliar' using errcode='42501'; end if;
+  elsif not v_override then
+    if not v_is_picker then raise exception 'No autorizado para recoger cortes' using errcode='42501'; end if;
+    if v_picking_profile is not null and v_picking_profile<>v_actor then raise exception 'La recogida está asignada a otro auxiliar' using errcode='42501'; end if;
+  end if;
+
+  for v_value in select value from jsonb_array_elements(p_requirement_ids) loop
+    v_id:=erp_supply.safe_uuid(trim(both '"' from v_value::text));
+    if v_id is null then raise exception 'Identificador de corte inválido'; end if;
+    update erp_supply.cut_requirements
+    set collection_status='COLLECTED',collected_at=now(),collected_by=v_actor,updated_at=now(),
+        metadata=metadata||jsonb_build_object('collectionSource',case when v_order.current_step_code='CORTE' then 'EARLY_PICKUP_V10_10' else 'ALISTAMIENTO_V10_10' end)
+    where id=v_id and order_id=p_order_id and process_status='READY' and collection_status='PENDING';
+    if found then v_count:=v_count+1; end if;
+  end loop;
+
+  if v_count=0 then raise exception 'Los cortes seleccionados ya habían sido recogidos'; end if;
+  select count(*) into v_remaining from erp_supply.cut_requirements where order_id=p_order_id and process_status='READY' and collection_status='PENDING';
+
+  update erp_supply.orders
+  set metadata=metadata||jsonb_build_object('cutFlow',coalesce(metadata->'cutFlow','{}'::jsonb)||jsonb_build_object(
+      'pendingCollection',v_remaining,'lastPickupAt',now(),'lastPickupBy',v_actor,
+      'earlyPickup',(v_order.current_step_code='CORTE'),
+      'allCollectedAt',case when v_remaining=0 then to_jsonb(now()) else metadata#>'{cutFlow,allCollectedAt}' end
+    )),version=version+1,updated_at=now()
+  where id=p_order_id;
+
+  insert into erp_supply.order_events(organization_id,order_id,task_id,event_type,action_code,from_step_code,to_step_code,actor_profile_id,actor_role_code,payload)
+  values(v_org,p_order_id,v_task.id,'DOMAIN_RECORD','CUT_PICKUP',v_order.current_step_code,v_order.current_step_code,v_actor,(erp_supply.current_roles())[1],jsonb_build_object('collected',v_count,'remaining',v_remaining,'earlyPickup',(v_order.current_step_code='CORTE')));
+
+  return jsonb_build_object('success',true,'collected',v_count,'remaining',v_remaining,'allCollected',(v_remaining=0),'stage',v_order.current_step_code);
+end;
+$$;
+
+-- Expediente extendido con cortes agrupados y estado de recogida.
+create or replace function public.erp_x_get_order(p_order_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth
+as $$
+declare
+  v_org uuid:=erp_supply.current_org_id();
+  v_order erp_supply.orders%rowtype;
+begin
+  perform erp_supply.require_profile();
+  select * into v_order from erp_supply.orders
+  where id=p_order_id and organization_id=v_org and erp_supply.can_view_order(id);
+  if not found then raise exception 'Pedido no encontrado'; end if;
+
+  return jsonb_build_object(
+    'order',to_jsonb(v_order),
+    'items',(select coalesce(jsonb_agg(to_jsonb(i) order by line_number),'[]'::jsonb) from erp_supply.order_items i where i.order_id=p_order_id and coalesce(i.metadata->>'receptionActive','true')<>'false'),
+    'tasks',(select coalesce(jsonb_agg(to_jsonb(t) order by sequence_no),'[]'::jsonb) from erp_supply.order_tasks t where t.order_id=p_order_id),
+    'sessions',(select coalesce(jsonb_agg(to_jsonb(s) order by s.started_at),'[]'::jsonb) from erp_supply.task_sessions s join erp_supply.order_tasks t on t.id=s.task_id where t.order_id=p_order_id),
+    'checklist',(select coalesce(jsonb_agg(to_jsonb(c) order by c.sort_order),'[]'::jsonb) from erp_supply.task_checklist c join erp_supply.order_tasks t on t.id=c.task_id where t.order_id=p_order_id),
+    'events',(select coalesce(jsonb_agg(jsonb_build_object('id',e.id,'eventType',e.event_type,'actionCode',e.action_code,'fromStep',e.from_step_code,'toStep',e.to_step_code,'fromStatus',e.from_status,'toStatus',e.to_status,'actorName',p.display_name,'actorRole',e.actor_role_code,'payload',e.payload,'createdAt',e.created_at) order by e.created_at),'[]'::jsonb) from erp_supply.order_events e left join erp_supply.profiles p on p.id=e.actor_profile_id where e.order_id=p_order_id),
+    'comments',(select coalesce(jsonb_agg(jsonb_build_object('id',c.id,'type',c.comment_type,'visibility',c.visibility,'body',c.body,'metadata',c.metadata,'author',p.display_name,'createdAt',c.created_at) order by c.created_at),'[]'::jsonb) from erp_supply.order_comments c join erp_supply.profiles p on p.id=c.author_profile_id where c.order_id=p_order_id),
+    'approvals',(select coalesce(jsonb_agg(to_jsonb(a) order by a.created_at),'[]'::jsonb) from erp_supply.approval_requests a where a.order_id=p_order_id),
+    'files',(select coalesce(jsonb_agg(to_jsonb(f) order by f.created_at),'[]'::jsonb) from erp_supply.drive_files f where f.order_id=p_order_id),
+    'purchaseOrders',(select coalesce(jsonb_agg(to_jsonb(po) order by po.created_at),'[]'::jsonb) from erp_supply.purchase_orders po where po.order_id=p_order_id),
+    'financialValidations',(select coalesce(jsonb_agg(to_jsonb(fv) order by fv.created_at),'[]'::jsonb) from erp_supply.financial_validations fv where fv.order_id=p_order_id),
+    'receipts',(select coalesce(jsonb_agg(to_jsonb(r) order by r.created_at),'[]'::jsonb) from erp_supply.receipts r where r.order_id=p_order_id),
+    'cutJobs',(select coalesce(jsonb_agg(to_jsonb(c) order by c.created_at),'[]'::jsonb) from erp_supply.cut_jobs c where c.order_id=p_order_id),
+    'cutRequirements',(select coalesce(jsonb_agg(to_jsonb(r) order by i.line_number),'[]'::jsonb) from erp_supply.cut_requirements r join erp_supply.order_items i on i.id=r.order_item_id where r.order_id=p_order_id),
+    'cutBatches',(select coalesce(jsonb_agg(to_jsonb(b) order by b.executed_at),'[]'::jsonb) from erp_supply.cut_batches b where exists(select 1 from erp_supply.cut_requirements r where r.cut_batch_id=b.id and r.order_id=p_order_id)),
+    'invoices',(select coalesce(jsonb_agg(to_jsonb(i) order by i.created_at),'[]'::jsonb) from erp_supply.invoices i where i.order_id=p_order_id),
+    'deliveries',(select coalesce(jsonb_agg(to_jsonb(d) order by d.created_at),'[]'::jsonb) from erp_supply.deliveries d where d.order_id=p_order_id),
+    'pickingRounds',(select coalesce(jsonb_agg(to_jsonb(r) order by r.round_no),'[]'::jsonb) from erp_supply.picking_rounds r where r.order_id=p_order_id),
+    'pickingRoundItems',(select coalesce(jsonb_agg(to_jsonb(ri) order by r.round_no,i.line_number),'[]'::jsonb) from erp_supply.picking_round_items ri join erp_supply.picking_rounds r on r.id=ri.picking_round_id join erp_supply.order_items i on i.id=ri.order_item_id where r.order_id=p_order_id),
+    'actions',public.erp_x_get_actions(p_order_id)
+  );
+end;
+$$;
+
+-- Sincroniza pedidos que ya están en Corte.
+do $$
+declare r record;
+begin
+  for r in select id from erp_supply.orders where current_step_code='CORTE' and status in('QUEUED','ASSIGNED','IN_PROGRESS','WAITING','BLOCKED') loop
+    perform erp_supply.sync_cut_requirements(r.id);
+  end loop;
+end $$;
+
+-- Corrige de forma segura pedidos con corte que aún no habían iniciado Alistamiento.
+do $$
+declare
+  r record;
+  v_order erp_supply.orders%rowtype;
+  v_sequence integer;
+  v_new_task erp_supply.order_tasks%rowtype;
+begin
+  for r in
+    select o.id,t.id task_id
+    from erp_supply.orders o
+    join erp_supply.order_tasks t on t.order_id=o.id and t.step_code='ALISTAMIENTO' and t.status in('QUEUED','ASSIGNED')
+    where o.current_step_code='ALISTAMIENTO' and o.requires_cut
+      and not exists(select 1 from erp_supply.picking_rounds pr where pr.order_id=o.id)
+  loop
+    update erp_supply.order_tasks set status='CANCELLED',completed_at=now(),result_code='REROUTED_TO_CUT',result_detail='Flujo corregido: Corte antes de Alistamiento' where id=r.task_id;
+    select * into v_order from erp_supply.orders where id=r.id for update;
+    select coalesce(max(sequence_no),0)+1 into v_sequence from erp_supply.order_tasks where order_id=r.id;
+    update erp_supply.orders set metadata=metadata||jsonb_build_object('cutFlow',jsonb_build_object('version','10.10','cutFirst',true,'reroutedAt',now())),version=version+1 where id=r.id returning * into v_order;
+    select * into v_new_task from erp_supply.create_task(v_order,'CORTE',v_sequence);
+    insert into erp_supply.order_events(organization_id,order_id,task_id,event_type,action_code,from_step_code,to_step_code,from_status,to_status,payload)
+    values(v_order.organization_id,r.id,r.task_id,'ROUTE_CORRECTION','CUT_BEFORE_PICKING','ALISTAMIENTO','CORTE',v_order.status,v_new_task.status,jsonb_build_object('version','10.10','newTaskId',v_new_task.id));
+  end loop;
+end $$;
+
+revoke all on function public.erp_x_cutting_groups(text,integer,integer) from public,anon,authenticated;
+revoke all on function public.erp_x_cutting_group(text) from public,anon,authenticated;
+revoke all on function public.erp_x_execute_cut_group(text,jsonb) from public,anon,authenticated;
+revoke all on function public.erp_x_resolve_cut_requirement(uuid,text,jsonb) from public,anon,authenticated;
+revoke all on function public.erp_x_cut_pickups_pending(text,integer,integer) from public,anon,authenticated;
+revoke all on function public.erp_x_cut_pickup_detail(uuid) from public,anon,authenticated;
+revoke all on function public.erp_x_confirm_cut_pickup(uuid,jsonb) from public,anon,authenticated;
+
+grant execute on function public.erp_x_cutting_groups(text,integer,integer) to authenticated;
+grant execute on function public.erp_x_cutting_group(text) to authenticated;
+grant execute on function public.erp_x_execute_cut_group(text,jsonb) to authenticated;
+grant execute on function public.erp_x_resolve_cut_requirement(uuid,text,jsonb) to authenticated;
+grant execute on function public.erp_x_cut_pickups_pending(text,integer,integer) to authenticated;
+grant execute on function public.erp_x_cut_pickup_detail(uuid) to authenticated;
+grant execute on function public.erp_x_confirm_cut_pickup(uuid,jsonb) to authenticated;
+grant execute on function public.erp_x_get_order(uuid) to authenticated;
+
+notify pgrst,'reload schema';
 
 commit;
