@@ -65,6 +65,7 @@ export const api={
   creditCreate:payload=>rpc("erp_x_credit_create",{p_payload:payload}),
   creditTransition:(id,action,reason=null)=>rpc("erp_x_credit_transition",{p_request_id:id,p_action:action,p_reason:reason}),
   saveReceipt:(orderId,payload)=>rpc("erp_x_save_receipt",{p_order_id:orderId,p_payload:payload}),
+  confirmOrderReception:(orderId,payload)=>rpc("erp_x_confirm_order_reception",{p_order_id:orderId,p_payload:payload}),
   stickers:orderId=>rpc("erp_x_stickers",{p_order_id:orderId}),
   saveCutJob:(orderId,payload)=>rpc("erp_x_save_cut_job",{p_order_id:orderId,p_payload:payload}),
   saveInvoice:(orderId,payload)=>rpc("erp_x_save_invoice",{p_order_id:orderId,p_payload:payload}),

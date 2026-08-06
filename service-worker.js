@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-5-operacion-simple-20260805";
+const CACHE="erp-electroingenieria-v10-6-recepcion-pedidos-20260805";
 const ASSETS=[
   "./",
   "./index.html",
@@ -8,7 +8,9 @@ const ASSETS=[
   "./assets/img/iso-electroingenieria.png",
   "./assets/js/main.js",
   "./assets/js/config.js",
-  "./assets/js/core/icons.js"
+  "./assets/js/core/icons.js",
+  "./assets/js/modules/receiving-order.js",
+  "./assets/js/services/pdf-order-reader.js"
 ];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

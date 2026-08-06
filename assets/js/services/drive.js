@@ -82,3 +82,18 @@ export async function uploadOrderFile(orderId,file,category="EVIDENCE",taskId=nu
     metadata:{orderNumber:orderNumber||null,driveParentId:categoryFolder}
   });
 }
+
+export async function downloadDriveFile(fileId){
+  const id=String(fileId||"").trim();
+  if(!id)throw new Error("No se recibió el identificador del archivo.");
+  const t=await token();
+  const response=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`,{
+    headers:{Authorization:`Bearer ${t}`}
+  });
+  if(!response.ok){
+    await response.text().catch(()=>"");
+    if(response.status===403||response.status===404)throw new Error("No fue posible abrir el PDF cargado por el asesor. Verifica que el archivo esté compartido con tu cuenta o selecciónalo manualmente.");
+    throw new Error(`No fue posible descargar el PDF (código ${response.status}).`);
+  }
+  return response.blob();
+}

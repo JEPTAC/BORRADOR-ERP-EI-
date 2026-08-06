@@ -4,6 +4,7 @@ import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {wizard,modal,toast,serializeForm,paginationHtml,empty,loading,actionCards,guide} from "../core/ui.js";
 import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice,simpleStatus} from "../core/guided.js";
 import {uploadOrderFile} from "../services/drive.js";
+import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
 let currentView="cards";
@@ -128,6 +129,7 @@ export async function openOrder(orderId){
 }
 
 function renderSimpleOrder(host,data){
+  if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
   const order=data.order;
   const task=activeTask(data);
   const status=simpleStatus(task?.status||order.status);
