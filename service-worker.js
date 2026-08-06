@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-8-alistamiento-parcial-20260806";
+const CACHE="erp-electroingenieria-v10-8-2-estado-visual-20260806";
 const ASSETS=[
   "./",
   "./index.html",

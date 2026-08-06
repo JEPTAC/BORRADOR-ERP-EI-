@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  version: "10.8.0-alistamiento-parcial",
+  version: "10.8.2-estado-visual-alistamiento",
   build: "2026-08-06.2",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",

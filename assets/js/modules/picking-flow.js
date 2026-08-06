@@ -105,7 +105,11 @@ function renderVerification(host,data,{reload,refreshLists}){
 
   host.querySelectorAll("[data-result]").forEach(button=>button.addEventListener("click",()=>{
     const row=button.closest("[data-picking-item]");
-    row.querySelectorAll("[data-result]").forEach(item=>item.classList.toggle("selected",item===button));
+    row.querySelectorAll("[data-result]").forEach(item=>{
+      const selected=item===button;
+      item.classList.toggle("selected",selected);
+      item.setAttribute("aria-pressed",String(selected));
+    });
     row.dataset.result=button.dataset.result;
     const novelty=row.querySelector("[data-novelty-wrap]");
     novelty.hidden=button.dataset.result!=="MISSING";
@@ -185,8 +189,8 @@ function itemRow(item,index,saved={}){
       ${item.requires_cut?`<div><small>Corte</small><strong>${item.requested_cut_length?`${fmt.number(item.requested_cut_length,3)} ${fmt.escape(item.unit)}`:"Requiere corte"}</strong></div>`:""}
     </div>
     <div class="picking-mini-actions">
-      <button type="button" class="picking-result found ${result==="FOUND"?"selected":""}" data-result="FOUND">Encontrado</button>
-      <button type="button" class="picking-result missing ${result==="MISSING"?"selected":""}" data-result="MISSING">No encontrado</button>
+      <button type="button" class="picking-result found ${result==="FOUND"?"selected":""}" data-result="FOUND" aria-pressed="${result==="FOUND"?"true":"false"}"><span class="picking-result-icon" aria-hidden="true">✓</span><span>Encontrado</span></button>
+      <button type="button" class="picking-result missing ${result==="MISSING"?"selected":""}" data-result="MISSING" aria-pressed="${result==="MISSING"?"true":"false"}"><span class="picking-result-icon" aria-hidden="true">!</span><span>No encontrado</span></button>
     </div>
     <div class="picking-novelty" data-novelty-wrap ${result==="MISSING"?"":"hidden"}>
       <label>¿Por qué no se encontró? *</label>
