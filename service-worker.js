@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-11-despachos-entregas-20260806";
+const CACHE="erp-electroingenieria-v10-11-2-drive-institucional-20260806";
 const ASSETS=[
   "./",
   "./index.html",

@@ -1,0 +1,7 @@
+VALIDACIÓN V10.11.2
+- uploadOrderFile usa exclusivamente Apps Script institucional.
+- La URL /exec recuperada quedó configurada en config.js.
+- Se mantiene la firma pública uploadOrderFile(orderId,file,category,taskId,orderNumber).
+- Se conserva downloadDriveFile(fileId) para el lector PDF de Recepción.
+- No se modificaron RPC, SQL ni microprocesos.
+- package.json y Service Worker fueron versionados.
