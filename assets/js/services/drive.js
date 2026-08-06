@@ -82,3 +82,22 @@ export async function uploadOrderFile(orderId,file,category="EVIDENCE",taskId=nu
     metadata:{orderNumber:orderNumber||null,driveParentId:categoryFolder}
   });
 }
+
+
+/**
+ * Descarga un archivo de Google Drive como Blob para que el lector PDF pueda procesarlo.
+ * Mantiene el contrato esperado por receiving-order.js.
+ */
+export async function downloadDriveFile(fileId){
+  if(!fileId)throw new Error("No se recibió el identificador del archivo.");
+  const t=await token();
+  const response=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,{
+    method:"GET",
+    headers:{Authorization:`Bearer ${t}`}
+  });
+  if(!response.ok){
+    const detail=await response.text().catch(()=>"");
+    throw new Error(`No fue posible descargar el archivo de Google Drive (código ${response.status})${detail?".":""}`);
+  }
+  return response.blob();
+}
