@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-11-8-cierre-foto-unica-20260808";
+const CACHE="erp-electroingenieria-v10-11-9-tipos-ventas-20260808";
 const ASSETS=[
   "./",
   "./index.html",

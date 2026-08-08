@@ -101,7 +101,7 @@ function formSelect(name,items,valueKey=null,labelKey=null,selected=null){
 }
 
 function openCreateOrder(){
-  const types=state.catalogs.orderTypes||[],payments=state.catalogs.paymentConditions||[],routes=state.catalogs.deliveryRoutes||[];
+  const types=[{code:"PVE",name:"PVE"},{code:"PVC",name:"PVC"},{code:"PVN",name:"PVN"},{code:"PVP",name:"PVP"}],payments=state.catalogs.paymentConditions||[],routes=state.catalogs.deliveryRoutes||[];
   const departments=colombianDepartments();
   const departmentOptions=`<option value="">Selecciona el departamento</option>${departments.map(item=>`<option value="${fmt.escape(item.code)}">${fmt.escape(item.name)}</option>`).join("")}`;
   const assistant=wizard({
