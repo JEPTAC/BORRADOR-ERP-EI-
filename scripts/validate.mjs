@@ -38,7 +38,8 @@ check(!/\.from\s*\(/.test(executable),"El frontend contiene acceso directo .from
 const migrationsDir=path.join(root,"sql/migrations");
 const migrations=fs.existsSync(migrationsDir)?walk("sql/migrations",".sql").sort():[];
 const install=read("sql/00_INSTALL_ALL.sql");
-const sql=migrations.length?migrations.map(read).join("\n"):install;
+const supplementalSql=["sql/02_CORRECCION_RAIZ_COLAS_QA_PEDIDOS.sql"].filter(rel=>fs.existsSync(path.join(root,rel))).map(read).join("\n");
+const sql=(migrations.length?migrations.map(read).join("\n"):install)+"\n"+supplementalSql;
 for(const rel of migrations){
   const marker=read(rel).split("\n").slice(0,3).join("\n").trim();
   check(install.includes(marker),`La migración no está incluida en 00_INSTALL_ALL.sql: ${rel}`);
@@ -57,7 +58,7 @@ for(const rpc of rpcDefs){
 check(sql.includes("p.proname like 'erp_x_%'")&&sql.includes("grant execute on function %s to authenticated"),"No se encontró reconciliación final de permisos RPC.");
 check(sql.includes("revoke all on schema erp_supply from public, anon, authenticated"),"El esquema interno no queda oculto.");
 check(sql.includes("uq_active_task_per_order"),"Falta unicidad de tarea activa por pedido.");
-check(sql.includes("uq_open_session_per_user"),"Falta unicidad de sesión activa por operario.");
+check(sql.includes("drop index if exists erp_supply.uq_open_session_per_user")&&sql.includes("uq_open_session_per_task"),"La política de sesiones debe permitir varios pedidos por usuario y conservar una sola sesión abierta por tarea.");
 check(sql.includes("p_expected_version"),"Falta control de versión optimista.");
 check(sql.includes("p_idempotency_key"),"Falta idempotencia en acciones.");
 check(sql.includes("business_seconds_between"),"Falta cálculo de tiempo laboral.");

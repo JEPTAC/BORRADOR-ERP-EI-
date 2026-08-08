@@ -1,6 +1,6 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
-import {empty,loading,paginationHtml,toast} from "../core/ui.js";
+import {empty,loading,paginationHtml,toast,modal} from "../core/ui.js";
 import {navigate} from "../core/router.js";
 import {parallelWorkFooter} from "./active-work.js";
 
@@ -137,6 +137,7 @@ function renderCutGroup(host,data){
               <span>−</span><div><small>Merma</small><strong data-balance-scrap>0 m</strong></div>
               <span>=</span><div class="remaining"><small>Queda</small><strong data-balance-remaining>0 m</strong></div>
             </section>
+            <section class="cutting-approval-warning" data-cut-approval-warning hidden><span>APROBACIÓN REQUERIDA</span><strong>El remanente quedará por debajo de 50 m</strong><p>Solicita autorización antes de ejecutar el corte. Puedes seguir trabajando otros grupos mientras se decide.</p><button type="button" class="btn btn-warning" data-request-remainder-approval>Enviar a aprobación</button></section>
             <button type="button" class="btn btn-primary cutting-execute-all" data-execute-group>Ejecutar todos los cortes de esta referencia</button>
             <small class="cutting-calculator-note">La operación es transaccional: si algo falla, no se descuenta inventario ni se cierra ningún pedido.</small>
           </aside>
@@ -149,6 +150,15 @@ function renderCutGroup(host,data){
   host.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>host.replaceChildren()));
   bindReelMode(host,"group",reels);
   bindBalance(host,Number(group.totalLength||0));
+  host.querySelector("[data-request-remainder-approval]")?.addEventListener("click",()=>{
+    const payload=readReelPayload(host,"group");
+    if(!payload)return;
+    modal({title:"Aprobar remanente crítico",confirmLabel:"Enviar solicitud",size:"wide",body:`<div class="cutting-approval-dialog"><strong>El carreto quedará con menos de 50 metros.</strong><p>La ejecución seguirá bloqueada hasta que la excepción sea aprobada. Los demás grupos de Corte pueden seguir trabajando.</p></div><div class="field"><label>Enviar a *</label><select class="control" name="assignedRole" required><option value="jefe_logistica">Jefatura Logística</option><option value="auditoria">Auditoría</option><option value="gerencia">Gerencia</option></select></div><div class="field"><label>Justificación *</label><textarea class="control" name="reason" required rows="4" placeholder="Explica por qué conviene utilizar este carreto"></textarea></div>`,onConfirm:async dialog=>{
+      await api.requestCutRemainderApproval(group.groupKey,{...payload,assignedRole:dialog.querySelector('[name="assignedRole"]').value,reason:dialog.querySelector('[name="reason"]').value.trim()});
+      toast("Solicitud de remanente enviada a aprobación.","success",6500);
+    }});
+  });
+
   host.querySelector("[data-execute-group]")?.addEventListener("click",async event=>{
     const payload=readReelPayload(host,"group");
     if(!payload)return;
@@ -228,8 +238,10 @@ function bindBalance(host,required){
     const value=host.querySelector("[data-balance-remaining]");
     value.textContent=`${fmt.number(remaining,3)} m`;
     value.closest(".remaining")?.classList.toggle("negative",remaining<0);
+    const critical=remaining>0&&remaining<50;
+    const warning=host.querySelector("[data-cut-approval-warning]");if(warning)warning.hidden=!critical;
     const button=host.querySelector("[data-execute-group]");
-    if(button)button.disabled=reel<=0||remaining<0;
+    if(button){button.disabled=reel<=0||remaining<0;button.textContent=critical?"Ejecutar cortes (requiere aprobación)":"Ejecutar todos los cortes de esta referencia";}
   };
   box.querySelectorAll("input,select").forEach(control=>control.addEventListener("input",sync));
   sync();

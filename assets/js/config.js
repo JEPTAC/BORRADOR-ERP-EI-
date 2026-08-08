@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.11.9-tipos-ventas",
-  build: "2026-08-08.02",
+  version: "10.12.0-flujos-paralelos-excepciones",
+  build: "2026-08-08.03",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

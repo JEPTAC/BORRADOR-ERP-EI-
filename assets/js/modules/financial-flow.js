@@ -67,7 +67,7 @@ function renderReleaseManagement(host,data,{reload,refreshLists}){
 
   host.innerHTML=`
     <div class="modal-overlay simple-process-overlay">
-      <section class="modal simple-process-modal financial-simple-modal">
+      <section class="modal simple-process-modal financial-simple-modal" data-order-id="${fmt.escape(data.order.id)}">
         <header class="modal-head simple-process-head">
           <div><span class="wizard-kicker">${area}</span><h3>${fmt.escape(order.order_number)}</h3><p>${fmt.escape(order.client_name)} · ${fmt.escape(fmt.label(order.order_type_code))}</p></div>
           <button class="icon-btn" data-close aria-label="Cerrar">×</button>
@@ -201,6 +201,7 @@ function renderLogisticsBilling(host,data,{reload,refreshLists}){
   const invoice=registeredInvoice(data);
   const annex=pvpAnnex(data);
   const document=pvp?annex:invoice;
+  const noInvoiceApproval=!pvp&&approvedException(data,"PAYMENT_EXCEPTION","NO_INVOICE");
   const canAccept=actions.has("CLAIM")||actions.has("START")||actions.has("RESUME");
   const canRouteToCash=cashOrder&&!document;
   const documentTitle=pvp?"Anexo PVP":"Factura";
@@ -210,7 +211,7 @@ function renderLogisticsBilling(host,data,{reload,refreshLists}){
 
   host.innerHTML=`
     <div class="modal-overlay simple-process-overlay">
-      <section class="modal simple-process-modal financial-simple-modal billing-process-modal">
+      <section class="modal simple-process-modal financial-simple-modal billing-process-modal" data-order-id="${fmt.escape(data.order.id)}">
         <header class="modal-head simple-process-head">
           <div><span class="wizard-kicker">Facturación · Logística</span><h3>${fmt.escape(order.order_number)}</h3><p>${fmt.escape(order.client_name)} · ${fmt.escape(fmt.label(order.order_type_code))} · ${fmt.escape(fmt.route(order.delivery_route_code))}</p></div>
           <button class="icon-btn" data-close aria-label="Cerrar">×</button>
@@ -230,10 +231,11 @@ function renderLogisticsBilling(host,data,{reload,refreshLists}){
           </section>`:`<section class="cash-invoice-steps billing-document-steps">
             ${invoiceStep(1,"Pedido aceptado",true,"La gestión fue tomada por el responsable.",false,"accepted")}
             ${invoiceStep(2,`Subir ${documentTitle}`,Boolean(document),documentDetail,!document,pvp?"annex":"invoice")}
-            ${invoiceStep(3,"Enviar a despacho",false,`El pedido continuará a ${fmt.route(order.delivery_route_code)}.`,Boolean(document),"send")}
+            ${invoiceStep(3,"Enviar a despacho",false,noInvoiceApproval&&!document?"Salida sin factura autorizada. La aprobación quedará en la trazabilidad.":`El pedido continuará a ${fmt.route(order.delivery_route_code)}.`,Boolean(document)||noInvoiceApproval,"send")}
           </section>`}
 
           ${document?billingDocumentSummary(document,{pvp}):""}
+          ${noInvoiceApproval&&!document?'<section class="billing-approved-exception"><span>APROBACIÓN VIGENTE</span><strong>Salida sin factura autorizada</strong><small>La excepción fue aprobada y será auditada en el pedido.</small></section>':""}
           <details class="simple-details"><summary>Ver información completa del pedido</summary>${orderDetails(data)}</details>
         </div>
         ${parallelWorkFooter(order.current_step_code)}
@@ -259,11 +261,12 @@ function renderCashInvoice(host,data,{reload,refreshLists}){
   const actions=actionCodes(data);
   const accepted=task?.status==="IN_PROGRESS";
   const invoice=registeredInvoice(data);
+  const noInvoiceApproval=approvedException(data,"PAYMENT_EXCEPTION","NO_INVOICE");
   const canAccept=actions.has("CLAIM")||actions.has("START")||actions.has("RESUME");
 
   host.innerHTML=`
     <div class="modal-overlay simple-process-overlay">
-      <section class="modal simple-process-modal financial-simple-modal billing-process-modal">
+      <section class="modal simple-process-modal financial-simple-modal billing-process-modal" data-order-id="${fmt.escape(data.order.id)}">
         <header class="modal-head simple-process-head">
           <div><span class="wizard-kicker">Caja · Pedido pagado de contado</span><h3>${fmt.escape(order.order_number)}</h3><p>${fmt.escape(order.client_name)} · ${fmt.escape(fmt.route(order.delivery_route_code))}</p></div>
           <button class="icon-btn" data-close aria-label="Cerrar">×</button>
@@ -273,9 +276,10 @@ function renderCashInvoice(host,data,{reload,refreshLists}){
           <section class="cash-invoice-steps">
             ${invoiceStep(1,"Aceptar pedido",accepted,"Toma el pedido para iniciar la facturación.",!accepted&&canAccept,"accept")}
             ${invoiceStep(2,"Subir factura",Boolean(invoice),invoice?`Factura ${invoice.invoice_number} registrada.`:"Adjunta el PDF y registra los datos de la factura.",accepted&&!invoice,"invoice")}
-            ${invoiceStep(3,"Enviar a despacho",false,`El pedido irá a ${fmt.route(order.delivery_route_code)}.`,accepted&&Boolean(invoice),"send")}
+            ${invoiceStep(3,"Enviar a despacho",false,noInvoiceApproval&&!invoice?"Salida sin factura autorizada. La aprobación quedará trazada.":`El pedido irá a ${fmt.route(order.delivery_route_code)}.`,accepted&&(Boolean(invoice)||noInvoiceApproval),"send")}
           </section>
           ${invoice?billingDocumentSummary(invoice,{pvp:false}):""}
+          ${noInvoiceApproval&&!invoice?'<section class="billing-approved-exception"><span>APROBACIÓN VIGENTE</span><strong>Salida sin factura autorizada</strong><small>Caja puede enviar el pedido sin cargar factura.</small></section>':""}
           <details class="simple-details"><summary>Ver información completa del pedido</summary>${orderDetails(data)}</details>
         </div>
         ${parallelWorkFooter(order.current_step_code)}
@@ -342,12 +346,17 @@ async function completeBillingAndDispatch(data,{refreshLists,host,pvp}){
   let latest=await api.getOrder(data.order.id);
   if(pvp){
     if(!pvpAnnex(latest))throw new Error("Primero debes subir el Anexo PVP.");
-  }else if(!registeredInvoice(latest))throw new Error("Primero debes subir la factura.");
-  await completeChecklist(latest,pvp?"Anexo PVP verificado":"Factura verificada");
+  }else if(!registeredInvoice(latest)&&!approvedException(latest,"PAYMENT_EXCEPTION","NO_INVOICE"))throw new Error("Primero debes subir la factura o contar con una aprobación de salida sin factura.");
+  const exceptionWithoutInvoice=!pvp&&!registeredInvoice(latest)&&approvedException(latest,"PAYMENT_EXCEPTION","NO_INVOICE");
+  await completeChecklist(latest,pvp?"Anexo PVP verificado":exceptionWithoutInvoice?"Control cerrado por aprobación de salida sin factura":"Factura verificada");
   latest=await api.getOrder(data.order.id);
   if(!actionCodes(latest).has("COMPLETE"))throw new Error("El pedido no está listo para enviarse a despacho.");
-  await api.executeAction(data.order.id,"COMPLETE",{detail:pvp?"Anexo PVP cargado y pedido enviado a despacho":"Factura cargada y pedido enviado a despacho"},latest.order.version);
+  await api.executeAction(data.order.id,"COMPLETE",{detail:pvp?"Anexo PVP cargado y pedido enviado a despacho":exceptionWithoutInvoice?"Salida sin factura aprobada y pedido enviado a despacho":"Factura cargada y pedido enviado a despacho"},latest.order.version);
   toast(`Pedido enviado a ${fmt.route(data.order.delivery_route_code)}.`,"success",6000);refresh(refreshLists);closeHost(host);
+}
+
+function approvedException(data,requestType,exceptionCode){
+  return (data.approvals||[]).some(item=>String(item.request_type||item.requestType||"").toUpperCase()===requestType&&String(item.request_payload?.exceptionCode||item.requestPayload?.exceptionCode||"").toUpperCase()===exceptionCode&&["APPROVED","EXECUTED"].includes(String(item.status||"").toUpperCase()));
 }
 
 function orderDetails(data){

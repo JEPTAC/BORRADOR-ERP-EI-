@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-11-9-tipos-ventas-20260808";
+const CACHE="erp-electroingenieria-v10-12-0-flujos-paralelos-20260808";
 const ASSETS=[
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const ASSETS=[
   "./assets/js/config.js",
   "./assets/js/core/icons.js",
   "./assets/js/modules/active-work.js",
+  "./assets/js/modules/support-flow.js",
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",

@@ -236,7 +236,7 @@ function renderSimpleOrder(host,data){
   const next=recommendedAction(data,requirement);
   host.innerHTML=`
     <div class="modal-overlay simple-process-overlay">
-      <section class="modal simple-process-modal wide">
+      <section class="modal simple-process-modal wide" data-order-id="${fmt.escape(order.id)}">
         <header class="modal-head simple-process-head">
           <div><span class="wizard-kicker">Gestión rápida</span><h3>${fmt.escape(order.order_number)}</h3><p>${fmt.escape(order.client_name)} · ${fmt.escape(fmt.step(order.current_step_code))}</p></div>
           <button class="icon-btn" data-close aria-label="Cerrar">×</button>

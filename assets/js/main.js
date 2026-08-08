@@ -18,6 +18,7 @@ import {renderCredit} from "./modules/credit.js";
 import {renderReports} from "./modules/reports.js";
 import {renderCutting} from "./modules/cutting-flow.js";
 import {initActiveWork,moduleForStep} from "./modules/active-work.js";
+import {installSupportFlow} from "./modules/support-flow.js";
 
 const routes={dashboard:renderDashboard,orders:renderOrders,sales:renderOrders,credit:renderCredit,inventory:renderInventory,approvals:renderApprovals,vsm:renderVsm,imports:renderImports,qa:renderQa,audit:renderAudit,admin:renderAdmin,reports:renderReports,cutting:renderCutting};
 const queueModules={cartera:["CARTERA"],caja:["CAJA","CAJA_FACTURACION"],purchasing:["COMPRAS"],receiving:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"],picking:["ALISTAMIENTO"],billing:["FACTURACION"],shipping:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]};
@@ -26,7 +27,7 @@ const titles={dashboard:["Centro de operación","Visibilidad ejecutiva, cargas y
 async function bootAuthenticated(){
   document.querySelector("#app").innerHTML=loading("Preparando tu espacio de trabajo…");
   try{
-    const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();initActiveWork();
+    const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();initActiveWork();installSupportFlow();
     initRouter(async route=>{
       if(route.segments[0]==="order"&&route.segments[1]){navigate("orders");setTimeout(()=>openOrder(route.segments[1]),0);return}
       const moduleId=route.module;const [title,sub]=titles[moduleId]||["ERP Electroingeniería",""];updateShell(moduleId,title,sub);

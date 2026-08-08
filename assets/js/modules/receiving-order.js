@@ -2,7 +2,7 @@ import {api} from "../services/api.js";
 import {state} from "../core/state.js";
 import {fmt} from "../core/format.js";
 import {toast,loading} from "../core/ui.js";
-import {downloadDriveFile,uploadOrderFile} from "../services/drive.js";
+import {downloadDriveFile} from "../services/drive.js";
 import {readOrderPdf} from "../services/pdf-order-reader.js";
 import {parallelWorkFooter} from "./active-work.js";
 
@@ -67,20 +67,15 @@ function renderWorkbench(host,data,draft,callbacks){
   const content=draft.stage==="PDF"?pdfStage(data,draft):draft.stage==="EDIT"?editStage(data,draft):draft.stage==="ASSIGN"?assignmentStageLoading(data,draft):reviewStage(data,draft);
   host.innerHTML=baseShell(data,`
     ${progressBar(draft.stage)}
-    <div class="reception-workspace" data-reception-workspace>${content}</div>
-    <div class="reception-support-actions">
-      <button type="button" class="btn btn-ghost" data-reception-novelty>⚠ Novedad</button>
-      <button type="button" class="btn btn-ghost" data-reception-report>▤ Reporte</button>
-    </div>`,true);
+    <div class="reception-workspace" data-reception-workspace>${content}</div>`,true);
   bindClose(host);
-  bindSupportActions(host,data,callbacks);
   bindStage(host,data,draft,callbacks);
 }
 
 function baseShell(data,content,showDetails){
   const order=data.order;
   return `<div class="modal-overlay simple-process-overlay">
-    <section class="modal simple-process-modal wide reception-process-modal">
+    <section class="modal simple-process-modal wide reception-process-modal" data-order-id="${fmt.escape(data.order.id)}">
       <header class="modal-head simple-process-head reception-process-head">
         <div><span class="wizard-kicker">Recepción de pedidos</span><h3>${fmt.escape(order.order_number)}</h3><p>${fmt.escape(order.client_name)} · ${fmt.escape(fmt.label(order.order_type_code))}</p></div>
         <button class="icon-btn" data-close aria-label="Cerrar">×</button>
@@ -110,7 +105,7 @@ function reviewStage(data){
       <article><small>Referencia externa</small><strong>${fmt.escape(data.order.external_reference||"—")}</strong></article>
       <article><small>Materiales informados</small><strong>${items.length}</strong></article>
     </div>
-    ${advisorFiles(data.files||[],data.order.id)}
+    ${advisorFiles(data.files||[])}
     <div class="reception-current-lines">${readOnlyLines(items)}</div>
     <div class="reception-decision-grid">
       <button type="button" class="reception-decision-card correct" data-info-correct>
@@ -171,7 +166,6 @@ function assignmentStage(data,draft,pickingPool,cutPool){
 }
 
 function bindStage(host,data,draft,callbacks){
-  bindDriveDownloads(host,data);
   host.querySelector("[data-info-correct]")?.addEventListener("click",()=>{
     draft.mode="CORRECT";
     draft.stage="ASSIGN";
@@ -198,7 +192,7 @@ function bindStage(host,data,draft,callbacks){
     if(!file)return toast("Selecciona un PDF válido.","error");
     draft.sourceFileId=file.drive_file_id;
     draft.sourceFileName=file.file_name;
-    await processPdf(host,data,draft,callbacks,()=>downloadDriveFile(file.drive_file_id,data.order.id));
+    await processPdf(host,data,draft,callbacks,()=>downloadDriveFile(file.drive_file_id));
   });
   host.querySelector("[data-local-pdf]")?.addEventListener("change",async event=>{
     const file=event.target.files?.[0];
@@ -210,41 +204,6 @@ function bindStage(host,data,draft,callbacks){
 
   if(draft.stage==="EDIT")bindLineEditor(host,data,draft,callbacks);
   if(draft.stage==="ASSIGN")loadAssignmentStage(host,data,draft,callbacks);
-}
-
-function bindDriveDownloads(host,data){
-  host.querySelectorAll("[data-download-drive-file]").forEach(button=>{
-    button.addEventListener("click",async()=>{
-      const fileId=button.dataset.downloadDriveFile;
-      const file=(data.files||[]).find(item=>String(item.drive_file_id)===String(fileId));
-      if(!file)return toast("No se encontró el archivo solicitado.","error");
-      const previous=button.textContent;
-      button.disabled=true;
-      button.textContent="Descargando…";
-      try{
-        const blob=await downloadDriveFile(fileId,data.order.id);
-        downloadBlob(blob,file.file_name||"archivo");
-        toast("Archivo descargado.","success");
-      }catch(error){
-        toast(error.message,"error",7500);
-      }finally{
-        button.disabled=false;
-        button.textContent=previous;
-      }
-    });
-  });
-}
-
-function downloadBlob(blob,fileName){
-  const url=URL.createObjectURL(blob);
-  const link=document.createElement("a");
-  link.href=url;
-  link.download=String(fileName||"archivo");
-  link.hidden=true;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
 async function processPdf(host,data,draft,callbacks,getFile){
@@ -337,7 +296,7 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
   openSubdialog(host,{
     title:"Confirmar recepción y asignación",
     confirmLabel:"Sí, confirmar y enviar",
-    body:`<div class="reception-confirm-dialog"><strong>Esta acción cerrará Recepción de pedidos.</strong><p>Se guardarán las líneas definitivas. Si existe al menos un corte, el pedido pasará primero a Corte y después a Alistamiento; si no hay cortes, irá directamente a Alistamiento.</p><div>${summaryChip("Líneas",draft.lines.length)}${summaryChip("Con corte",draft.lines.filter(line=>line.requiresCut).length)}</div></div>`,
+    body:`<div class="reception-confirm-dialog"><strong>Esta acción cerrará Recepción de pedidos.</strong><p>Se guardarán las líneas definitivas. Alistamiento quedará activo inmediatamente y, si existen cortes, únicamente esas líneas se enviarán a Corte en paralelo.</p><div>${summaryChip("Líneas",draft.lines.length)}${summaryChip("Con corte",draft.lines.filter(line=>line.requiresCut).length)}</div></div>`,
     onConfirm:async button=>{
       button.disabled=true;
       try{
@@ -365,42 +324,8 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
         clearDraft(data.order.id);
         host.replaceChildren();
         refreshLists?.();
-        toast(draft.lines.some(line=>line.requiresCut)?"Recepción confirmada. El pedido fue enviado primero a Corte.":"Recepción confirmada. El pedido fue asignado a Alistamiento.","success",7000);
+        toast(draft.lines.some(line=>line.requiresCut)?"Recepción confirmada. Alistamiento quedó activo y los cortes fueron enviados a Corte en paralelo.":"Recepción confirmada. El pedido fue asignado a Alistamiento.","success",7000);
       }catch(error){toast(error.message,"error",7500);button.disabled=false}
-    }
-  });
-}
-
-function bindSupportActions(host,data,{reload}={}){
-  host.querySelector("[data-reception-novelty]")?.addEventListener("click",()=>openIncident(host,data,"NOVELTY",reload));
-  host.querySelector("[data-reception-report]")?.addEventListener("click",()=>openIncident(host,data,"REPORT",reload));
-}
-
-function openIncident(host,data,type,reload){
-  const isReport=type==="REPORT";
-  openSubdialog(host,{
-    title:isReport?"Registrar reporte":"Registrar novedad",
-    confirmLabel:isReport?"Guardar reporte":"Guardar novedad",
-    body:`<div class="form-grid">
-      ${isReport?`<div class="field"><label>Categoría *</label><select class="control" name="category" required><option value="DATA_DIFFERENCE">Diferencia de información</option><option value="WRONG_DOCUMENT">Documento incorrecto</option><option value="QUANTITY_DIFFERENCE">Diferencia de cantidades</option><option value="PROCESS_BLOCK">Bloqueo del proceso</option><option value="OTHER">Otro</option></select></div><div class="field"><label>Prioridad *</label><select class="control" name="priority" required><option value="MEDIUM">Media</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select></div>`:""}
-      <div class="field full"><label>${isReport?"Descripción del reporte":"Descripción de la novedad"} *</label><textarea class="control" name="body" required autofocus></textarea></div>
-      <div class="field full"><label>Evidencia opcional</label><input class="control" name="file" type="file"></div>
-    </div>`,
-    onConfirm:async button=>{
-      const layer=button.closest(".reception-subdialog-layer");
-      const body=layer.querySelector('[name="body"]').value.trim();
-      if(!body)throw new Error("Escribe la descripción.");
-      button.disabled=true;
-      try{
-        const category=layer.querySelector('[name="category"]')?.value||"OPERATIONAL_NOVELTY";
-        const priority=layer.querySelector('[name="priority"]')?.value||"MEDIUM";
-        await api.executeAction(data.order.id,"COMMENT",{body,commentType:type,visibility:"INTERNAL",metadata:{source:"RECEPCION_PEDIDO",category,priority}},data.order.version);
-        const file=layer.querySelector('[name="file"]')?.files?.[0];
-        if(file)await uploadOrderFile(data.order.id,file,isReport?"QUALITY":"EVIDENCE",activeTask(data)?.id,data.order.order_number);
-        toast(isReport?"Reporte guardado.":"Novedad guardada.","success");
-        layer.remove();
-        setTimeout(()=>reload?.(),80);
-      }catch(error){toast(error.message,"error",7000);button.disabled=false}
     }
   });
 }
@@ -418,6 +343,40 @@ function openSubdialog(host,{title,body,confirmLabel,onConfirm}){
       await onConfirm(event.currentTarget);
     }catch(error){toast(error.message||String(error),"error",7000);event.currentTarget.disabled=false}
   };
+}
+
+export function openPurchaseArrival(order,{refreshLists}={}){
+  const host=document.querySelector("#modal-root");
+  const status=String(order.arrivalStatus||"").toUpperCase();
+  const waiting=status==="WAITING";
+  const arrived=status==="ARRIVED";
+  host.innerHTML=`<div class="modal-overlay simple-process-overlay">
+    <section class="modal simple-process-modal wide reception-process-modal purchase-shadow-modal" data-order-id="${fmt.escape(order.id)}">
+      <header class="modal-head simple-process-head reception-process-head"><div><span class="wizard-kicker">Recepción · seguimiento de Compras</span><h3>${fmt.escape(order.orderNumber)}</h3><p>${fmt.escape(order.clientName)} · PVE</p></div><button class="icon-btn" data-close aria-label="Cerrar">×</button></header>
+      <div class="modal-body simple-process-body reception-process-body">
+        <section class="purchase-shadow-banner"><span>EN PARALELO CON COMPRAS</span><div><strong>${arrived?"Mercancía recibida":waiting?"Esperando llegada a la sede":"Confirma el estado físico de la mercancía"}</strong><p>Este seguimiento no duplica el pedido ni interfiere con la gestión de Compras.</p></div></section>
+        <section class="purchase-shadow-status">
+          <div><small>Etapa principal</small><strong>${fmt.escape(fmt.step(order.currentStep))}</strong></div>
+          <div><small>Estado de llegada</small><strong>${arrived?"Mercancía OK":waiting?"En espera":"Sin marcar"}</strong></div>
+          <div><small>Destino posterior</small><strong>Recepción de pedidos</strong></div>
+        </section>
+        <div class="purchase-shadow-actions">
+          ${arrived?`<button class="btn btn-success btn-large" disabled>✓ Mercancía OK</button><p>${order.currentStep==="COMPRAS"?"La mercancía ya está registrada. Cuando Compras libere el pedido, Recepción quedará habilitada automáticamente.":"El pedido ya puede continuar en Recepción."}</p>`:waiting?`<button class="btn btn-success btn-large" data-arrival="ARRIVED">Mercancía OK</button><p>Úsalo cuando la mercancía ya esté físicamente en la sede.</p>`:`<button class="btn btn-warning btn-large" data-arrival="WAITING">Marcar espera</button><p>Indica que Recepción está esperando la llegada física del PVE.</p>`}
+        </div>
+      </div>
+      ${parallelWorkFooter(order.currentStep||"COMPRAS")}
+    </section>
+  </div>`;
+  bindClose(host);
+  host.querySelector("[data-arrival]")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;button.disabled=true;
+    try{
+      const result=await api.setPurchaseArrival(order.id,button.dataset.arrival);
+      toast(button.dataset.arrival==="WAITING"?"Pedido marcado en espera de mercancía.":"Mercancía OK registrada.","success",6000);
+      refreshLists?.();window.__erpQueueRefresh?.();
+      host.replaceChildren();
+    }catch(error){toast(error.message,"error",7000);button.disabled=false}
+  });
 }
 
 function editableLine(line,index){
@@ -477,9 +436,9 @@ function readOnlyLines(items){
   return `<div class="reception-lines-preview">${items.map(item=>`<article><div><strong>${fmt.escape(item.reference||item.sku||item.description)}</strong><p>${fmt.escape(item.description)}</p></div><span>${fmt.number(item.quantity,3)} ${fmt.escape(item.unit||"UND")}</span>${item.requires_cut?'<b>Corte</b>':""}</article>`).join("")}</div>`;
 }
 
-function advisorFiles(files,orderId){
+function advisorFiles(files){
   if(!files.length)return '<div class="reception-file-warning"><strong>No hay archivos cargados.</strong><p>La información podrá asignarse manualmente o mediante un PDF local.</p></div>';
-  return `<section class="reception-files"><header><strong>Archivos enviados por el asesor</strong><span>${files.length} soporte(s)</span></header><div>${files.map(file=>`<article><span class="reception-file-icon">${isPdf(file)?"PDF":"DOC"}</span><div><strong>${fmt.escape(file.file_name)}</strong><small>${fmt.escape(file.file_category||"EVIDENCE")} · ${formatBytes(file.size_bytes)}</small></div>${file.drive_file_id?`<button type="button" class="btn btn-ghost" data-download-drive-file="${fmt.escape(file.drive_file_id)}" data-order-id="${fmt.escape(orderId)}">Descargar</button>`:""}</article>`).join("")}</div></section>`;
+  return `<section class="reception-files"><header><strong>Archivos enviados por el asesor</strong><span>${files.length} soporte(s)</span></header><div>${files.map(file=>`<article><span class="reception-file-icon">${isPdf(file)?"PDF":"DOC"}</span><div><strong>${fmt.escape(file.file_name)}</strong><small>${fmt.escape(file.file_category||"EVIDENCE")} · ${formatBytes(file.size_bytes)}</small></div>${file.web_view_link?`<a class="btn btn-ghost" href="${fmt.escape(file.web_view_link)}" target="_blank" rel="noopener">Abrir</a>`:""}</article>`).join("")}</div></section>`;
 }
 
 function fullDetails(data){

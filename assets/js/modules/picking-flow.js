@@ -30,10 +30,10 @@ function renderStandaloneCutPickup(host,data,{refreshLists}={}){
     resolution_code:item.resolution,lot_number:item.lotNumber,location:item.location
   }));
   host.innerHTML=`<div class="modal-overlay simple-process-overlay">
-    <section class="modal simple-process-modal wide picking-process-modal cut-pickup-standalone">
+    <section class="modal simple-process-modal wide picking-process-modal cut-pickup-standalone" data-order-id="${fmt.escape(order.id)}">
       <header class="modal-head simple-process-head picking-process-head"><div><span class="wizard-kicker">Alistamiento · Recogida desde Corte</span><h3>${fmt.escape(order.orderNumber)}</h3><p>${fmt.escape(order.clientName)} · ${fmt.escape(fmt.route(order.route))}</p></div><button class="icon-btn" data-close aria-label="Cerrar">×</button></header>
       <div class="modal-body simple-process-body picking-process-body">
-        <section class="cut-pickup-early-banner"><span>LISTO PARA RECOGER</span><div><strong>${data.pickupWhileCutting?"Recogida anticipada":"Cortes terminados"}</strong><p>${data.pickupWhileCutting?`Puedes recoger estas referencias ahora. El pedido permanece en Corte porque todavía faltan ${fmt.number(data.cutsStillPending||0)} corte(s).`:"Confirma las referencias entregadas por Corte antes de iniciar la verificación normal."}</p></div></section>
+        <section class="cut-pickup-early-banner"><span>LISTO PARA RECOGER</span><div><strong>${data.pickupWhileCutting?"Recogida anticipada":"Cortes terminados"}</strong><p>${data.pickupWhileCutting?`Puedes recoger estas referencias ahora. Otras referencias del mismo pedido todavía continúan en Corte mientras Alistamiento avanza en paralelo.`:"Confirma las referencias entregadas por Corte antes de iniciar la verificación normal."}</p></div></section>
         <section class="cut-pickup-workbench">
           <header class="cut-pickup-stage-head"><div><span class="picking-step-tag">Entrega física</span><h4>Cortes por recoger</h4><p>Marca únicamente lo que recibiste físicamente.</p></div><div class="cut-pickup-counter"><strong data-cut-pickup-selected>0</strong><span>de ${items.length} marcados</span></div></header>
           <div class="cut-pickup-items">${items.map((item,index)=>cutPickupItem(item,index)).join("")}</div>
@@ -110,7 +110,7 @@ export function renderPickingFlow(host,data,{reload,refreshLists}={}){
     return;
   }
 
-  renderVerification(host,data,{reload,refreshLists});
+  renderVerification(host,data,{reload,refreshLists}).catch(error=>{toast(error.message,"error",7500);host.replaceChildren();});
 }
 
 function renderCutPickup(host,data,{reload,refreshLists}){
@@ -191,27 +191,42 @@ function bindPickupSelection(host,items,onConfirm){
   sync();
 }
 
-function renderVerification(host,data,{reload,refreshLists}){
+async function renderVerification(host,data,{reload,refreshLists}){
   const task=activeTask(data);
-  const pending=pendingItems(data);
-  const draft=loadDraft(task,pending);
+  const allPending=pendingItems(data);
+  const cutMap=new Map((data.cutRequirements||[]).map(item=>[item.order_item_id,item]));
+  const cutsPending=(data.cutRequirements||[]).filter(item=>String(item.process_status||"").toUpperCase()!=="READY");
+  const processable=allPending.filter(item=>{
+    if(!item.requires_cut)return true;
+    const cut=cutMap.get(item.id);
+    return cut&&String(cut.process_status||"").toUpperCase()==="READY"&&String(cut.collection_status||"").toUpperCase()==="COLLECTED";
+  });
+  let serverDraft={};
+  try{
+    const pre=await api.pickingPrecheck(data.order.id);
+    serverDraft=Object.fromEntries((pre.items||[]).map(item=>[item.orderItemId,{result:item.result||"",novelty:item.novelty||""}]));
+  }catch(error){
+    console.warn("[ALISTAMIENTO PRECHECK]",error);
+  }
+  const localDraft=loadDraft(task,processable);
+  const draft=Object.fromEntries(processable.map(item=>[item.id,{...(serverDraft[item.id]||{}),...(localDraft[item.id]||{})}]));
   const roundNo=rounds(data).length+1;
   const previous=rounds(data).length;
+  const parallel=cutsPending.length>0;
 
   host.innerHTML=shell(data,`
     ${pickingProgress(data,"VERIFY")}
     ${partialBanner(data)}
+    ${parallel?`<section class="picking-parallel-cut-banner"><span>CORTE EN PARALELO</span><div><strong>${cutsPending.length} referencia(s) siguen en Corte</strong><p>Alista ahora la mercancía que no requiere corte. El avance se guarda y el pedido no podrá pasar a Facturación hasta recoger y verificar los cortes pendientes.</p></div></section>`:""}
     <section class="picking-verification-card">
       <header class="picking-stage-head">
-        <div><span class="picking-step-tag">Ronda ${roundNo}</span><h4>Verificación de mercancía</h4><p>${previous?"Solo aparecen los elementos pendientes de la salida anterior.":"Marca Encontrado o No encontrado en cada línea."}</p></div>
-        <div class="picking-counter"><strong data-picking-verified>0</strong><span>de ${pending.length} verificadas</span></div>
+        <div><span class="picking-step-tag">Ronda ${roundNo}</span><h4>Verificación de mercancía</h4><p>${parallel?"Trabaja únicamente las líneas disponibles mientras Corte avanza al mismo tiempo.":previous?"Solo aparecen los elementos pendientes de la salida anterior.":"Marca Encontrado o No encontrado en cada línea."}</p></div>
+        <div class="picking-counter"><strong data-picking-verified>0</strong><span>de ${processable.length} verificadas</span></div>
       </header>
-      <div class="picking-items" data-picking-items>
-        ${pending.map((item,index)=>itemRow(item,index,draft[item.id])).join("")}
-      </div>
+      ${processable.length?`<div class="picking-items" data-picking-items>${processable.map((item,index)=>itemRow(item,index,draft[item.id])).join("")}</div>`:`<div class="picking-waiting-cuts"><strong>No hay líneas disponibles para alistar todavía.</strong><p>Todas las referencias pendientes están actualmente en Corte. Puedes cerrar este popup y atender otro pedido.</p></div>`}
       <section class="picking-result-summary" data-picking-summary></section>
-      <button type="button" class="btn btn-primary picking-send-button" data-picking-send disabled>Enviar a facturación</button>
-      <small class="picking-route-note">${hasCutHistory(data)?"Los cortes ya fueron procesados y recogidos. Al finalizar esta verificación, el pedido continuará al proceso de facturación correspondiente.":"El pedido continuará directamente al proceso de facturación correspondiente."}</small>
+      ${processable.length?`<button type="button" class="btn btn-primary picking-send-button" data-picking-send disabled>${parallel?"Guardar avance y esperar cortes":"Enviar a facturación"}</button>`:""}
+      <small class="picking-route-note">${parallel?"Corte y Alistamiento están trabajando sobre el mismo pedido en paralelo, sin duplicarlo.":hasCutHistory(data)?"Los cortes ya fueron procesados y recogidos. Al finalizar esta verificación, el pedido continuará al proceso de facturación correspondiente.":"El pedido continuará directamente al proceso de facturación correspondiente."}</small>
     </section>
     ${roundHistory(data)}
   `);
@@ -224,30 +239,36 @@ function renderVerification(host,data,{reload,refreshLists}){
     const missing=results.filter(row=>row.result==="MISSING").length;
     const found=results.filter(row=>row.result==="FOUND").length;
     const missingWithoutReason=results.some(row=>row.result==="MISSING"&&!row.novelty);
-    host.querySelector("[data-picking-verified]").textContent=String(verified);
-    host.querySelector("[data-picking-summary]").innerHTML=summaryMarkup(pending.length,found,missing,verified);
-    const send=host.querySelector("[data-picking-send]");
-    send.disabled=verified!==pending.length||missingWithoutReason||pending.length===0;
+    const counter=host.querySelector("[data-picking-verified]");if(counter)counter.textContent=String(verified);
+    const summary=host.querySelector("[data-picking-summary]");if(summary)summary.innerHTML=summaryMarkup(processable.length,found,missing,verified);
+    const send=host.querySelector("[data-picking-send]");if(send)send.disabled=verified!==processable.length||missingWithoutReason||processable.length===0;
     saveDraft(task,results);
   };
 
   host.querySelectorAll("[data-result]").forEach(button=>button.addEventListener("click",()=>{
     const row=button.closest("[data-picking-item]");
-    row.querySelectorAll("[data-result]").forEach(item=>{
-      const selected=item===button;
-      item.classList.toggle("selected",selected);
-      item.setAttribute("aria-pressed",String(selected));
-    });
+    row.querySelectorAll("[data-result]").forEach(item=>{const selected=item===button;item.classList.toggle("selected",selected);item.setAttribute("aria-pressed",String(selected));});
     row.dataset.result=button.dataset.result;
-    const novelty=row.querySelector("[data-novelty-wrap]");
-    novelty.hidden=button.dataset.result!=="MISSING";
-    const textarea=novelty.querySelector("textarea");
-    textarea.required=button.dataset.result==="MISSING";
-    if(button.dataset.result==="FOUND")textarea.value="";
+    const novelty=row.querySelector("[data-novelty-wrap]");novelty.hidden=button.dataset.result!=="MISSING";
+    const textarea=novelty.querySelector("textarea");textarea.required=button.dataset.result==="MISSING";if(button.dataset.result==="FOUND")textarea.value="";
     sync();
   }));
   host.querySelectorAll("[data-picking-item] textarea").forEach(textarea=>textarea.addEventListener("input",sync));
-  host.querySelector("[data-picking-send]")?.addEventListener("click",()=>openConfirmation(host,data,task,refreshLists));
+  host.querySelector("[data-picking-send]")?.addEventListener("click",async event=>{
+    const results=[...host.querySelectorAll("[data-picking-item]")].map(readRow);
+    if(parallel){
+      event.currentTarget.disabled=true;
+      try{
+        await api.savePickingPrecheck(data.order.id,results);
+        let latest=await api.getOrder(data.order.id);
+        const actions=actionCodes(latest);
+        if(actions.has("WAIT"))await api.executeAction(latest.order.id,"WAIT",{reason:"Esperando cortes pendientes",detail:`Alistamiento paralelo guardado. ${cutsPending.length} referencia(s) continúan en Corte.`},latest.order.version);
+        clearDraft(task);
+        toast("Avance de Alistamiento guardado. Corte continúa en paralelo.","success",6500);
+        refreshLists?.();host.replaceChildren();
+      }catch(error){toast(error.message,"error",7500);event.currentTarget.disabled=false}
+    }else openConfirmation(host,data,task,refreshLists);
+  });
   sync();
 }
 
@@ -284,7 +305,7 @@ function renderPartialResume(host,data,{reload,refreshLists}){
 function shell(data,content){
   const fulfillment=data.order.metadata?.fulfillment||{};
   return `<div class="modal-overlay simple-process-overlay">
-    <section class="modal simple-process-modal wide picking-process-modal">
+    <section class="modal simple-process-modal wide picking-process-modal" data-order-id="${fmt.escape(data.order.id)}">
       <header class="modal-head simple-process-head picking-process-head">
         <div><span class="wizard-kicker">Alistamiento</span><h3>${fmt.escape(data.order.order_number)}</h3><p>${fmt.escape(data.order.client_name)} · ${fmt.escape(fmt.label(data.order.order_type_code))}</p></div>
         <div class="picking-head-actions">${fulfillment.partialLabel||fulfillment.status==="PARTIAL"?'<span class="picking-partial-badge">PEDIDO PARCIAL</span>':""}<button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
@@ -323,7 +344,7 @@ function itemRow(item,index,saved={}){
     <div class="picking-novelty" data-novelty-wrap ${result==="MISSING"?"":"hidden"}>
       <label>¿Por qué no se encontró? *</label>
       <textarea class="control" rows="2" placeholder="Ejemplo: referencia agotada, ubicación vacía o cantidad incompleta" ${result==="MISSING"?"required":""}>${fmt.escape(novelty)}</textarea>
-      <small>La novedad quedará registrada automáticamente en el pedido.</small>
+      <small>El faltante quedará trazado en esta ronda y podrá generar una salida parcial.</small>
     </div>
   </article>`;
 }
