@@ -1015,3 +1015,10 @@ textarea.control{min-height:124px}
 .shipping-sales-address small{display:block;margin-top:8px;color:#718193;font-size:.78rem}
 @media(max-width:850px){.sales-address-grid{grid-template-columns:1fr 1fr}.sales-address-grid .full{grid-column:1/-1}}
 @media(max-width:620px){.sales-address-card{padding:16px}.sales-address-head{flex-direction:column}.sales-address-grid{grid-template-columns:1fr}.sales-address-grid .full{grid-column:auto}.shipping-progress-three{grid-template-columns:1fr}.shipping-sales-address header{align-items:flex-start;flex-direction:column}.shipping-sales-address header strong{text-align:left}}
+
+/* V10.11.8 · Cierre de despacho en una sola acción */
+.shipping-photo-only{min-height:360px}
+.shipping-photo-only .btn-hero{min-width:min(100%,360px)}
+.shipping-photo-help{display:block;max-width:520px;margin-top:12px;color:#6b7d8f;font-size:.9rem;line-height:1.45}
+.shipping-auto-close{display:flex;flex-direction:column;align-items:center;gap:7px;width:min(100%,560px);padding:18px 20px;border:1px solid #9fd4b8;border-radius:16px;background:#f3fbf7;color:#285943}
+.shipping-auto-close strong{font-size:1.08rem}.shipping-auto-close small{font-size:.9rem;color:#607669}.shipping-auto-close .btn{margin-top:8px}

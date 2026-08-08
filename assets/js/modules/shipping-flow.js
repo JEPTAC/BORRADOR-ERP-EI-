@@ -87,31 +87,100 @@ function renderDispatch(host,data,{reload,refreshLists}){
   });
 }
 
-function renderClosure(host,data,{reload,refreshLists}){
-  const task=activeTask(data),actions=actionSet(data),delivery=latestDelivery(data),place=destination(delivery,data.order),evidence=deliveryEvidence(data,task?.id),started=task?.status==="IN_PROGRESS";
-  if(!started){
-    shell(host,data,`<section class="shipping-take-card closure"><span class="shipping-route-chip">Cierre de entrega</span><div class="shipping-take-icon">✓</div><h4>Confirma la llegada del pedido</h4><p>Cuando la mercancía haya llegado, toma el pedido para subir la foto y finalizarlo.</p><button class="btn btn-primary btn-hero" data-take-closure>Tomar pedido</button></section>${dispatchRecap(delivery,place)}`);
-    host.querySelector("[data-take-closure]")?.addEventListener("click",async button=>{
-      button.disabled=true;
-      try{
-        let current=data,available=actionSet(current);
-        if(available.has("CLAIM")){await api.executeAction(current.order.id,"CLAIM",{detail:"Cierre de entrega tomado"},current.order.version);current=await api.getOrder(current.order.id);available=actionSet(current)}
-        if(available.has("START"))await api.executeAction(current.order.id,"START",{detail:"Verificación final de entrega iniciada"},current.order.version);
-        else if(available.has("RESUME"))await api.executeAction(current.order.id,"RESUME",{detail:"Cierre de entrega retomado"},current.order.version);
-        toast("Cierre iniciado. Sube la foto de entrega.","success");refreshLists?.();await reload?.();
-      }catch(error){toast(error.message,"error",7000);button.disabled=false}
-    });
-    return;
-  }
-
-  shell(host,data,`<section class="shipping-progress closure-progress">${progressItem(1,"Despacho",true)}${progressItem(2,"Llegada",true)}${progressItem(3,"Foto de entrega",Boolean(evidence),!evidence)}${progressItem(4,"Pedido finalizado",false,Boolean(evidence))}</section>
+function renderClosure(host,data,{refreshLists}){
+  const delivery=latestDelivery(data),place=destination(delivery,data.order),task=activeTask(data),evidence=deliveryEvidence(data,task?.id);
+  shell(host,data,`<section class="shipping-take-card closure shipping-photo-only">
+      <span class="shipping-route-chip">Cierre de despacho</span>
+      <div class="shipping-take-icon">▣</div>
+      <h4>Anexar foto del vehículo cargado</h4>
+      <p>Esta es la última acción del despacho. Sube una foto donde se vea la mercancía cargada en el vehículo. Cuando la carga termine correctamente, el ERP cerrará el pedido automáticamente.</p>
+      ${evidence
+        ? `<div class="shipping-auto-close" data-auto-close-status><strong>Foto registrada</strong><small>Finalizando pedido automáticamente…</small></div>`
+        : `<input type="file" accept="image/*" capture="environment" data-closure-photo hidden>
+           <button class="btn btn-success btn-hero" data-attach-closure-photo>Anexar foto</button>
+           <small class="shipping-photo-help">No tendrás que confirmar ningún otro paso después de subirla.</small>`}
+    </section>
     ${dispatchRecap(delivery,place)}
-    <section class="delivery-photo-panel ${evidence?"complete":""}"><div class="delivery-photo-copy"><span>${evidence?"Evidencia cargada":"Evidencia obligatoria"}</span><h4>Subir foto de la mercancía entregada</h4><p>La imagen debe permitir identificar que el pedido llegó a la dirección registrada por Ventas.</p></div>${evidence?`<article class="delivery-file-card"><div><strong>${fmt.escape(evidence.file_name)}</strong><small>${fmt.date(evidence.created_at)}</small></div>${evidence.web_view_link?`<a class="btn btn-ghost" href="${fmt.escape(evidence.web_view_link)}" target="_blank" rel="noopener">Ver foto</a>`:""}</article>`:`<button class="btn btn-primary btn-large" data-upload-delivery-photo>Subir foto</button>`}</section>
-    <section class="shipping-finalize-panel ${evidence?"ready":"pending"}"><div><span>${evidence?"Entrega comprobada":"Pendiente de evidencia"}</span><h4>Pedido finalizado</h4><p>${evidence?"Al confirmar, el pedido se cerrará y quedarán calculados sus tiempos por proceso.":"Sube la foto antes de finalizar."}</p></div><button class="btn btn-success btn-hero" data-finish-delivery ${evidence?"":"disabled"}>Pedido finalizado</button></section>
     <details class="simple-details"><summary>Ver trazabilidad y tiempos</summary>${shippingSummary(data)}</details>`);
 
-  host.querySelector("[data-upload-delivery-photo]")?.addEventListener("click",()=>openEvidenceDialog(data,{reload,refreshLists}));
-  host.querySelector("[data-finish-delivery]")?.addEventListener("click",()=>openFinalizeDialog(data,{host,refreshLists}));
+  const input=host.querySelector('[data-closure-photo]');
+  const button=host.querySelector('[data-attach-closure-photo]');
+  if(button&&input){
+    button.addEventListener('click',()=>input.click());
+    input.addEventListener('change',async()=>{
+      const file=input.files?.[0];
+      if(!file)return;
+      if(!file.type?.startsWith('image/')){toast('Debes seleccionar una imagen.','error',6500);input.value='';return}
+      button.disabled=true;
+      const original=button.textContent;
+      button.textContent='Preparando cierre…';
+      try{
+        const current=await ensureClosureInProgress(data);
+        const closureTask=activeTask(current);
+        if(!closureTask?.id)throw new Error('No se encontró la tarea activa de cierre.');
+        button.textContent='Subiendo foto…';
+        const uploaded=await uploadOrderFile(current.order.id,file,'DELIVERY_EVIDENCE',closureTask.id,current.order.order_number);
+        if(!uploaded?.file?.id)throw new Error('Google Drive no devolvió el archivo cargado.');
+        button.textContent='Cerrando pedido…';
+        await api.registerShippingEvidence(current.order.id,{fileId:uploaded.file.id,taskId:closureTask.id});
+        await api.finalizeShipping(current.order.id,{});
+        toast('Foto registrada. Pedido finalizado correctamente.','success',7000);
+        host.replaceChildren();
+        refreshLists?.();
+      }catch(error){
+        toast(error.message||'No fue posible finalizar el pedido.','error',8000);
+        button.disabled=false;
+        button.textContent=original;
+        input.value='';
+      }
+    });
+  }
+
+  if(evidence){
+    queueMicrotask(async()=>{
+      try{
+        const current=await ensureClosureInProgress(data);
+        await api.finalizeShipping(current.order.id,{});
+        toast('Pedido finalizado correctamente.','success',6500);
+        host.replaceChildren();
+        refreshLists?.();
+      }catch(error){
+        const status=host.querySelector('[data-auto-close-status]');
+        if(status)status.innerHTML=`<strong>La foto ya está registrada</strong><small>${fmt.escape(error.message||'No fue posible cerrar automáticamente.')}</small><button class="btn btn-success btn-large" data-retry-auto-close>Reintentar cierre</button>`;
+        host.querySelector('[data-retry-auto-close]')?.addEventListener('click',()=>renderClosure(host,data,{refreshLists}));
+      }
+    });
+  }
+}
+
+async function ensureClosureInProgress(data){
+  let current=await api.getOrder(data.order.id);
+  if(current?.order?.current_step_code!=='CLOSURE')throw new Error('El pedido ya no está en la etapa de cierre.');
+  let task=activeTask(current);
+  if(!task)throw new Error('No existe una tarea activa de cierre para este pedido.');
+  if(task.status==='IN_PROGRESS')return current;
+
+  let available=actionSet(current);
+  if(available.has('CLAIM')){
+    await api.executeAction(current.order.id,'CLAIM',{detail:'Cierre de despacho asignado automáticamente al anexar la foto'},current.order.version);
+    current=await api.getOrder(current.order.id);
+    task=activeTask(current);
+    available=actionSet(current);
+  }
+
+  if(task?.status==='WAITING'||task?.status==='BLOCKED'){
+    if(available.has('RESUME')){
+      await api.executeAction(current.order.id,'RESUME',{detail:'Cierre de despacho retomado automáticamente para anexar la foto'},current.order.version);
+      current=await api.getOrder(current.order.id);
+    }
+  }else if(task?.status!=='IN_PROGRESS'&&available.has('START')){
+    await api.executeAction(current.order.id,'START',{detail:'Cierre de despacho iniciado automáticamente para anexar la foto'},current.order.version);
+    current=await api.getOrder(current.order.id);
+  }
+
+  task=activeTask(current);
+  if(task?.status!=='IN_PROGRESS')throw new Error('No fue posible iniciar automáticamente la etapa de cierre.');
+  return current;
 }
 
 function openGuideDialog(data,delivery,{reload,refreshLists}){
@@ -119,19 +188,6 @@ function openGuideDialog(data,delivery,{reload,refreshLists}){
     const trackingNumber=dialog.querySelector('[name="trackingNumber"]').value.trim(),carrier=dialog.querySelector('[name="carrier"]').value.trim(),file=dialog.querySelector('[name="guideFile"]').files[0];
     let fileId=null;if(file){const uploaded=await uploadOrderFile(data.order.id,file,"SHIPPING_GUIDE",activeTask(data)?.id,data.order.order_number);fileId=uploaded?.file?.id||null}
     await api.saveShippingGuide(data.order.id,{trackingNumber,carrier:carrier||null,guideFileId:fileId});toast("Guía guardada.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
-  }});
-}
-
-function openEvidenceDialog(data,{reload,refreshLists}){
-  modal({title:"Subir foto de entrega",confirmLabel:"Subir evidencia",body:`<div class="shipping-dialog-intro"><strong>Foto obligatoria</strong><p>Selecciona una imagen en la que se identifique la mercancía entregada.</p></div><div class="field"><label>Foto *</label><input class="control" name="file" type="file" accept="image/*" capture="environment" required></div>`,onConfirm:async dialog=>{
-    const file=dialog.querySelector('[name="file"]').files[0];if(!file?.type?.startsWith("image/"))throw new Error("Debes seleccionar una imagen.");
-    const task=activeTask(data),uploaded=await uploadOrderFile(data.order.id,file,"DELIVERY_EVIDENCE",task?.id,data.order.order_number);await api.registerShippingEvidence(data.order.id,{fileId:uploaded?.file?.id,taskId:task?.id});toast("Foto de entrega cargada.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
-  }});
-}
-
-function openFinalizeDialog(data,{host,refreshLists}){
-  modal({title:"Finalizar pedido",confirmLabel:"Sí, finalizar pedido",body:`<div class="wizard-confirm-box"><strong>El pedido quedará cerrado</strong><p>La entrega, la evidencia y todos los tiempos del flujo permanecerán disponibles en la trazabilidad.</p></div><div class="field"><label>Recibido por, opcional</label><input class="control" name="receivedBy" placeholder="Nombre de quien recibió"></div>`,onConfirm:async dialog=>{
-    const receivedBy=dialog.querySelector('[name="receivedBy"]').value.trim();await api.finalizeShipping(data.order.id,{receivedBy:receivedBy||null});toast("Pedido finalizado correctamente.","success",7000);document.querySelector("#modal-root")?.replaceChildren();host?.replaceChildren();refreshLists?.();
   }});
 }
 
