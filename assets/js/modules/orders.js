@@ -4,6 +4,7 @@ import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {wizard,modal,toast,serializeForm,paginationHtml,empty,loading,actionCards,guide} from "../core/ui.js";
 import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice,simpleStatus} from "../core/guided.js";
 import {uploadOrderFile} from "../services/drive.js";
+import {colombianDepartments,colombianMunicipalities} from "../services/location.js";
 import {isOrderReceptionStep,renderOrderReception} from "./receiving-order.js";
 import {isFinancialFlowStep,renderFinancialFlow} from "./financial-flow.js";
 import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
@@ -101,14 +102,47 @@ function formSelect(name,items,valueKey=null,labelKey=null,selected=null){
 
 function openCreateOrder(){
   const types=state.catalogs.orderTypes||[],payments=state.catalogs.paymentConditions||[],routes=state.catalogs.deliveryRoutes||[];
+  const departments=colombianDepartments();
+  const departmentOptions=`<option value="">Selecciona el departamento</option>${departments.map(item=>`<option value="${fmt.escape(item.code)}">${fmt.escape(item.name)}</option>`).join("")}`;
   const assistant=wizard({
     title:"Crear pedido",
-    subtitle:"Solo necesitas registrar el pedido, el cliente y los materiales.",
+    subtitle:"Registra el pedido, la dirección obligatoria y los materiales en tres pasos.",
     finishLabel:"Crear pedido",
     steps:[
-      {title:"Pedido y cliente",description:"Completa la información principal.",content:`<div class="form-grid"><div class="field"><label>Número de pedido *</label><input class="control" name="orderNumber" placeholder="Ejemplo: PVC-5001" required autofocus></div><div class="field"><label>Cliente *</label><input class="control" name="clientName" required></div><div class="field"><label>Tipo *</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div><div class="field"><label>Condición de pago *</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div><div class="field full order-routing-conditions" data-routing-conditions><div class="conditional-routing-card" data-credit-arrears hidden><label><input type="checkbox" name="hasCreditArrears"> <span><strong>Cliente con mora en crédito</strong><small>Solo al marcarlo, los pedidos PVC o PVP pasarán primero por Cartera.</small></span></label></div><div class="conditional-routing-card" data-cash-hold hidden><label><input type="checkbox" name="heldByCashier"> <span><strong>Pedido retenido por Caja</strong><small>Solo al marcarlo, el pedido PVN pasará primero por Caja.</small></span></label></div><div class="conditional-routing-direct" data-direct-reception><strong>Ruta inicial: Recepción de pedidos</strong><small>Si no existe una condición excepcional, el pedido no pasa por Cartera ni Caja.</small></div></div><div class="field"><label>Entrega *</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div><div class="field"><label>Prioridad *</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div></div><details class="simple-details"><summary>Agregar más datos del cliente, si los tienes</summary><div class="form-grid" style="padding:14px"><div class="field"><label>NIT o documento</label><input class="control" name="clientDocument"></div><div class="field"><label>Ciudad</label><input class="control" name="clientCity"></div><div class="field"><label>Dirección</label><input class="control" name="clientAddress"></div><div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div><div class="field"><label>Referencia externa</label><input class="control" name="externalReference"></div><div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div></div></details>`},
+      {title:"Pedido, cliente y entrega",description:"La dirección se registra aquí y Logística solo agregará la guía.",content:`
+        <div class="form-grid">
+          <div class="field"><label>Número de pedido *</label><input class="control" name="orderNumber" placeholder="Ejemplo: PVC-5001" required autofocus></div>
+          <div class="field"><label>Cliente *</label><input class="control" name="clientName" required></div>
+          <div class="field"><label>Tipo *</label>${formSelect("orderType",types,"code","name",types[0]?.code)}</div>
+          <div class="field"><label>Condición de pago *</label>${formSelect("paymentCondition",payments,"code","name",payments[0]?.code)}</div>
+          <div class="field full order-routing-conditions" data-routing-conditions>
+            <div class="conditional-routing-card" data-credit-arrears hidden><label><input type="checkbox" name="hasCreditArrears"> <span><strong>Cliente con mora en crédito</strong><small>Solo al marcarlo, los pedidos PVC o PVP pasarán primero por Cartera.</small></span></label></div>
+            <div class="conditional-routing-card" data-cash-hold hidden><label><input type="checkbox" name="heldByCashier"> <span><strong>Pedido retenido por Caja</strong><small>Solo al marcarlo, el pedido PVN pasará primero por Caja.</small></span></label></div>
+            <div class="conditional-routing-direct" data-direct-reception><strong>Ruta inicial: Recepción de pedidos</strong><small>Si no existe una condición excepcional, el pedido no pasa por Cartera ni Caja.</small></div>
+          </div>
+          <div class="field"><label>Modalidad de entrega *</label>${formSelect("deliveryRoute",routes,"code","name",routes[0]?.code)}</div>
+          <div class="field"><label>Prioridad *</label>${formSelect("priority",["LOW","MEDIUM","HIGH","URGENT","CRITICAL"])}</div>
+        </div>
+        <section class="sales-address-card">
+          <header class="sales-address-head"><span>Dirección</span><div><strong>Lugar de entrega obligatorio</strong><p>Selecciona el departamento y el municipio. Después escribe la dirección exactamente como debe verla Logística.</p></div></header>
+          <div class="sales-address-grid">
+            <div class="field"><label>País</label><input class="control" value="Colombia" readonly aria-readonly="true"><input type="hidden" name="clientCountry" value="Colombia"></div>
+            <div class="field"><label>Departamento *</label><select class="control" name="clientDepartmentCode" required>${departmentOptions}</select><input type="hidden" name="clientDepartment"></div>
+            <div class="field"><label>Municipio o ciudad *</label><select class="control" name="clientCity" required disabled><option value="">Primero selecciona el departamento</option></select><small class="field-help" data-municipality-help>La lista se cargará según el departamento.</small></div>
+            <div class="field full"><label>Dirección completa *</label><input class="control" name="clientAddress" placeholder="Ejemplo: Carrera 40 # 28-15, Bodega 3" required autocomplete="street-address"><small class="field-help">Incluye vía, número, barrio, vereda, bodega, local o referencia cuando aplique.</small></div>
+          </div>
+        </section>
+        <details class="simple-details"><summary>Datos adicionales del cliente</summary><div class="form-grid" style="padding:14px"><div class="field"><label>NIT o documento</label><input class="control" name="clientDocument"></div><div class="field"><label>Teléfono</label><input class="control" name="clientPhone"></div><div class="field"><label>Referencia externa</label><input class="control" name="externalReference"></div><div class="field"><label>Fecha solicitada</label><input class="control" name="requestedDeliveryDate" type="date"></div></div></details>`,validate:({root})=>{
+            const department=root.querySelector('[name="clientDepartment"]')?.value.trim();
+            const city=root.querySelector('[name="clientCity"]')?.value.trim();
+            const address=root.querySelector('[name="clientAddress"]')?.value.trim();
+            if(!department)throw new Error("Selecciona el departamento de entrega.");
+            if(!city)throw new Error("Selecciona el municipio o ciudad de entrega.");
+            if(!address||address.length<5)throw new Error("Escribe una dirección de entrega completa.");
+            return true;
+          }},
       {title:"Materiales",description:"Agrega los materiales y marca únicamente si requieren compra o corte.",content:`<div class="wizard-choice-grid"><label class="wizard-choice"><input type="checkbox" name="requiresCut"><span><strong>Requiere corte</strong><small>Algún material debe pasar por Corte.</small></span></label><label class="wizard-choice"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>El pedido depende de una orden de compra.</small></span></label></div><div class="items-wizard-head"><div><strong>Materiales del pedido</strong><p>Descripción y cantidad son obligatorias.</p></div><button class="btn btn-ghost" type="button" id="add-item">＋ Agregar material</button></div><div class="items-editor" id="items-editor"></div>`,validate:({root})=>{const rows=[...root.querySelectorAll(".item-row")];if(!rows.length)throw new Error("Agrega al menos un material.");let cutItems=0;for(const [index,row] of rows.entries()){const description=row.querySelector('[name="description"]').value.trim(),quantity=Number(row.querySelector('[name="quantity"]').value),requiresCut=row.querySelector('[name="itemCut"]').checked,cutLength=Number(row.querySelector('[name="cutLength"]').value);if(!description||!Number.isFinite(quantity)||quantity<=0)throw new Error(`El material ${index+1} debe tener descripción y cantidad.`);if(requiresCut){cutItems++;if(!Number.isFinite(cutLength)||cutLength<=0)throw new Error(`Registra la longitud del material ${index+1}.`)}}if(root.querySelector('[name="requiresCut"]')?.checked&&!cutItems)throw new Error("Marca al menos un material para corte y registra su longitud.");return true}},
-      {title:"Confirmar",description:"Revisa el resumen y crea el pedido.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>El ERP hará el resto</strong><p>El pedido se enviará automáticamente a la primera etapa que corresponda.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Materiales",String(count)),summaryItem("Proceso especial",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`),summaryItem("Ruta inicial",initialRouteLabel(d))].join("")}}
+      {title:"Confirmar",description:"Revisa la ruta, la dirección y los materiales antes de crear.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>La dirección viajará con el pedido</strong><p>Despachos solo tendrá que registrar la guía y enviarlo al cierre.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Destino",`${d.clientCity}, ${d.clientDepartment}`),summaryItem("Dirección",d.clientAddress),summaryItem("Materiales",String(count)),summaryItem("Proceso especial",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`),summaryItem("Ruta inicial",initialRouteLabel(d))].join("")}}
     ],
     onFinish:async({root,data})=>{
       const items=[...root.querySelectorAll(".item-row")].map((row,index)=>({lineNumber:index+1,sku:row.querySelector('[name="sku"]').value.trim()||null,reference:row.querySelector('[name="reference"]').value.trim()||null,description:row.querySelector('[name="description"]').value.trim(),quantity:Number(row.querySelector('[name="quantity"]').value),unit:row.querySelector('[name="unit"]').value.trim()||"UND",warehouseLocation:row.querySelector('[name="location"]').value.trim()||null,requiresCut:row.querySelector('[name="itemCut"]').checked,requestedCutLength:row.querySelector('[name="itemCut"]').checked?(Number(row.querySelector('[name="cutLength"]').value)||null):null}));
@@ -136,6 +170,33 @@ function openCreateOrder(){
   assistant.root.querySelector('[name="hasCreditArrears"]')?.addEventListener("change",syncRoutingConditions);
   assistant.root.querySelector('[name="heldByCashier"]')?.addEventListener("change",syncRoutingConditions);
   syncRoutingConditions();
+
+  const departmentSelect=assistant.root.querySelector('[name="clientDepartmentCode"]');
+  const departmentName=assistant.root.querySelector('[name="clientDepartment"]');
+  const municipalitySelect=assistant.root.querySelector('[name="clientCity"]');
+  const municipalityHelp=assistant.root.querySelector('[data-municipality-help]');
+  const loadMunicipalities=async()=>{
+    const code=departmentSelect?.value||"";
+    const selected=departments.find(item=>item.code===code);
+    if(departmentName)departmentName.value=selected?.name||"";
+    if(!municipalitySelect)return;
+    municipalitySelect.disabled=true;
+    municipalitySelect.innerHTML='<option value="">Cargando municipios…</option>';
+    if(municipalityHelp)municipalityHelp.textContent="Consultando la lista oficial…";
+    if(!code){municipalitySelect.innerHTML='<option value="">Primero selecciona el departamento</option>';if(municipalityHelp)municipalityHelp.textContent="La lista se cargará según el departamento.";return;}
+    try{
+      const rows=await colombianMunicipalities(code);
+      municipalitySelect.innerHTML=`<option value="">Selecciona el municipio o ciudad</option>${rows.map(item=>`<option value="${fmt.escape(item.name)}">${fmt.escape(item.name)}${item.type&&item.type!=="Municipio"?` · ${fmt.escape(item.type)}`:""}</option>`).join("")}`;
+      municipalitySelect.disabled=false;
+      if(municipalityHelp)municipalityHelp.textContent=`${rows.length} municipios y distritos disponibles.`;
+    }catch(error){
+      municipalitySelect.innerHTML='<option value="">No fue posible cargar la lista</option>';
+      if(municipalityHelp)municipalityHelp.innerHTML=`${fmt.escape(error.message)} <button type="button" class="location-inline-link" data-retry-municipalities>Reintentar</button>`;
+      municipalityHelp?.querySelector('[data-retry-municipalities]')?.addEventListener("click",loadMunicipalities,{once:true});
+    }
+  };
+  departmentSelect?.addEventListener("change",loadMunicipalities);
+
   const editor=assistant.root.querySelector("#items-editor");
   const add=()=>{const row=document.createElement("div");row.className="item-row item-row-guided";row.innerHTML=`<div class="item-row-number"></div><input class="control" name="sku" placeholder="SKU"><input class="control" name="reference" placeholder="Referencia"><input class="control item-description" name="description" placeholder="Descripción" required><input class="control" name="quantity" type="number" min="0.0001" step="any" placeholder="Cantidad" required><input class="control" name="unit" value="UND" placeholder="Unidad"><input class="control" name="location" placeholder="Ubicación"><label class="filter-pill"><input type="checkbox" name="itemCut"> Corte</label><input class="control" name="cutLength" type="number" step="any" placeholder="Longitud"><button type="button" class="icon-btn" title="Eliminar">×</button>`;const toggle=row.querySelector('[name="itemCut"]'),length=row.querySelector('[name="cutLength"]');const sync=()=>{length.disabled=!toggle.checked;length.required=toggle.checked;if(!toggle.checked)length.value=""};toggle.onchange=sync;sync();row.querySelector("button").onclick=()=>{row.remove();renumberItems(editor)};editor.append(row);renumberItems(editor)};
   assistant.root.querySelector("#add-item").onclick=add;add();

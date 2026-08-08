@@ -993,50 +993,25 @@ textarea.control{min-height:124px}
 @media(max-width:850px){.location-search-panel{grid-template-columns:1fr}.location-search-actions .btn{flex:1}.shipping-trace-metrics{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.location-search-actions{display:grid;grid-template-columns:1fr}.shipping-trace-metrics{grid-template-columns:1fr}.shipping-commercial-view>header{flex-direction:column}.commercial-shipping-actions .btn{width:100%}}
 
-/* V10.11.4 · Ubicación estructurada tipo Maps */
-.location-intro{margin-bottom:14px}
-.maps-address-search{padding:18px;border:1px solid #d7e4f0;border-radius:18px;background:linear-gradient(180deg,#fbfdff 0%,#f4f8fc 100%);margin-bottom:12px}
-.maps-address-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-.maps-address-grid .field{margin:0}.maps-address-grid .full{grid-column:1/-1}
-.maps-search-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.maps-search-actions .btn{min-width:190px}
-.maps-search-results{border:1px solid #dbe6f0;border-radius:16px;background:#fff;padding:10px;margin:0 0 14px}
-.maps-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 7px 10px}.maps-results-head strong{font-size:.94rem;color:#1e3b57}.maps-results-head span{font-size:.78rem;color:#718096}
-.maps-result-option{width:100%;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;text-align:left;border:1px solid transparent;background:#f7fafc;border-radius:12px;padding:10px 12px;margin:5px 0;color:#233f59;cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
-.maps-result-option>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#dfeaf4;color:#285576;font-weight:800;font-size:.8rem}
-.maps-result-option strong,.maps-result-option small{display:block}.maps-result-option strong{font-size:.92rem}.maps-result-option small{margin-top:3px;color:#667a8e;line-height:1.35;font-size:.78rem}
-.maps-result-option:hover{border-color:#a9c4dc;background:#f1f7fc}.maps-result-option.selected{border-color:#2776ae;background:#edf7ff;box-shadow:0 0 0 2px rgba(39,118,174,.1)}.maps-result-option.selected>span{background:#246f9f;color:#fff}
-.maps-workspace{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(230px,.65fr);gap:14px;margin:0 0 16px}
-.erp-location-map{position:relative;min-height:360px;border:1px solid #cadbea;border-radius:18px;overflow:hidden;background:#eaf1f6;z-index:0}
-.erp-location-map .leaflet-container{font-family:inherit}.erp-location-map .leaflet-control-attribution{font-size:10px}
-.map-loading,.map-unavailable{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;color:#557086;background:#edf4f8;z-index:500}.map-unavailable strong{font-size:1rem;color:#27465f}.map-unavailable p{margin:5px 0 0;font-size:.84rem}
-.maps-location-summary{border:1px solid #dbe5ed;border-radius:18px;background:#fff;padding:18px;display:flex;flex-direction:column;min-width:0}
-.maps-summary-kicker{font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;color:#678198;font-weight:800}.maps-location-summary>strong{font-size:1.12rem;color:#173f5e;margin:7px 0 4px;overflow-wrap:anywhere}.maps-location-summary>p{font-size:.88rem;color:#60758a;line-height:1.45;margin:0 0 15px;overflow-wrap:anywhere}
-.maps-location-summary dl{display:grid;gap:8px;margin:auto 0 14px}.maps-location-summary dl div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:10px;background:#f4f8fb}.maps-location-summary dt,.maps-location-summary dd{margin:0}.maps-location-summary dt{font-size:.76rem;color:#728497}.maps-location-summary dd{font-size:.82rem;color:#23465f;font-weight:800;overflow-wrap:anywhere;text-align:right}
-.maps-location-summary>small{display:block;border-top:1px solid #e7edf2;padding-top:12px;color:#74879a;line-height:1.4;font-size:.76rem}
-.maps-final-fields{padding:15px;border-radius:16px;background:#f7fafc;border:1px solid #e0e8ef}.coordinates-control{background:#eef3f7!important;color:#466077!important;font-weight:700}
-@media(max-width:850px){.maps-workspace{grid-template-columns:1fr}.erp-location-map{min-height:330px}.maps-location-summary dl{grid-template-columns:repeat(3,minmax(0,1fr))}.maps-location-summary dl div{display:block}.maps-location-summary dd{text-align:left;margin-top:3px}}
-@media(max-width:620px){.maps-address-grid{grid-template-columns:1fr}.maps-address-grid .full{grid-column:auto}.maps-search-actions{display:grid;grid-template-columns:1fr}.maps-search-actions .btn{width:100%;min-width:0}.erp-location-map{min-height:300px;border-radius:14px}.maps-location-summary dl{grid-template-columns:1fr}.maps-result-option{grid-template-columns:30px minmax(0,1fr);padding:9px}.maps-workspace{gap:10px}}
-
-/* V10.11.5 · Dirección guiada con DIVIPOLA */
-.address-wizard-card{margin:0 0 15px;padding:18px;border:1px solid #d7e4ef;border-radius:18px;background:#fff}
-.address-wizard-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
-.address-wizard-head>span{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:none;background:#0f5ca8;color:#fff;font-weight:900}
-.address-wizard-head strong{display:block;color:#183b5a;font-size:1.08rem}
-.address-wizard-head p{margin:4px 0 0;color:#64788b;font-size:.9rem;line-height:1.45}
-.territory-grid{grid-template-columns:minmax(150px,.55fr) minmax(220px,1fr)}
-.territory-grid .full{grid-column:1/-1}
-.address-mode-field{max-width:480px;margin-bottom:14px}
-.address-components-grid{padding:15px;border:1px solid #e0e8ef;border-radius:15px;background:#f7fafc}
-.address-mode-panel[hidden]{display:none!important}
-.field-help{display:block;margin-top:6px;color:#6d8093;font-size:.78rem;line-height:1.35}
+/* V10.11.6 · Dirección obligatoria en Ventas y despacho simplificado */
+.sales-address-card{margin:18px 0 4px;padding:20px;border:1px solid #cfddea;border-radius:19px;background:linear-gradient(180deg,#f8fbfe 0%,#fff 100%)}
+.sales-address-head{display:flex;align-items:flex-start;gap:13px;margin-bottom:17px}
+.sales-address-head>span{display:grid;place-items:center;min-width:74px;height:36px;padding:0 12px;border-radius:11px;background:#0f5ca8;color:#fff;font-size:.76rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
+.sales-address-head strong{display:block;color:#183b5a;font-size:1.12rem}
+.sales-address-head p{margin:4px 0 0;color:#64788b;font-size:.92rem;line-height:1.45}
+.sales-address-grid{display:grid;grid-template-columns:minmax(145px,.45fr) minmax(200px,.75fr) minmax(240px,1fr);gap:14px}
+.sales-address-grid .field{margin:0}.sales-address-grid .full{grid-column:1/-1}
+.sales-address-grid select{cursor:pointer}.sales-address-grid select:disabled{cursor:wait;background:#eef2f6;color:#778595}
+.field-help{display:block;margin-top:6px;color:#6d8093;font-size:.8rem;line-height:1.4}
 .location-inline-link{border:0;background:transparent;color:#0f5ca8;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer;padding:0}
-.address-built-box{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:end;margin-top:14px;padding:15px;border:1px solid #cfddea;border-radius:15px;background:#eef6fd}
-.address-built-box>div{grid-column:1/-1}
-.address-built-box label{display:block;color:#183d5e;font-weight:800;margin-bottom:3px}
-.address-built-box small{color:#60788e;line-height:1.4}
-.address-built-box textarea{min-height:66px;resize:vertical;background:#fff}
-.address-built-box .btn{align-self:stretch;min-width:190px}
-.territory-grid select,.address-wizard-card select{cursor:pointer}
-.territory-grid select:disabled{cursor:wait;background:#eef2f6;color:#778595}
-.maps-search-actions{border-top:1px solid #e4ebf1;padding-top:15px}
-@media(max-width:760px){.territory-grid{grid-template-columns:1fr}.territory-grid .full{grid-column:auto}.address-built-box{grid-template-columns:1fr}.address-built-box>div{grid-column:auto}.address-built-box .btn{width:100%;min-width:0}.address-wizard-card{padding:15px}}
+.shipping-progress-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.shipping-action-stack.single{grid-template-columns:minmax(0,1fr)}
+.shipping-action-stack.single .shipping-step-card{min-height:220px}
+.shipping-sales-address{margin:0 0 18px;padding:17px 19px;border:1px solid #d7e3ed;border-left:5px solid #0f5ca8;border-radius:16px;background:#f8fbfe}
+.shipping-sales-address header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:8px}
+.shipping-sales-address header span{font-size:.73rem;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:#1765a5}
+.shipping-sales-address header strong{color:#203e59;font-size:1rem;text-align:right}
+.shipping-sales-address p{margin:0;color:#243e56;font-size:1.02rem;font-weight:750;line-height:1.45;overflow-wrap:anywhere}
+.shipping-sales-address small{display:block;margin-top:8px;color:#718193;font-size:.78rem}
+@media(max-width:850px){.sales-address-grid{grid-template-columns:1fr 1fr}.sales-address-grid .full{grid-column:1/-1}}
+@media(max-width:620px){.sales-address-card{padding:16px}.sales-address-head{flex-direction:column}.sales-address-grid{grid-template-columns:1fr}.sales-address-grid .full{grid-column:auto}.shipping-progress-three{grid-template-columns:1fr}.shipping-sales-address header{align-items:flex-start;flex-direction:column}.shipping-sales-address header strong{text-align:left}}
