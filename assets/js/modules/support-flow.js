@@ -59,10 +59,10 @@ async function loadIssues(zone,orderId){
     if(!open.length){target.innerHTML="";dialog?.classList.remove("order-blocked-by-issue");return;}
     dialog?.classList.add("order-blocked-by-issue");
     dialog?.querySelectorAll("button").forEach(button=>{if(!button.closest("[data-order-support]")&&!button.matches("[data-close],[data-sub-close]"))button.disabled=true;});
-    target.innerHTML=open.map(issue=>`<article class="support-open-issue ${String(issue.type||"").toLowerCase()}">
-      <div><span>${issue.type==="NOVELTY"?"ESPERA CON NOVEDAD":"REPORTE"}</span><strong>${fmt.escape(issue.title||issue.type)}</strong><p>${fmt.escape(issue.detail||"")}</p><small>${fmt.escape(issue.createdBy||"Usuario")} · ${fmt.date(issue.createdAt)}</small></div>
+    target.innerHTML=open.map(issue=>{const level=Number(issue.slaLevel||0),hours=Number(issue.ageBusinessSeconds||0)/3600;return `<article class="support-open-issue ${String(issue.type||"").toLowerCase()} sla-${level}">
+      <div><span>${issue.type==="NOVELTY"?"ESPERA CON NOVEDAD":"REPORTE"}${level>=2?` · ${level>=3?"SLA CRÍTICO":"ESCALADO"}`:level===1?" · SLA EN ALERTA":""}</span><strong>${fmt.escape(issue.title||issue.type)}</strong><p>${fmt.escape(issue.detail||"")}</p><small>${fmt.escape(issue.createdBy||"Usuario")} · ${fmt.date(issue.createdAt)} · ${hours<1?Math.round(Number(issue.ageBusinessSeconds||0)/60)+" min":fmt.number(hours,1)+" h"} laborales</small></div>
       <button type="button" class="btn btn-primary btn-compact" data-resolve-issue="${fmt.escape(issue.id)}" data-order-id="${fmt.escape(orderId)}">Abrir y solucionar</button>
-    </article>`).join("");
+    </article>`}).join("");
   }catch(error){
     target.innerHTML=`<span class="support-error">${fmt.escape(error.message)}</span>`;
   }

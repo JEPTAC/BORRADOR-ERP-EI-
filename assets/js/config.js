@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.12.0-flujos-paralelos-excepciones",
-  build: "2026-08-08.03",
+  version: "10.13.0-inteligencia-operacional",
+  build: "2026-08-08.04",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -38,7 +38,7 @@ export const NAV_GROUPS = [
   ]},
   {label:"Control y análisis",items:[
     {id:"inventory",label:"Inventario",icon:"inventory"},
-    {id:"approvals",label:"Aprobaciones",icon:"approvals"},
+    {id:"approvals",label:"Centro de excepciones",icon:"approvals"},
     {id:"vsm",label:"Flujo y tiempos",icon:"vsm"},
     {id:"reports",label:"Reportes",icon:"reports"},
     {id:"imports",label:"Importar historial",icon:"imports"},

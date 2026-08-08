@@ -9,7 +9,7 @@ export async function renderDashboard(root){
   const today=new Date();
   const to=today.toISOString().slice(0,10);
   const from=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
-  const [data,partialData]=await Promise.all([api.dashboard(),api.partialFulfillmentMetrics(from,to)]);
+  const [data,partialData,exceptionData]=await Promise.all([api.dashboard(),api.partialFulfillmentMetrics(from,to),api.exceptionSummary().catch(()=>({}))]);
   const k=data.kpis||{};
   const queues=data.queues||[];
   const recent=data.recent||[];
@@ -18,7 +18,7 @@ export async function renderDashboard(root){
   const cards=[];
   if(can("sales","canCreate")||can("orders","canCreate"))cards.push({id:"guide-new-order",title:"Crear un pedido",description:"El asistente te pedirá solo la información necesaria, paso a paso.",icon:"＋",tone:"accent"});
   if(state.modules.some(m=>["cartera","caja","purchasing","receiving","picking","cutting","billing","shipping"].includes(m.code)&&m.canRead))cards.push({id:"guide-my-work",title:"Ver mis tareas",description:"Abre los pedidos asignados a tu usuario y continúa la etapa correspondiente.",icon:"✓",tone:"primary"});
-  if(can("approvals","canRead"))cards.push({id:"guide-approvals",title:"Revisar decisiones",description:"Consulta solicitudes pendientes y registra la decisión con su justificación.",icon:"!",tone:"warning"});
+  if(can("approvals","canRead"))cards.push({id:"guide-approvals",title:"Centro de excepciones",description:"Atiende Novedades, Reportes, Aprobaciones y alertas SLA desde una sola bandeja.",icon:"!",tone:"warning"});
   if(can("orders","canRead"))cards.push({id:"guide-orders",title:"Buscar un pedido",description:"Encuentra rápidamente un pedido por número, cliente, etapa o estado.",icon:"⌕"});
   if(can("qa","canRead"))cards.push({id:"guide-qa",title:"Validar el ERP",description:"Ejecuta las pruebas automáticas antes de habilitar nuevos cambios.",icon:"▶",tone:"success"});
 
@@ -26,7 +26,7 @@ export async function renderDashboard(root){
     <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div></section>
     ${workspaceIntro({title:`Hola, ${state.profile?.name?.split(" ")[0]||"bienvenido"}`,description:"Aquí encuentras las opciones principales disponibles para tu rol. Selecciona una tarjeta y el ERP te guiará.",cards:actionCards(cards)})}
     <section class="grid grid-kpi">
-      ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos parciales",partialSummary.partialPending||0,"Con mercancía pendiente","warning")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",k.pendingApprovals,"Solicitudes por revisar")}
+      ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos parciales",partialSummary.partialPending||0,"Con mercancía pendiente","warning")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Excepciones escaladas",exceptionData.escalated||0,exceptionData.critical?`${exceptionData.critical} crítica(s) por SLA`:"SLA bajo control",exceptionData.critical?"danger":exceptionData.escalated?"warning":"success")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",exceptionData.pendingApprovals??k.pendingApprovals,"Solicitudes por revisar")}
     </section>
     ${partialOrders.length?`<div class="section-gap"></div><section class="card partial-time-card"><header class="card-head"><div><h3>Pedidos parciales: tiempo parcial y tiempo real</h3><p class="muted">Cada fila corresponde al mismo pedido; no se crean pedidos duplicados.</p></div></header><div class="card-body">${partialTimesTable(partialOrders.slice(0,8))}</div></section>`:""}
     <div class="section-gap"></div>

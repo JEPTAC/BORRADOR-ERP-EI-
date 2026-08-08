@@ -94,15 +94,15 @@ async function openCutGroup(groupKey){
   const host=document.querySelector("#modal-root");
   host.innerHTML=`<div class="modal-overlay cutting-overlay"><section class="modal cutting-group-modal"><div class="modal-body">${loading("Preparando el grupo de corte…")}</div></section></div>`;
   try{
-    const data=await api.cuttingGroup(groupKey);
-    renderCutGroup(host,data);
+    const [data,optimizer]=await Promise.all([api.cuttingGroup(groupKey),api.cuttingOptimizer(groupKey)]);
+    renderCutGroup(host,data,optimizer);
   }catch(error){
     host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><h3>No fue posible abrir el grupo</h3><button class="icon-btn" data-close>×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
     host.querySelector("[data-close]")?.addEventListener("click",()=>host.replaceChildren());
   }
 }
 
-function renderCutGroup(host,data){
+function renderCutGroup(host,data,optimizer={}){
   const group=data.group||{};
   const items=data.items||[];
   const reels=data.reels||[];
@@ -130,6 +130,7 @@ function renderCutGroup(host,data){
             <span class="cutting-step-tag">Ejecutar todos</span>
             <h4>Carreto de trabajo</h4>
             <p>Confirma cuánto tiene el carreto. El ERP descontará los cortes y dejará el remanente registrado en Inventario.</p>
+            ${optimizerPanel(optimizer)}
             ${reelControls("group",reels,group.totalLength)}
             <section class="cutting-live-balance" data-balance>
               <div><small>Disponible</small><strong data-balance-reel>0 m</strong></div>
@@ -149,6 +150,7 @@ function renderCutGroup(host,data){
 
   host.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>host.replaceChildren()));
   bindReelMode(host,"group",reels);
+  bindOptimizer(host,optimizer);
   bindBalance(host,Number(group.totalLength||0));
   host.querySelector("[data-request-remainder-approval]")?.addEventListener("click",()=>{
     const payload=readReelPayload(host,"group");
@@ -179,6 +181,44 @@ function renderCutGroup(host,data){
   host.querySelectorAll("[data-confirm-full-reel]").forEach(button=>button.addEventListener("click",()=>resolveIndividual(host,group.groupKey,button.closest("[data-cut-item]"),"FULL_REEL",button)));
   host.querySelectorAll("[data-confirm-no-cut]").forEach(button=>button.addEventListener("click",()=>resolveIndividual(host,group.groupKey,button.closest("[data-cut-item]"),"NO_CUT",button)));
   items.forEach(item=>bindReelMode(host,`item-${item.requirementId}`,reels));
+}
+
+function optimizerPanel(optimizer={}){
+  const recommended=optimizer.recommended||null;
+  const best=optimizer.bestMaterialUse||null;
+  const candidates=optimizer.candidates||[];
+  if(!candidates.length)return `<section class="cut-optimizer empty"><div><span>OPTIMIZADOR</span><strong>No hay carretos registrados para sugerir</strong><p>Registra o selecciona manualmente un carreto para esta referencia.</p></div></section>`;
+  const same=recommended?.lotId&&best?.lotId===recommended.lotId;
+  return `<section class="cut-optimizer">
+    <header><div><span>OPTIMIZADOR DE CARRETOS</span><strong>Sugerencia para minimizar desperdicio</strong><p>El ERP prioriza un carreto suficiente que no obligue aprobación. La decisión final sigue siendo del operario.</p></div><small>${fmt.number(optimizer.requiredLength,3)} m requeridos</small></header>
+    <div class="cut-optimizer-main">
+      ${recommended?optimizerChoice("Recomendado",recommended,"recommended"):""}
+      ${best&&!same?optimizerChoice("Mayor aprovechamiento",best,"material"):""}
+    </div>
+    <details><summary>Comparar ${candidates.length} carreto(s) disponible(s)</summary><div class="cut-optimizer-list">${candidates.map((candidate,index)=>`<button type="button" class="cut-optimizer-candidate" data-optimizer-lot="${fmt.escape(candidate.lotId)}" data-optimizer-length="${Number(candidate.usableLength||0)}"><span>#${index+1} ${fmt.escape(candidate.lotNumber||"Sin lote")}</span><strong>${fmt.number(candidate.usableLength,3)} m</strong><small>${candidate.sufficient?`Quedarían ${fmt.number(candidate.projectedRemaining,3)} m${candidate.approvalRequired?" · requiere aprobación":""}`:`Faltan ${fmt.number(Math.abs(candidate.projectedRemaining),3)} m`}</small></button>`).join("")}</div></details>
+  </section>`;
+}
+
+function optimizerChoice(label,candidate,kind){
+  const insufficient=Number(candidate.projectedRemaining||0)<0;
+  return `<article class="cut-optimizer-choice ${candidate.approvalRequired?"approval":""} ${insufficient?"insufficient":""}"><span>${label}</span><strong>${fmt.escape(candidate.lotNumber||"Sin lote")}</strong><p>${fmt.number(candidate.usableLength,3)} m disponibles · ${insufficient?`faltan ${fmt.number(Math.abs(candidate.projectedRemaining),3)} m`:`remanente ${fmt.number(candidate.projectedRemaining,3)} m`}</p>${candidate.approvalRequired?`<small>Requiere aprobación por remanente menor a 50 m</small>`:""}<button type="button" class="btn btn-ghost btn-compact" data-optimizer-lot="${fmt.escape(candidate.lotId)}" data-optimizer-length="${Number(candidate.usableLength||0)}">Usar esta sugerencia</button></article>`;
+}
+
+function bindOptimizer(host,optimizer={}){
+  host.querySelectorAll("[data-optimizer-lot]").forEach(button=>button.addEventListener("click",()=>{
+    const box=host.querySelector('[data-reel-fields="group"]');
+    if(!box)return;
+    const select=box.querySelector("[data-reel-select]");
+    const option=[...select.options].find(item=>item.value===button.dataset.optimizerLot);
+    if(!option){toast("El carreto sugerido ya no está disponible. Actualiza el grupo.","error");return}
+    select.value=button.dataset.optimizerLot;
+    select.dispatchEvent(new Event("change",{bubbles:true}));
+    const length=box.querySelector("[data-reel-length]");
+    if(length&&button.dataset.optimizerLength)length.value=button.dataset.optimizerLength;
+    length?.dispatchEvent(new Event("input",{bubbles:true}));
+    box.scrollIntoView({behavior:"smooth",block:"center"});
+    toast("Carreto sugerido aplicado. Revisa el balance antes de ejecutar.","success",5000);
+  }));
 }
 
 function cutItem(item,index,reels){
@@ -285,7 +325,7 @@ async function resolveIndividual(host,groupKey,item,mode,button){
     await api.resolveCutRequirement(requirementId,mode,payload);
     toast(mode==="FULL_REEL"?"Carreto completo enviado a Alistamiento.":"La referencia quedó marcada como no requiere corte.","success",6500);
     await loadCuttingGroups(currentPage);
-    try{const latest=await api.cuttingGroup(groupKey);renderCutGroup(host,latest)}catch{host.replaceChildren()}
+    try{const [latest,optimizer]=await Promise.all([api.cuttingGroup(groupKey),api.cuttingOptimizer(groupKey)]);renderCutGroup(host,latest,optimizer)}catch{host.replaceChildren()}
     window.__erpQueueRefresh?.();
   }catch(error){toast(error.message,"error",8000);button.disabled=false}
 }

@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-12-0-flujos-paralelos-20260808";
+const CACHE="erp-electroingenieria-v10-13-0-inteligencia-operacional-20260808";
 const ASSETS=[
   "./",
   "./index.html",
