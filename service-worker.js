@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-13-0-inteligencia-operacional-20260808";
+const CACHE="erp-electroingenieria-v10-14-0-maestro-siesa-20260808";
 const ASSETS=[
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ const ASSETS=[
   "./assets/js/modules/queue.js",
   "./assets/js/modules/orders.js",
   "./assets/js/services/api.js",
+  "./assets/js/services/materials.js",
   "./assets/js/services/drive.js",
   "./assets/js/services/location.js",
   "./assets/js/services/pdf-order-reader.js"

@@ -4,6 +4,7 @@ import {fmt} from "../core/format.js";
 import {toast,loading} from "../core/ui.js";
 import {downloadDriveFile} from "../services/drive.js";
 import {readOrderPdf} from "../services/pdf-order-reader.js";
+import {materialPickerHtml,bindMaterialPicker,readMaterialPicker,resolveMaterialLines} from "../services/materials.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 const DRAFT_PREFIX="erp:recepcion-pedido:v10.6:";
@@ -214,7 +215,8 @@ async function processPdf(host,data,draft,callbacks,getFile){
   try{
     const file=await getFile();
     const parsed=await readOrderPdf(file);
-    draft.lines=parsed.items.map((line,index)=>mergeReaderLine(line,data.items||[],index));
+    const detected=parsed.items.map((line,index)=>mergeReaderLine(line,data.items||[],index));
+    draft.lines=await resolveMaterialLines(detected);
     draft.rawPreview=parsed.raw.slice(0,30000);
     draft.readerVersion=parsed.readerVersion;
     draft.stage="EDIT";
@@ -236,6 +238,7 @@ function bindLineEditor(host,data,draft,callbacks){
     try{draft.lines=collectEditorLines(editor,false);persistDraft(data.order.id,draft)}catch{}
   };
   editor.addEventListener("input",save);
+  editor.addEventListener("material:selected",save);
   editor.addEventListener("change",event=>{if(event.target.matches('[data-field="requiresCut"]'))syncCutRow(event.target.closest("[data-line-row]"));save()});
   editor.addEventListener("click",event=>{
     const remove=event.target.closest("[data-remove-line]");
@@ -318,7 +321,7 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
             warehouseLocation:line.warehouseLocation||null,
             requiresCut:Boolean(line.requiresCut),
             requestedCutLength:line.requiresCut?Number(line.requestedCutLength||line.quantity):null,
-            metadata:{readerConfidence:line.readerConfidence||null,sourceLine:line.sourceLine||null}
+            metadata:{readerConfidence:line.readerConfidence||null,sourceLine:line.sourceLine||null,materialMasterId:line.materialMasterId||null,materialVariantId:line.materialVariantId||null,variantLabel:line.variantLabel||null,source:"RECEPTION_SIESA_MASTER"}
           }))
         });
         clearDraft(data.order.id);
@@ -380,19 +383,20 @@ export function openPurchaseArrival(order,{refreshLists}={}){
 }
 
 function editableLine(line,index){
-  return `<article class="reception-line-row" data-line-row data-order-item-id="${fmt.escape(line.orderItemId||"")}">
+  const unresolved=line.materialResolution==="NOT_FOUND";
+  return `<article class="reception-line-row official-reception-line ${unresolved?"unresolved":""}" data-line-row data-order-item-id="${fmt.escape(line.orderItemId||"")}">
     <div class="reception-line-number">${index+1}</div>
-    <div class="reception-line-fields">
-      <input class="control" data-field="sku" value="${fmt.escape(line.sku||"")}" placeholder="SKU">
-      <input class="control" data-field="reference" value="${fmt.escape(line.reference||"")}" placeholder="Referencia">
-      <input class="control wide" data-field="description" value="${fmt.escape(line.description||"")}" placeholder="Descripción" required>
-      <input class="control" data-field="quantity" type="number" min="0.0001" step="any" value="${fmt.escape(line.quantity??"")}" placeholder="Cantidad" required>
-      <input class="control" data-field="unit" value="${fmt.escape(line.unit||"UND")}" placeholder="Unidad" required>
-      <input class="control" data-field="warehouseLocation" value="${fmt.escape(line.warehouseLocation||"")}" placeholder="Ubicación">
+    <div class="reception-line-material">
+      ${materialPickerHtml({materialMasterId:line.materialMasterId||line.material_master_id,materialVariantId:line.materialVariantId||line.material_variant_id,variantLabel:line.variantLabel||line.variant_label,reference:line.reference,sku:line.sku,name:line.description,description:line.description,unit:line.unit})}
+      ${unresolved?`<div class="material-resolution-warning">No se pudo relacionar automáticamente esta línea. Busca y selecciona el material oficial antes de continuar.</div>`:""}
+    </div>
+    <div class="reception-line-fields official-line-quantity">
+      <div class="field"><label>Cantidad *</label><input class="control" data-field="quantity" type="number" min="0.0001" step="any" value="${fmt.escape(line.quantity??"")}" placeholder="Cantidad" required></div>
+      <div class="field"><label>Ubicación operativa</label><input class="control" data-field="warehouseLocation" value="${fmt.escape(line.warehouseLocation||"")}" placeholder="Opcional"></div>
     </div>
     <div class="reception-cut-controls">
       <label class="filter-pill"><input type="checkbox" data-field="requiresCut" ${line.requiresCut?"checked":""}> Requiere corte</label>
-      <input class="control" data-field="requestedCutLength" type="number" min="0.0001" step="any" value="${fmt.escape(line.requestedCutLength??"")}" placeholder="Longitud" ${line.requiresCut?"required":"disabled"}>
+      <input class="control" data-field="requestedCutLength" type="number" min="0.0001" step="any" value="${fmt.escape(line.requestedCutLength??"")}" placeholder="Longitud por unidad" ${line.requiresCut?"required":"disabled"}>
       <button type="button" class="icon-btn" data-remove-line title="Eliminar línea">×</button>
     </div>
   </article>`;
@@ -402,20 +406,23 @@ function collectEditorLines(editor,strict){
   const rows=[...editor.querySelectorAll("[data-line-row]")];
   if(strict&&!rows.length)throw new Error("Agrega al menos una línea al pedido.");
   return rows.map((row,index)=>{
+    let material;
+    try{material=readMaterialPicker(row.querySelector("[data-material-picker]"),strict)}catch(error){throw new Error(`Línea ${index+1}: ${error.message}`)}
     const value=name=>row.querySelector(`[data-field="${name}"]`)?.value?.trim()||"";
-    const description=value("description");
     const quantity=Number(value("quantity"));
     const requiresCut=row.querySelector('[data-field="requiresCut"]').checked;
     const requestedCutLength=Number(value("requestedCutLength"));
-    if(strict&&!description)throw new Error(`La línea ${index+1} necesita una descripción.`);
     if(strict&&(!Number.isFinite(quantity)||quantity<=0))throw new Error(`La línea ${index+1} necesita una cantidad válida.`);
     if(strict&&requiresCut&&(!Number.isFinite(requestedCutLength)||requestedCutLength<=0))throw new Error(`Registra la longitud de corte de la línea ${index+1}.`);
-    return {orderItemId:row.dataset.orderItemId||null,sku:value("sku")||null,reference:value("reference")||null,description,quantity:Number.isFinite(quantity)?quantity:0,unit:value("unit")||"UND",warehouseLocation:value("warehouseLocation")||null,requiresCut,requestedCutLength:requiresCut&&Number.isFinite(requestedCutLength)?requestedCutLength:null};
+    return {orderItemId:row.dataset.orderItemId||null,materialMasterId:material.materialMasterId,materialVariantId:material.materialVariantId,variantLabel:material.variantLabel,sku:material.sku,reference:material.reference,description:material.description,quantity:Number.isFinite(quantity)?quantity:0,unit:material.unit||"UND",warehouseLocation:value("warehouseLocation")||null,requiresCut,requestedCutLength:requiresCut&&Number.isFinite(requestedCutLength)?requestedCutLength:null};
   });
 }
 
 function bindRows(editor){
-  editor.querySelectorAll("[data-line-row]").forEach(syncCutRow);
+  editor.querySelectorAll("[data-line-row]").forEach(row=>{
+    syncCutRow(row);
+    bindMaterialPicker(row.querySelector("[data-material-picker]"),{onChange:()=>row.classList.remove("unresolved")});
+  });
 }
 function syncCutRow(row){
   if(!row)return;
@@ -463,14 +470,14 @@ function persistDraft(orderId,draft){draft.updatedAt=new Date().toISOString();lo
 function clearDraft(orderId){localStorage.removeItem(DRAFT_PREFIX+orderId)}
 
 function fromOrderItem(item,index){
-  return {orderItemId:item.id,sku:item.sku||null,reference:item.reference||null,description:item.description||"",quantity:Number(item.quantity||0),unit:item.unit||"UND",warehouseLocation:item.warehouse_location||null,requiresCut:Boolean(item.requires_cut),requestedCutLength:item.requested_cut_length==null?null:Number(item.requested_cut_length),sourceLine:index+1};
+  return {orderItemId:item.id,materialMasterId:item.material_master_id||item.metadata?.materialMasterId||null,materialVariantId:item.material_variant_id||item.metadata?.materialVariantId||null,variantLabel:item.metadata?.variantLabel||null,sku:item.sku||null,reference:item.reference||null,description:item.description||"",quantity:Number(item.quantity||0),unit:item.unit||"UND",warehouseLocation:item.warehouse_location||null,requiresCut:Boolean(item.requires_cut),requestedCutLength:item.requested_cut_length==null?null:Number(item.requested_cut_length),sourceLine:index+1};
 }
 function mergeReaderLine(line,current,index){
-  const normalized=String(line.reference||line.sku||"").toUpperCase();
-  const match=current.find(item=>[item.reference,item.sku].some(value=>String(value||"").toUpperCase()===normalized))||current[index];
-  return {...line,orderItemId:match?.id||null,warehouseLocation:match?.warehouse_location||"",requestedCutLength:line.requiresCut?(line.requestedCutLength||line.quantity):null};
+  const normalized=String(line.reference||line.sku||"").trim().toUpperCase();
+  const match=current.find(item=>[item.reference,item.sku].some(value=>String(value||"").trim().toUpperCase()===normalized))||current[index];
+  return {...line,orderItemId:match?.id||null,materialMasterId:match?.material_master_id||match?.metadata?.materialMasterId||null,materialVariantId:match?.material_variant_id||match?.metadata?.materialVariantId||null,variantLabel:match?.metadata?.variantLabel||line.variantLabel||line.color||null,warehouseLocation:match?.warehouse_location||"",requestedCutLength:line.requiresCut?(line.requestedCutLength||line.quantity):null};
 }
-function blankLine(){return {orderItemId:null,sku:null,reference:null,description:"",quantity:1,unit:"UND",warehouseLocation:"",requiresCut:false,requestedCutLength:null}}
+function blankLine(){return {orderItemId:null,materialMasterId:null,materialVariantId:null,variantLabel:null,sku:null,reference:null,description:"",quantity:1,unit:"UND",warehouseLocation:"",requiresCut:false,requestedCutLength:null,materialResolution:"NOT_FOUND"}}
 
 function pdfFiles(files){return files.filter(isPdf)}
 function isPdf(file){return /pdf/i.test(file.mime_type||"")||/\.pdf$/i.test(file.file_name||"")}

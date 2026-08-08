@@ -63,14 +63,14 @@ async function loadCuttingGroups(page=1){
 
 function groupCard(group){
   return `<button type="button" class="cutting-group-card ${group.inProgress?"in-progress":""}" data-cut-group="${fmt.escape(group.groupKey)}">
-    <header><div><span class="cutting-reference">${fmt.escape(group.reference||group.sku||"Sin referencia")}</span><strong>${fmt.escape(group.description)}</strong></div><span class="cutting-state">${group.inProgress?"En ejecución":"Pendiente"}</span></header>
+    <header><div><span class="cutting-reference">${fmt.escape(group.reference||group.sku||"Sin referencia")}</span><strong>${fmt.escape(group.description)}</strong>${group.variantLabel?`<small class="cutting-variant-badge">${fmt.escape(group.variantLabel)}</small>`:""}</div><span class="cutting-state">${group.inProgress?"En ejecución":"Pendiente"}</span></header>
     <div class="cutting-total"><small>Longitud total requerida</small><strong>${fmt.number(group.totalLength,3)} <b>m</b></strong></div>
     <div class="cutting-card-metrics">
       <div><small>Cortes</small><strong>${fmt.number(group.cutCount,2)}</strong></div>
       <div><small>Ítems</small><strong>${fmt.number(group.itemCount)}</strong></div>
       <div><small>Pedidos</small><strong>${fmt.number(group.orderCount)}</strong></div>
     </div>
-    <footer><span>Agrupado por referencia y nombre</span><strong>Abrir grupo →</strong></footer>
+    <footer><span>Agrupado por material oficial${group.variantLabel?" y variante":""}</span><strong>Abrir grupo →</strong></footer>
   </button>`;
 }
 
@@ -109,7 +109,7 @@ function renderCutGroup(host,data,optimizer={}){
   host.innerHTML=`<div class="modal-overlay cutting-overlay">
     <section class="modal cutting-group-modal">
       <header class="modal-head cutting-modal-head">
-        <div><span class="cutting-kicker">Referencia agrupada</span><h3>${fmt.escape(group.reference||group.sku||"Sin referencia")}</h3><p>${fmt.escape(group.description||"")}</p></div>
+        <div><span class="cutting-kicker">Material oficial agrupado</span><h3>${fmt.escape(group.reference||group.sku||"Sin referencia")}</h3><p>${fmt.escape(group.description||"")}${group.variantLabel?` · <strong>${fmt.escape(group.variantLabel)}</strong>`:""}</p></div>
         <button class="icon-btn" data-close aria-label="Cerrar">×</button>
       </header>
       <div class="modal-body cutting-modal-body">
@@ -201,7 +201,7 @@ function optimizerPanel(optimizer={}){
 
 function optimizerChoice(label,candidate,kind){
   const insufficient=Number(candidate.projectedRemaining||0)<0;
-  return `<article class="cut-optimizer-choice ${candidate.approvalRequired?"approval":""} ${insufficient?"insufficient":""}"><span>${label}</span><strong>${fmt.escape(candidate.lotNumber||"Sin lote")}</strong><p>${fmt.number(candidate.usableLength,3)} m disponibles · ${insufficient?`faltan ${fmt.number(Math.abs(candidate.projectedRemaining),3)} m`:`remanente ${fmt.number(candidate.projectedRemaining,3)} m`}</p>${candidate.approvalRequired?`<small>Requiere aprobación por remanente menor a 50 m</small>`:""}<button type="button" class="btn btn-ghost btn-compact" data-optimizer-lot="${fmt.escape(candidate.lotId)}" data-optimizer-length="${Number(candidate.usableLength||0)}">Usar esta sugerencia</button></article>`;
+  return `<article class="cut-optimizer-choice ${candidate.approvalRequired?"approval":""} ${insufficient?"insufficient":""}"><span>${label}</span><strong>${fmt.escape([candidate.lotNumber,candidate.serialNumber].filter(Boolean).join(" · ")||"Sin lote")}</strong><p>${fmt.number(candidate.usableLength,3)} m disponibles · ${fmt.escape(candidate.locationName||candidate.location||"Sin ubicación")} · ${insufficient?`faltan ${fmt.number(Math.abs(candidate.projectedRemaining),3)} m`:`remanente ${fmt.number(candidate.projectedRemaining,3)} m`}</p>${candidate.approvalRequired?`<small>Requiere aprobación por remanente menor a 50 m</small>`:""}<button type="button" class="btn btn-ghost btn-compact" data-optimizer-lot="${fmt.escape(candidate.lotId)}" data-optimizer-length="${Number(candidate.usableLength||0)}">Usar esta sugerencia</button></article>`;
 }
 
 function bindOptimizer(host,optimizer={}){
@@ -242,7 +242,7 @@ function cutItem(item,index,reels){
 
 function reelControls(prefix,reels,required,exact=false){
   return `<div class="cutting-reel-fields" data-reel-fields="${fmt.escape(prefix)}" data-required="${Number(required||0)}">
-    <label>Carreto<select class="control" data-reel-select><option value="">Registrar nuevo carreto</option>${reels.map(reel=>`<option value="${fmt.escape(reel.lotId)}" data-length="${Number(reel.quantityAvailable||0)}">${fmt.escape(reel.lotNumber||"Sin lote")} · ${fmt.number(reel.quantityAvailable,3)} m · ${fmt.escape(reel.location||"Sin ubicación")}</option>`).join("")}</select></label>
+    <label>Carreto<select class="control" data-reel-select><option value="">Registrar nuevo carreto</option>${reels.map(reel=>`<option value="${fmt.escape(reel.lotId)}" data-length="${Number(reel.quantityAvailable||0)}">${fmt.escape([reel.variantLabel,reel.lotNumber,reel.serialNumber].filter(Boolean).join(" · ")||"Sin lote")} · ${fmt.number(reel.quantityAvailable,3)} m · ${fmt.escape(reel.locationName||reel.location||"Sin ubicación")}</option>`).join("")}</select></label>
     <label>${exact?"Medida exacta del carreto":"Longitud disponible del carreto"} *<input class="control" data-reel-length type="number" min="0.0001" step="0.0001" value="${exact?Number(required||0):""}" placeholder="Ej. 500"></label>
     <label data-new-reel-field>Número o identificación<input class="control" data-lot-number placeholder="Ej. CR-0245"></label>
     <label data-new-reel-field>Ubicación<input class="control" data-location value="CORTE" placeholder="Ubicación física"></label>
