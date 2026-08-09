@@ -100,6 +100,8 @@ export const api={
   cuttingGroups:(search="",page=1,pageSize=50)=>rpc("erp_x_cutting_groups",{p_search:search||null,p_page:page,p_page_size:pageSize}),
   cuttingGroup:groupKey=>rpc("erp_x_cutting_group",{p_group_key:groupKey}),
   cuttingOptimizer:groupKey=>rpc("erp_x_cutting_optimizer",{p_group_key:groupKey}),
+  cuttingOriginSearch:(groupKey,search="",limit=50)=>rpc("erp_x_cutting_origin_search",{p_group_key:groupKey,p_search:search||null,p_limit:limit}),
+  cuttingBatchPlan:(groupKey,lotId,reelLength,scrapLength=0)=>rpc("erp_x_cutting_batch_plan",{p_group_key:groupKey,p_inventory_lot_id:lotId,p_reel_length:reelLength,p_scrap_length:scrapLength}),
   executeCutGroup:(groupKey,payload)=>mutationRpc("erp_x_execute_cut_group",{p_group_key:groupKey,p_payload:payload}),
   resolveCutRequirement:(requirementId,resolution,payload={})=>mutationRpc("erp_x_resolve_cut_requirement",{p_requirement_id:requirementId,p_resolution:resolution,p_payload:payload}),
   cutPickupsPending:(search="",page=1,pageSize=50)=>rpc("erp_x_cut_pickups_pending",{p_search:search||null,p_page:page,p_page_size:pageSize}),

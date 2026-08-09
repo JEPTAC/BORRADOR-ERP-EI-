@@ -27,7 +27,7 @@ function renderStandaloneCutPickup(host,data,{refreshLists}={}){
   const items=(data.items||[]).map(item=>({
     id:item.requirementId,reference:item.reference,sku:item.sku,description:item.description,
     units_required:item.unitsRequired,length_each:item.lengthEach,total_length:item.totalLength,
-    resolution_code:item.resolution,lot_number:item.lotNumber,location:item.location
+    resolution_code:item.resolution,lot_number:item.lotNumber,location:item.location,origins:item.origins||[]
   }));
   host.innerHTML=`<div class="modal-overlay simple-process-overlay">
     <section class="modal simple-process-modal wide picking-process-modal cut-pickup-standalone" data-order-id="${fmt.escape(order.id)}">
@@ -159,6 +159,14 @@ function cutPickupItem(item,index){
 }
 
 function cutLotLabel(item){
+  const explicit=Array.isArray(item.origins)?item.origins:[];
+  const metadataOrigins=Array.isArray(item.metadata?.cutOrigins)?item.metadata.cutOrigins:[];
+  const origins=[...explicit,...metadataOrigins];
+  const unique=[];
+  const seen=new Set();
+  origins.forEach(origin=>{const key=String(origin.inventoryLotId||origin.lotId||origin.lotNumber||origin.location||"");if(key&&!seen.has(key)){seen.add(key);unique.push(origin)}});
+  if(unique.length>1)return `${unique.length} carretos`;
+  if(unique.length===1)return unique[0].lotNumber||unique[0].location||"Carreto trazado";
   const batch=(item.cut_batch_id||item.inventory_lot_id)?"Listo en Corte":"Sin carreto";
   return item.lot_number||item.location||item.metadata?.lotNumber||item.metadata?.location||batch;
 }

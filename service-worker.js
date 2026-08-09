@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-17-operacion-guiada-listas-20260809";
+const CACHE="erp-electroingenieria-v10-18-corte-referencia-multi-carreto-20260809";
 const ASSETS=[
   "./",
   "./index.html",
