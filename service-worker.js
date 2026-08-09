@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-16-sandbox-superadmin-20260809";
+const CACHE="erp-electroingenieria-v10-17-operacion-guiada-listas-20260809";
 const ASSETS=[
   "./",
   "./index.html",

@@ -18,14 +18,10 @@ export async function renderCutting(root,{params={}}={}){
   root.innerHTML=`
     ${sandboxMode?`<section class="sandbox-queue-banner"><strong>MODO SANDBOX · CORTE</strong><span>Carretos y consumos son simulados. Inventario Siesa permanece intacto.</span><button class="btn btn-ghost btn-compact" id="sandbox-cut-back">Volver al Bot</button></section>`:""}
     <section class="page-head cutting-page-head">
-      <div><span class="cutting-kicker">Centro de corte</span><h2>Cortes pendientes por referencia</h2><p>Las solicitudes iguales se consolidan para calcular el carreto necesario y ejecutar varios pedidos en una sola operación.</p></div>
+      <div><span class="cutting-kicker">Centro de corte</span><h2>Cortes pendientes</h2><p>Busca una referencia y pulsa <strong>Iniciar corte</strong>. El ERP te llevará por revisión, carreto y confirmación en ese orden.</p></div>
       <div class="page-actions"><button class="btn btn-ghost" id="cutting-refresh">Actualizar</button></div>
     </section>
-    <section class="cutting-guide-strip">
-      <div><span>1</span><strong>Selecciona una referencia</strong><small>Verás todos los pedidos y cortes agrupados.</small></div>
-      <div><span>2</span><strong>Confirma el carreto</strong><small>El ERP calcula consumo y remanente.</small></div>
-      <div><span>3</span><strong>Ejecuta y entrega</strong><small>Alistamiento recibe automáticamente los cortes.</small></div>
-    </section>
+    <section class="workflow-hint"><span>1</span><strong>Selecciona una referencia.</strong><p>Todo lo demás se hará dentro del popup guiado.</p></section>
     <section class="card card-pad cutting-workspace">
       <div class="cutting-toolbar">
         <input class="control search-wide" id="cutting-search" placeholder="Buscar referencia, SKU o material">
@@ -54,7 +50,7 @@ async function loadCuttingGroups(page=1){
     const rows=data.items||[];
     target.innerHTML=rows.length?`
       <div class="cutting-result-head"><div><strong>${fmt.number(data.pagination?.totalItems||rows.length)} referencia(s)</strong><span>Solo se muestran cortes disponibles para tu usuario.</span></div></div>
-      <div class="cutting-group-grid">${rows.map(groupCard).join("")}</div>
+      <div class="erp-work-list cutting-group-list">${rows.map(groupCard).join("")}</div>
       ${paginationHtml(data.pagination)}`:empty("No hay cortes pendientes","Cuando Recepción confirme un pedido con corte, sus referencias aparecerán agrupadas aquí.");
     target.querySelectorAll("[data-cut-group]").forEach(card=>card.addEventListener("click",()=>openCutGroup(card.dataset.cutGroup)));
     target.querySelectorAll("[data-page]").forEach(button=>button.addEventListener("click",()=>loadCuttingGroups(Number(button.dataset.page))));
@@ -66,16 +62,7 @@ async function loadCuttingGroups(page=1){
 }
 
 function groupCard(group){
-  return `<button type="button" class="cutting-group-card ${group.inProgress?"in-progress":""}" data-cut-group="${fmt.escape(group.groupKey)}">
-    <header><div><span class="cutting-reference">${fmt.escape(group.reference||group.sku||"Sin referencia")}</span><strong>${fmt.escape(group.description)}</strong>${group.variantLabel?`<small class="cutting-variant-badge">${fmt.escape(group.variantLabel)}</small>`:""}</div><span class="cutting-state">${group.inProgress?"En ejecución":"Pendiente"}</span></header>
-    <div class="cutting-total"><small>Longitud total requerida</small><strong>${fmt.number(group.totalLength,3)} <b>m</b></strong></div>
-    <div class="cutting-card-metrics">
-      <div><small>Cortes</small><strong>${fmt.number(group.cutCount,2)}</strong></div>
-      <div><small>Ítems</small><strong>${fmt.number(group.itemCount)}</strong></div>
-      <div><small>Pedidos</small><strong>${fmt.number(group.orderCount)}</strong></div>
-    </div>
-    <footer><span>Agrupado por material oficial${group.variantLabel?" y variante":""}</span><strong>Abrir grupo →</strong></footer>
-  </button>`;
+  return `<article class="erp-work-row cutting-group-row ${group.inProgress?"in-progress":""}"><div class="erp-work-main"><span class="erp-work-eyebrow">${group.inProgress?"EN EJECUCIÓN":"PENDIENTE"}</span><strong>${fmt.escape(group.reference||group.sku||"Sin referencia")}</strong><small>${fmt.escape(group.description)}${group.variantLabel?` · ${fmt.escape(group.variantLabel)}`:""}</small></div><div class="erp-work-meta"><span><small>Longitud</small><b>${fmt.number(group.totalLength,3)} m</b></span><span><small>Cortes</small><b>${fmt.number(group.cutCount,2)}</b></span><span><small>Pedidos</small><b>${fmt.number(group.orderCount)}</b></span><span><small>Ítems</small><b>${fmt.number(group.itemCount)}</b></span></div><div class="erp-work-status"><span class="badge ${group.inProgress?"badge-blue":"badge-gray"}">${group.inProgress?"En ejecución":"Pendiente"}</span></div><button type="button" class="btn btn-primary erp-work-action" data-cut-group="${fmt.escape(group.groupKey)}">${group.inProgress?"Continuar":"Iniciar corte"}</button></article>`;
 }
 
 export function renderCuttingOrder(host,data){
@@ -111,41 +98,49 @@ function renderCutGroup(host,data,optimizer={}){
   const items=data.items||[];
   const reels=data.reels||[];
   host.innerHTML=`<div class="modal-overlay cutting-overlay">
-    <section class="modal cutting-group-modal">
+    <section class="modal cutting-group-modal cut-guided-modal">
       <header class="modal-head cutting-modal-head">
-        <div><span class="cutting-kicker">Material oficial agrupado</span><h3>${fmt.escape(group.reference||group.sku||"Sin referencia")}</h3><p>${fmt.escape(group.description||"")}${group.variantLabel?` · <strong>${fmt.escape(group.variantLabel)}</strong>`:""}</p></div>
+        <div><span class="cutting-kicker">Corte guiado</span><h3>${fmt.escape(group.reference||group.sku||"Sin referencia")}</h3><p>${fmt.escape(group.description||"")}${group.variantLabel?` · <strong>${fmt.escape(group.variantLabel)}</strong>`:""}</p></div>
         <button class="icon-btn" data-close aria-label="Cerrar">×</button>
       </header>
-      <div class="modal-body cutting-modal-body">
-        <section class="cutting-group-summary">
-          <div><small>Cantidad a cortar</small><strong>${fmt.number(group.cutCount,2)} <b>corte(s)</b></strong></div>
-          <div><small>Longitud requerida</small><strong>${fmt.number(group.totalLength,3)} <b>m</b></strong></div>
-          <div><small>Pedidos incluidos</small><strong>${fmt.number(group.orderCount)}</strong></div>
-          <div><small>Carretos disponibles</small><strong>${reels.length}</strong></div>
+      <div class="modal-body cutting-modal-body cut-guided-body">
+        <nav class="cut-guide-progress" aria-label="Progreso de corte">
+          <div class="active" data-cut-progress="1"><span>1</span><div><strong>Revisar</strong><small>Qué debes cortar</small></div></div>
+          <div data-cut-progress="2"><span>2</span><div><strong>Carreto</strong><small>De dónde saldrá</small></div></div>
+          <div data-cut-progress="3"><span>3</span><div><strong>Confirmar</strong><small>Validar y ejecutar</small></div></div>
+        </nav>
+
+        <section class="cut-guide-step active" data-cut-step="1">
+          <div class="cut-guide-intro"><span>PASO 1 DE 3</span><h4>Confirma qué vas a cortar</h4><p>Revisa cantidades y medidas. Solo abre “Caso especial” si una línea realmente no se va a cortar de forma normal.</p></div>
+          <section class="cut-guide-summary">
+            <div><small>Cortes</small><strong>${fmt.number(group.cutCount,2)}</strong></div>
+            <div><small>Longitud total</small><strong>${fmt.number(group.totalLength,3)} m</strong></div>
+            <div><small>Pedidos</small><strong>${fmt.number(group.orderCount)}</strong></div>
+          </section>
+          <div class="cut-guide-list">${items.map((item,index)=>cutItem(item,index,reels)).join("")}</div>
+          <footer class="cut-guide-actions"><span>Si todo coincide, continúa. El ERP te recomendará el carreto en el siguiente paso.</span><button type="button" class="btn btn-primary btn-large" data-cut-next="2">Continuar · Elegir carreto</button></footer>
         </section>
 
-        <section class="cutting-layout">
-          <div class="cutting-items-panel">
-            <header><div><h4>Detalle individual</h4><p>Cada línea conserva su pedido y puede resolverse por separado cuando corresponda.</p></div><span>${items.length} ítem(s)</span></header>
-            <div class="cutting-item-list">${items.map((item,index)=>cutItem(item,index,reels)).join("")}</div>
-          </div>
-
-          <aside class="cutting-calculator">
-            <span class="cutting-step-tag">Ejecutar todos</span>
-            <h4>Carreto de trabajo</h4>
-            <p>Confirma cuánto tiene el carreto. El ERP descontará los cortes y dejará el remanente registrado en Inventario.</p>
+        <section class="cut-guide-step" data-cut-step="2" hidden>
+          <div class="cut-guide-intro"><span>PASO 2 DE 3</span><h4>Selecciona el carreto</h4><p>Usa la recomendación del ERP o selecciona otro carreto válido. Aquí todavía no se descuenta inventario.</p></div>
+          <div class="cut-guide-reel-layout">
             ${optimizerPanel(optimizer)}
-            ${reelControls("group",reels,group.totalLength)}
-            <section class="cutting-live-balance" data-balance>
-              <div><small>Disponible</small><strong data-balance-reel>0 m</strong></div>
-              <span>−</span><div><small>Cortes</small><strong>${fmt.number(group.totalLength,3)} m</strong></div>
-              <span>−</span><div><small>Merma</small><strong data-balance-scrap>0 m</strong></div>
-              <span>=</span><div class="remaining"><small>Queda</small><strong data-balance-remaining>0 m</strong></div>
-            </section>
-            <section class="cutting-approval-warning" data-cut-approval-warning hidden><span>APROBACIÓN REQUERIDA</span><strong>El remanente quedará por debajo de 50 m</strong><p>Solicita autorización antes de ejecutar el corte. Puedes seguir trabajando otros grupos mientras se decide.</p><button type="button" class="btn btn-warning" data-request-remainder-approval>Enviar a aprobación</button></section>
-            <button type="button" class="btn btn-primary cutting-execute-all" data-execute-group>Ejecutar todos los cortes de esta referencia</button>
-            <small class="cutting-calculator-note">La operación es transaccional: si algo falla, no se descuenta inventario ni se cierra ningún pedido.</small>
-          </aside>
+            <section class="cut-guide-reel-form"><span class="cutting-step-tag">Origen físico</span><h5>Carreto de trabajo</h5>${reelControls("group",reels,group.totalLength)}</section>
+          </div>
+          <footer class="cut-guide-actions"><button type="button" class="btn btn-ghost" data-cut-prev="1">Atrás</button><button type="button" class="btn btn-primary btn-large" data-cut-next="3">Continuar · Revisar resultado</button></footer>
+        </section>
+
+        <section class="cut-guide-step" data-cut-step="3" hidden>
+          <div class="cut-guide-intro"><span>PASO 3 DE 3</span><h4>Confirma antes de ejecutar</h4><p>Verifica una última vez el consumo y el remanente. Solo al confirmar se registra el corte.</p></div>
+          <section class="cutting-live-balance cut-guide-balance" data-balance>
+            <div><small>Carreto</small><strong data-balance-reel>0 m</strong></div>
+            <span>−</span><div><small>Cortes</small><strong>${fmt.number(group.totalLength,3)} m</strong></div>
+            <span>−</span><div><small>Merma</small><strong data-balance-scrap>0 m</strong></div>
+            <span>=</span><div class="remaining"><small>Remanente</small><strong data-balance-remaining>0 m</strong></div>
+          </section>
+          <section class="cutting-approval-warning" data-cut-approval-warning hidden><span>APROBACIÓN REQUERIDA</span><strong>El remanente quedará por debajo de 50 m</strong><p>Solicita autorización antes de ejecutar. Mientras se decide puedes cerrar este popup y trabajar otro grupo.</p><button type="button" class="btn btn-warning" data-request-remainder-approval>Enviar a aprobación</button></section>
+          <div class="cut-guide-final-note"><strong>Esta es la única acción que modifica inventario.</strong><span>Si ocurre un error, la operación se revierte completa.</span></div>
+          <footer class="cut-guide-actions"><button type="button" class="btn btn-ghost" data-cut-prev="2">Atrás</button><button type="button" class="btn btn-primary btn-large cutting-execute-all" data-execute-group>Confirmar y ejecutar cortes</button></footer>
         </section>
       </div>
       ${parallelWorkFooter("CORTE")}
@@ -153,6 +148,7 @@ function renderCutGroup(host,data,optimizer={}){
   </div>`;
 
   host.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>host.replaceChildren()));
+  bindCutGuide(host);
   bindReelMode(host,"group",reels);
   bindOptimizer(host,optimizer);
   bindBalance(host,Number(group.totalLength||0));
@@ -185,6 +181,20 @@ function renderCutGroup(host,data,optimizer={}){
   host.querySelectorAll("[data-confirm-full-reel]").forEach(button=>button.addEventListener("click",()=>resolveIndividual(host,group.groupKey,button.closest("[data-cut-item]"),"FULL_REEL",button)));
   host.querySelectorAll("[data-confirm-no-cut]").forEach(button=>button.addEventListener("click",()=>resolveIndividual(host,group.groupKey,button.closest("[data-cut-item]"),"NO_CUT",button)));
   items.forEach(item=>bindReelMode(host,`item-${item.requirementId}`,reels));
+}
+
+function bindCutGuide(host){
+  const show=step=>{
+    host.querySelectorAll("[data-cut-step]").forEach(panel=>{const active=Number(panel.dataset.cutStep)===Number(step);panel.hidden=!active;panel.classList.toggle("active",active)});
+    host.querySelectorAll("[data-cut-progress]").forEach(node=>{const n=Number(node.dataset.cutProgress);node.classList.toggle("active",n===Number(step));node.classList.toggle("done",n<Number(step))});
+    host.querySelector(".cut-guided-body")?.scrollTo({top:0,behavior:"smooth"});
+  };
+  host.querySelectorAll("[data-cut-next]").forEach(button=>button.addEventListener("click",()=>{
+    const next=Number(button.dataset.cutNext);
+    if(next===3){const payload=readReelPayload(host,"group");if(!payload)return;}
+    show(next);
+  }));
+  host.querySelectorAll("[data-cut-prev]").forEach(button=>button.addEventListener("click",()=>show(Number(button.dataset.cutPrev))));
 }
 
 function optimizerPanel(optimizer={}){
@@ -226,13 +236,13 @@ function bindOptimizer(host,optimizer={}){
 }
 
 function cutItem(item,index,reels){
-  return `<article class="cutting-item" data-cut-item data-requirement-id="${fmt.escape(item.requirementId)}">
-    <div class="cutting-item-index">${index+1}</div>
-    <div class="cutting-item-main"><span>${fmt.escape(item.orderNumber)} · ${fmt.escape(item.clientName)}</span><strong>${fmt.escape(item.reference||item.sku||item.description)}</strong><p>${fmt.escape(item.description)}</p></div>
-    <div class="cutting-item-quantity"><small>Cantidad</small><strong>${fmt.number(item.unitsRequired,2)} × ${fmt.number(item.lengthEach,3)} m</strong><b>${fmt.number(item.totalLength,3)} m total</b></div>
-    <div class="cutting-item-actions"><button type="button" class="btn btn-warning" data-full-reel>Carreto completo</button><button type="button" class="btn btn-ghost" data-no-cut>No necesita corte</button></div>
+  return `<article class="cut-guide-item" data-cut-item data-requirement-id="${fmt.escape(item.requirementId)}">
+    <div class="cut-guide-item-index">${index+1}</div>
+    <div class="cut-guide-item-main"><span>${fmt.escape(item.orderNumber)} · ${fmt.escape(item.clientName)}</span><strong>${fmt.escape(item.reference||item.sku||item.description)}</strong><small>${fmt.escape(item.description)}</small></div>
+    <div class="cut-guide-item-qty"><small>Necesidad</small><strong>${fmt.number(item.unitsRequired,2)} × ${fmt.number(item.lengthEach,3)} m</strong><b>${fmt.number(item.totalLength,3)} m</b></div>
+    <details class="cut-guide-exception"><summary>Caso especial</summary><div class="cut-guide-exception-actions"><button type="button" class="btn btn-warning btn-compact" data-full-reel>Carreto completo</button><button type="button" class="btn btn-ghost btn-compact" data-no-cut>No necesita corte</button></div></details>
     <section class="cutting-resolution-panel" data-resolution-panel="FULL_REEL" hidden>
-      <header><div><strong>Entregar carreto completo</strong><p>Solo se confirma si la medida del carreto coincide exactamente con este ítem.</p></div><button class="icon-btn" data-cancel-resolution>×</button></header>
+      <header><div><strong>Entregar carreto completo</strong><p>Confirma únicamente si la medida del carreto coincide exactamente con este ítem.</p></div><button class="icon-btn" data-cancel-resolution>×</button></header>
       ${reelControls(`item-${item.requirementId}`,reels,item.totalLength,true)}
       <button type="button" class="btn btn-success" data-confirm-full-reel>Confirmar carreto completo</button>
     </section>

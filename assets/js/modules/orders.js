@@ -2,7 +2,7 @@ import {api} from "../services/api.js";
 import {state,can} from "../core/state.js";
 import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {wizard,modal,toast,serializeForm,paginationHtml,empty,loading,actionCards,guide} from "../core/ui.js";
-import {workspaceIntro,orderVisualCards,viewSwitch,summaryItem,choice,simpleStatus} from "../core/guided.js";
+import {workspaceIntro,summaryItem,choice,simpleStatus} from "../core/guided.js";
 import {uploadOrderFile} from "../services/drive.js";
 import {colombianDepartments,colombianMunicipalities} from "../services/location.js";
 import {materialPickerHtml,bindMaterialPicker,readMaterialPicker} from "../services/materials.js";
@@ -14,7 +14,6 @@ import {isShippingFlow,renderShippingFlow} from "./shipping-flow.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
-let currentView="cards";
 
 export async function renderOrders(root,{moduleId="orders",params={}}={}){
   currentList.root=root;
@@ -40,20 +39,18 @@ export async function renderOrders(root,{moduleId="orders",params={}}={}){
         ${simpleSelect("f-assignment","Asignación",["ALL","MINE","UNASSIGNED"],currentList.filters.assignment)}
         <label class="filter-pill"><input type="checkbox" id="f-history" ${currentList.filters.includeHistory!==false?"checked":""}> Incluir historial</label>
         <button class="btn btn-primary" id="apply-filters">Buscar</button>
-        ${viewSwitch(currentView)}
       </div>
-      <div class="selection-hint"><strong>Selecciona un pedido</strong><span>Las tarjetas resumen etapa, estado, responsable, tiempo y prioridad antes de abrir el expediente.</span></div>
+      <div class="selection-hint"><strong>Lista de pedidos</strong><span>Usa los filtros y abre el pedido desde la acción de la derecha. La lista está pensada para operar alto volumen sin perder contexto.</span></div>
       <div id="orders-result">${loading("Cargando pedidos…")}</div>
     </section>`;
 
   root.querySelector("#create-order")?.addEventListener("click",openCreateOrder);
   root.querySelector("#show-all-orders").onclick=()=>{setFilters({assignment:"ALL",status:"",includeHistory:true});loadOrders(1)};
   root.querySelector("#show-my-orders").onclick=()=>{setFilters({assignment:"MINE",status:"",includeHistory:false});loadOrders(1)};
-    root.querySelector("#orders-help").onclick=()=>guide({title:"Cómo gestionar pedidos",description:"Todo el trabajo se realiza desde una sola ventana.",items:[{title:"Busca el pedido",detail:"Usa el número o nombre del cliente."},{title:"Abre la tarjeta",detail:"Verás la situación actual y el siguiente paso recomendado."},{title:"Marca el estado",detail:"Pendiente, en gestión, en espera, con novedad o gestionado."},{title:"Llena solo lo necesario",detail:"El ERP mostrará únicamente el dato que hace falta para avanzar."}]});
+    root.querySelector("#orders-help").onclick=()=>guide({title:"Cómo gestionar pedidos",description:"Todo el trabajo se realiza desde una lista y una sola ventana guiada.",items:[{title:"Busca el pedido",detail:"Usa el número, cliente o filtros de la operación."},{title:"Usa Abrir / Continuar",detail:"La acción está siempre a la derecha de la fila."},{title:"Sigue el paso activo",detail:"El popup muestra únicamente la decisión actual y oculta lo que todavía no corresponde."},{title:"Confirma y continúa",detail:"El siguiente paso se habilita cuando la información necesaria está completa."}]});
   root.querySelector("#apply-filters").onclick=()=>loadOrders(1);
   root.querySelector("#f-search").onkeydown=event=>{if(event.key==="Enter")loadOrders(1)};
   root.querySelector("#export-list").onclick=exportCurrent;
-  root.querySelectorAll("[data-view]").forEach(button=>button.onclick=()=>{currentView=button.dataset.view;root.querySelectorAll("[data-view]").forEach(item=>item.classList.toggle("active",item===button));renderOrderResults()});
   if(moduleId==="sales"&&params.create==="1")openCreateOrder();
   await loadOrders(currentList.filters.page);
 }
@@ -81,14 +78,18 @@ function renderOrderResults(){
   const result=root?.querySelector("#orders-result");
   const data=currentList.data;
   if(!result||!data)return;
-  const content=data.items.length?(currentView==="cards"?orderVisualCards(data.items):ordersTable(data.items)):empty("No se encontraron pedidos","Ajusta los filtros o crea un pedido nuevo.");
+  const content=data.items.length?ordersTable(data.items):empty("No se encontraron pedidos","Ajusta los filtros o crea un pedido nuevo.");
   result.innerHTML=`${content}${data.items.length?paginationHtml(data.pagination):""}`;
   result.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>openOrder(element.dataset.order));
   result.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>loadOrders(Number(element.dataset.page)));
 }
 
 function ordersTable(rows){
-  return `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Tipo y pago</th><th>Etapa</th><th>Estado</th><th>Responsable</th><th>Tiempo</th><th>Prioridad</th><th>Actualizado</th></tr></thead><tbody>${rows.map(order=>`<tr><td><span class="table-link" data-order="${order.id}">${fmt.escape(order.orderNumber)}</span>${order.fulfillmentStatus==="PARTIAL"||order.partialLabel?`<div><span class="order-partial-tag">Pedido parcial · ${fmt.number(order.pendingItemCount||0)} pendiente(s)</span></div>`:""}<div class="cell-sub">${fmt.escape(order.externalReference||"")}</div></td><td><div class="cell-main">${fmt.escape(order.clientName)}</div><div class="cell-sub">${fmt.escape(fmt.route(order.route))}</div></td><td><span class="badge badge-blue">${fmt.escape(fmt.label(order.orderType))}</span><div class="cell-sub">${fmt.escape(fmt.payment(order.paymentCondition))}</div></td><td><div class="cell-main">${fmt.escape(fmt.step(order.stepName||order.currentStep))}</div></td><td>${statusBadge(order.status)}${order.slaExceeded?'<div class="cell-sub danger">Plazo excedido</div>':""}</td><td>${fmt.escape(order.assigneeName||"En cola")}<div class="cell-sub">${fmt.escape(fmt.role(order.roleCode||""))}</div></td><td>${fmt.hours(order.ageBusinessSeconds)}</td><td>${priorityBadge(order.priority)}</td><td>${fmt.date(order.updatedAt)}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="erp-work-list orders-master-list">${rows.map(order=>{
+    const status=String(order.status||"").toUpperCase();
+    const action=status==="IN_PROGRESS"?"Continuar":status==="ASSIGNED"||status==="QUEUED"?"Abrir / iniciar":"Abrir";
+    return `<article class="erp-work-row orders-master-row"><div class="erp-work-main"><span class="erp-work-eyebrow">${fmt.escape(fmt.step(order.stepName||order.currentStep))}</span><strong>${fmt.escape(order.orderNumber)}</strong><small>${fmt.escape(order.clientName)} · ${fmt.escape(fmt.label(order.orderType))} · ${fmt.escape(fmt.payment(order.paymentCondition))}</small>${order.fulfillmentStatus==="PARTIAL"||order.partialLabel?`<em class="order-partial-tag">Pedido parcial · ${fmt.number(order.pendingItemCount||0)} pendiente(s)</em>`:""}</div><div class="erp-work-meta"><span><small>Estado</small><b>${statusBadge(order.status)}</b></span><span><small>Responsable</small><b>${fmt.escape(order.assigneeName||"En cola")}</b></span><span><small>Tiempo</small><b>${fmt.hours(order.ageBusinessSeconds)}</b></span><span><small>Ruta</small><b>${fmt.escape(fmt.route(order.route))}</b></span><span><small>Actualizado</small><b>${fmt.date(order.updatedAt)}</b></span></div><div class="erp-work-status">${priorityBadge(order.priority)}${order.slaExceeded?'<small class="danger">Plazo excedido</small>':""}</div><button type="button" class="btn btn-primary erp-work-action" data-order="${fmt.escape(order.id)}">${action}</button></article>`;
+  }).join("")}</div>`;
 }
 
 function select(id,label,items=[],valueKey="code",labelKey="name",selected=""){
