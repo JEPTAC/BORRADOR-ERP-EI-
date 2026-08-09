@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.14.0-maestro-siesa",
-  build: "2026-08-08.05",
+  version: "10.15.0-ventas-inventario-trazable",
+  build: "2026-08-08.06",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

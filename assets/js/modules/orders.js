@@ -142,12 +142,30 @@ function openCreateOrder(){
             if(!address||address.length<5)throw new Error("Escribe una dirección de entrega completa.");
             return true;
           }},
-      {title:"Materiales",description:"Selecciona únicamente materiales del maestro oficial Siesa.",content:`<div class="wizard-choice-grid"><label class="wizard-choice"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>Actívalo cuando el pedido dependa de abastecimiento. PVE conserva su ruta de Compras.</small></span></label><div class="wizard-choice official-material-note"><span class="official-material-mark">SIESA</span><span><strong>Catálogo oficial</strong><small>Referencia, nombre, unidad y variante quedan protegidos contra escritura libre.</small></span></div></div><div class="items-wizard-head"><div><strong>Materiales vendidos</strong><p>Busca por referencia, nombre, familia o marca. El ERP usará exactamente la identidad del maestro.</p></div><button class="btn btn-primary" type="button" id="add-item">＋ Agregar material</button></div><div class="items-editor official-items-editor" id="items-editor"></div>`,validate:({root})=>{const rows=[...root.querySelectorAll(".item-row")];if(!rows.length)throw new Error("Agrega al menos un material.");for(const [index,row] of rows.entries()){let material;try{material=readMaterialPicker(row.querySelector("[data-material-picker]"),true)}catch(error){throw new Error(`Material ${index+1}: ${error.message}`)}const quantity=Number(row.querySelector('[name="quantity"]').value),requiresCut=row.querySelector('[name="itemCut"]').checked,cutLength=Number(row.querySelector('[name="cutLength"]').value);if(!material.materialMasterId||!Number.isFinite(quantity)||quantity<=0)throw new Error(`El material ${index+1} debe seleccionarse del maestro y tener cantidad válida.`);if(requiresCut&&(!Number.isFinite(cutLength)||cutLength<=0))throw new Error(`Registra la longitud de corte del material ${index+1}.`) }return true}},
-      {title:"Confirmar",description:"Revisa la ruta, la dirección y los materiales antes de crear.",content:`<div id="order-review" class="wizard-summary"></div><div class="wizard-confirm-box"><strong>La dirección viajará con el pedido</strong><p>Despachos solo tendrá que registrar la guía y enviarlo al cierre.</p></div>`,onEnter:({root,form})=>{const d=serializeForm(form),count=root.querySelectorAll(".item-row").length;root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Destino",`${d.clientCity}, ${d.clientDepartment}`),summaryItem("Dirección",d.clientAddress),summaryItem("Materiales",String(count)),summaryItem("Proceso especial",`${d.requiresCut?"Corte":"Sin corte"} · ${d.requiresPurchase?"Compra":"Sin compra"}`),summaryItem("Ruta inicial",initialRouteLabel(d))].join("")}}
+      {title:"Materiales",description:"Ventas define qué se vendió y cuánto. Logística decidirá después de qué lote, ubicación o carreto sale.",content:`
+        <section class="sales-materials-intro">
+          <div class="sales-materials-intro-main"><span class="official-material-mark">SIESA</span><div><strong>Busca, selecciona y registra la necesidad</strong><p>No escribas referencias, nombres, lotes ni ubicaciones. El ERP usa el maestro oficial y reserva lógicamente la cantidad al crear el pedido.</p></div></div>
+          <label class="sales-purchase-toggle"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>Úsalo cuando comercialmente el pedido dependa de abastecimiento. PVE conserva su ruta por Compras.</small></span></label>
+        </section>
+        <div class="items-wizard-head"><div><strong>Materiales vendidos</strong><p>Para materiales en metros puedes registrar entrega directa o varias medidas de corte. El total se calcula automáticamente.</p></div><button class="btn btn-primary" type="button" id="add-item">＋ Agregar material</button></div>
+        <div class="sales-material-list" id="items-editor"></div>`,validate:({root})=>{
+          const cards=[...root.querySelectorAll("[data-sales-material]")];
+          if(!cards.length)throw new Error("Agrega al menos un material.");
+          cards.forEach((card,index)=>validateSalesMaterialCard(card,index));
+          return true;
+        }},
+      {title:"Confirmar",description:"Revisa el destino, el total de materiales y si existen cortes antes de crear.",content:`<div id="order-review" class="wizard-summary"></div><section class="sales-reservation-confirm"><span>RESERVA ERP</span><div><strong>Ventas no asigna lotes</strong><p>Al crear el pedido, el ERP reservará la necesidad contra la disponibilidad comercial. Alistamiento y Corte definirán el origen físico real y lo dejarán trazado.</p></div></section>`,onEnter:({root,form})=>{
+        const d=serializeForm(form),items=collectSalesItems(root),cards=[...root.querySelectorAll("[data-sales-material]")];
+        const cutLines=items.filter(item=>item.requiresCut).length;
+        const shortageCards=cards.filter(card=>Number(card.dataset.shortage||0)>0).length;
+        root.querySelector("#order-review").innerHTML=[summaryItem("Pedido",d.orderNumber),summaryItem("Cliente",d.clientName),summaryItem("Tipo",fmt.label(d.orderType)),summaryItem("Pago",fmt.payment(d.paymentCondition)),summaryItem("Entrega",fmt.route(d.deliveryRoute)),summaryItem("Destino",`${d.clientCity}, ${d.clientDepartment}`),summaryItem("Dirección",d.clientAddress),summaryItem("Materiales",String(cards.length)),summaryItem("Líneas operativas",String(items.length)),summaryItem("Cortes",cutLines?`${cutLines} línea(s) de corte`:"Sin cortes"),summaryItem("Disponibilidad",shortageCards?`${shortageCards} material(es) con faltante proyectado`:"Disponible según maestro actual"),summaryItem("Ruta inicial",initialRouteLabel(d))].join("");
+      }}
     ],
     onFinish:async({root,data})=>{
-      const items=[...root.querySelectorAll(".item-row")].map((row,index)=>{const material=readMaterialPicker(row.querySelector("[data-material-picker]"),true);const requiresCut=row.querySelector('[name="itemCut"]').checked;return {lineNumber:index+1,sku:material.reference,reference:material.reference,description:material.description,quantity:Number(row.querySelector('[name="quantity"]').value),unit:material.unit,warehouseLocation:null,requiresCut,requestedCutLength:requiresCut?(Number(row.querySelector('[name="cutLength"]').value)||null):null,metadata:{materialMasterId:material.materialMasterId,materialVariantId:material.materialVariantId,variantLabel:material.variantLabel,source:"SALES_SIESA_MASTER"}}});
-      const result=await api.createOrder({...data,items});toast(`Pedido ${result.orderNumber} creado y enviado a ${fmt.step(result.currentStep)}.`,"success",6500);await loadOrders(1);setTimeout(()=>openOrder(result.orderId),180);
+      const items=collectSalesItems(root);
+      const result=await api.createOrder({...data,requiresCut:items.some(item=>item.requiresCut),items});
+      toast(`Pedido ${result.orderNumber} creado. Las cantidades quedaron reservadas lógicamente y el pedido fue enviado a ${fmt.step(result.currentStep)}.`,"success",7500);
+      await loadOrders(1);setTimeout(()=>openOrder(result.orderId),180);
     }
   });
   const typeControl=assistant.root.querySelector('[name="orderType"]');
@@ -199,9 +217,142 @@ function openCreateOrder(){
   departmentSelect?.addEventListener("change",loadMunicipalities);
 
   const editor=assistant.root.querySelector("#items-editor");
-  const add=()=>{const row=document.createElement("article");row.className="item-row item-row-guided official-item-row";row.innerHTML=`<div class="item-row-number"></div><div class="official-item-picker">${materialPickerHtml()}</div><div class="official-item-quantity field"><label>Cantidad *</label><input class="control" name="quantity" type="number" min="0.0001" step="any" placeholder="Cantidad" required></div><div class="official-item-cut"><label class="filter-pill"><input type="checkbox" name="itemCut"> Requiere corte</label><input class="control" name="cutLength" type="number" min="0.0001" step="any" placeholder="Longitud por unidad"></div><button type="button" class="icon-btn official-item-remove" title="Eliminar">×</button>`;const toggle=row.querySelector('[name="itemCut"]'),length=row.querySelector('[name="cutLength"]');const sync=()=>{length.disabled=!toggle.checked;length.required=toggle.checked;if(!toggle.checked)length.value=""};toggle.onchange=sync;sync();row.querySelector(".official-item-remove").onclick=()=>{row.remove();renumberItems(editor)};editor.append(row);bindMaterialPicker(row.querySelector("[data-material-picker]"));renumberItems(editor)};
-  assistant.root.querySelector("#add-item").onclick=add;add();
+  const add=()=>{
+    const card=document.createElement("article");
+    card.className="sales-material-card";
+    card.dataset.salesMaterial="";
+    card.dataset.mode="DIRECT";
+    card.innerHTML=salesMaterialCardHtml();
+    editor.append(card);
+    bindSalesMaterialCard(card);
+    renumberItems(editor);
+  };
+  assistant.root.querySelector("#add-item").onclick=add;
+  add();
 }
+
+function salesMaterialCardHtml(){
+  return `<div class="sales-material-index item-row-number"></div>
+    <div class="sales-material-main">
+      <div class="official-item-picker">${materialPickerHtml()}</div>
+      <section class="sales-demand-builder" data-sales-demand hidden>
+        <div class="sales-demand-mode" data-sales-mode-wrap hidden>
+          <button type="button" class="sales-mode active" data-sales-mode="DIRECT"><span>Entrega directa</span><small>Empacar / enviar la cantidad solicitada</small></button>
+          <button type="button" class="sales-mode" data-sales-mode="CUTS"><span>Cortes por medida</span><small>Define tramos y el ERP calcula el total</small></button>
+        </div>
+        <div class="sales-direct-demand" data-direct-demand>
+          <label class="field"><span>Cantidad solicitada *</span><div class="sales-quantity-control"><input class="control" data-sales-quantity type="number" min="0.0001" step="any" placeholder="0"><b data-sales-unit>UND</b></div></label>
+        </div>
+        <div class="sales-cuts-demand" data-cuts-demand hidden>
+          <div class="sales-cut-head"><div><strong>Plan de cortes</strong><p>Agrega una fila por medida. Puedes pedir varias piezas de la misma longitud.</p></div><button type="button" class="btn btn-ghost" data-add-cut>＋ Agregar medida</button></div>
+          <div class="sales-cut-list" data-cut-list></div>
+        </div>
+        <div class="sales-demand-summary" data-demand-summary><div><small>Total solicitado</small><strong>0</strong></div><div><small>Disponible para venta</small><strong>—</strong></div><div><small>Después de reservar</small><strong>—</strong></div></div>
+        <div class="sales-demand-status" data-demand-status></div>
+      </section>
+    </div>
+    <button type="button" class="icon-btn sales-material-remove" data-remove-material title="Eliminar material">×</button>`;
+}
+
+function bindSalesMaterialCard(card){
+  const picker=card.querySelector("[data-material-picker]");
+  const demand=card.querySelector("[data-sales-demand]");
+  const modeWrap=card.querySelector("[data-sales-mode-wrap]");
+  const quantity=card.querySelector("[data-sales-quantity]");
+  const unitLabel=card.querySelector("[data-sales-unit]");
+  const cutList=card.querySelector("[data-cut-list]");
+  const addCut=()=>{
+    const row=document.createElement("div");row.className="sales-cut-row";
+    row.innerHTML=`<label><span>Piezas</span><input class="control" data-cut-pieces type="number" min="1" step="1" value="1"></label><span class="sales-cut-x">×</span><label><span>Longitud</span><div class="sales-quantity-control"><input class="control" data-cut-length type="number" min="0.0001" step="any" placeholder="0"><b>m</b></div></label><strong data-cut-total>0 m</strong><button type="button" class="icon-btn" data-remove-cut aria-label="Eliminar medida">×</button>`;
+    cutList.append(row);
+    row.querySelector("[data-remove-cut]").onclick=()=>{row.remove();syncSalesMaterialDemand(card)};
+    row.querySelectorAll("input").forEach(input=>input.addEventListener("input",()=>syncSalesMaterialDemand(card)));
+    syncSalesMaterialDemand(card);
+  };
+  bindMaterialPicker(picker,{onChange:()=>{
+    const material=readMaterialPicker(picker,false);
+    if(!material.materialMasterId){demand.hidden=true;return}
+    demand.hidden=false;unitLabel.textContent=material.unit||"UND";
+    const metric=String(material.unit||"").toUpperCase()==="M";
+    modeWrap.hidden=!metric;
+    if(!metric){card.dataset.mode="DIRECT";card.querySelectorAll("[data-sales-mode]").forEach(button=>button.classList.toggle("active",button.dataset.salesMode==="DIRECT"));}
+    syncSalesMaterialMode(card);
+    syncSalesMaterialDemand(card);
+  }});
+  card.querySelectorAll("[data-sales-mode]").forEach(button=>button.addEventListener("click",()=>{
+    card.dataset.mode=button.dataset.salesMode;
+    card.querySelectorAll("[data-sales-mode]").forEach(item=>item.classList.toggle("active",item===button));
+    if(card.dataset.mode==="CUTS"&&!cutList.children.length)addCut();
+    syncSalesMaterialMode(card);syncSalesMaterialDemand(card);
+  }));
+  card.querySelector("[data-add-cut]").onclick=addCut;
+  quantity.addEventListener("input",()=>syncSalesMaterialDemand(card));
+  card.querySelector("[data-remove-material]").onclick=()=>{const editor=card.parentElement;card.remove();renumberItems(editor)};
+}
+
+function syncSalesMaterialMode(card){
+  const mode=card.dataset.mode||"DIRECT";
+  card.querySelector("[data-direct-demand]").hidden=mode!=="DIRECT";
+  card.querySelector("[data-cuts-demand]").hidden=mode!=="CUTS";
+}
+
+function salesMaterialDemand(card){
+  const picker=card.querySelector("[data-material-picker]");
+  const material=readMaterialPicker(picker,false);
+  const mode=card.dataset.mode||"DIRECT";
+  if(mode==="CUTS"){
+    return [...card.querySelectorAll(".sales-cut-row")].reduce((sum,row)=>sum+(Number(row.querySelector("[data-cut-pieces]").value)||0)*(Number(row.querySelector("[data-cut-length]").value)||0),0);
+  }
+  return Number(card.querySelector("[data-sales-quantity]").value)||0;
+}
+
+function syncSalesMaterialDemand(card){
+  const picker=card.querySelector("[data-material-picker]");
+  const material=readMaterialPicker(picker,false);
+  const mode=card.dataset.mode||"DIRECT";
+  card.querySelectorAll(".sales-cut-row").forEach(row=>{const pieces=Number(row.querySelector("[data-cut-pieces]").value)||0,length=Number(row.querySelector("[data-cut-length]").value)||0;row.querySelector("[data-cut-total]").textContent=`${fmt.number(pieces*length,3)} m`;});
+  const total=salesMaterialDemand(card);
+  const atp=Number(material.availableToPromise||0);
+  const projected=atp-total;
+  card.dataset.shortage=String(Math.max(-projected,0));
+  const cells=card.querySelectorAll("[data-demand-summary] strong");
+  if(cells[0])cells[0].textContent=`${fmt.number(total,3)} ${fmt.escape(material.unit||"UND")}`;
+  if(cells[1])cells[1].textContent=`${fmt.number(atp,3)} ${fmt.escape(material.unit||"UND")}`;
+  if(cells[2]){cells[2].textContent=`${fmt.number(Math.max(projected,0),3)} ${fmt.escape(material.unit||"UND")}`;cells[2].classList.toggle("warning",projected<0);}
+  const status=card.querySelector("[data-demand-status]");
+  if(!material.materialMasterId){status.innerHTML="";return}
+  if(total<=0){status.className="sales-demand-status neutral";status.innerHTML='<strong>Define la cantidad.</strong><span>La reserva se calculará cuando completes este material.</span>';return}
+  if(projected>=0){status.className="sales-demand-status success";status.innerHTML=`<strong>Disponibilidad suficiente</strong><span>Al crear el pedido quedarán reservados ${fmt.number(total,3)} ${fmt.escape(material.unit)} de forma lógica. Logística escogerá el origen físico.</span>`;}
+  else{status.className="sales-demand-status warning";status.innerHTML=`<strong>Faltante proyectado: ${fmt.number(Math.abs(projected),3)} ${fmt.escape(material.unit)}</strong><span>El pedido puede registrarse, pero quedará trazada la necesidad por encima de la disponibilidad comercial actual.</span>`;}
+}
+
+function validateSalesMaterialCard(card,index){
+  let material;try{material=readMaterialPicker(card.querySelector("[data-material-picker]"),true)}catch(error){throw new Error(`Material ${index+1}: ${error.message}`)}
+  const mode=card.dataset.mode||"DIRECT";
+  if(mode==="CUTS"){
+    if(String(material.unit).toUpperCase()!=="M")throw new Error(`Material ${index+1}: solo los materiales en metros pueden usar plan de cortes.`);
+    const rows=[...card.querySelectorAll(".sales-cut-row")];if(!rows.length)throw new Error(`Material ${index+1}: agrega al menos una medida de corte.`);
+    rows.forEach((row,cutIndex)=>{const pieces=Number(row.querySelector("[data-cut-pieces]").value),length=Number(row.querySelector("[data-cut-length]").value);if(!Number.isInteger(pieces)||pieces<=0)throw new Error(`Material ${index+1}, corte ${cutIndex+1}: indica cuántas piezas necesitas.`);if(!Number.isFinite(length)||length<=0)throw new Error(`Material ${index+1}, corte ${cutIndex+1}: indica una longitud válida.`);});
+  }else{
+    const quantity=Number(card.querySelector("[data-sales-quantity]").value);if(!Number.isFinite(quantity)||quantity<=0)throw new Error(`Material ${index+1}: registra una cantidad válida.`);
+  }
+  return material;
+}
+
+function collectSalesItems(root){
+  const output=[];let line=0;
+  [...root.querySelectorAll("[data-sales-material]")].forEach((card,index)=>{
+    const material=validateSalesMaterialCard(card,index);const mode=card.dataset.mode||"DIRECT";const groupId=crypto.randomUUID();
+    const baseMeta={materialMasterId:material.materialMasterId,materialVariantId:material.materialVariantId,variantLabel:material.variantLabel,source:"SALES_SIESA_MASTER_V10_15",salesMaterialGroupId:groupId};
+    if(mode==="CUTS"){
+      [...card.querySelectorAll(".sales-cut-row")].forEach((row,cutIndex)=>{line+=1;const pieces=Number(row.querySelector("[data-cut-pieces]").value),length=Number(row.querySelector("[data-cut-length]").value);output.push({lineNumber:line,sku:material.reference,reference:material.reference,description:material.description,quantity:pieces,unit:material.unit,warehouseLocation:null,requiresCut:true,requestedCutLength:length,metadata:{...baseMeta,salesDemandMode:"CUTS",salesCutIndex:cutIndex+1,totalRequested:pieces*length}});});
+    }else{
+      line+=1;const quantity=Number(card.querySelector("[data-sales-quantity]").value);output.push({lineNumber:line,sku:material.reference,reference:material.reference,description:material.description,quantity,unit:material.unit,warehouseLocation:null,requiresCut:false,requestedCutLength:null,metadata:{...baseMeta,salesDemandMode:"DIRECT",totalRequested:quantity}});
+    }
+  });
+  return output;
+}
+
 function renumberItems(editor){[...editor.querySelectorAll(".item-row-number")].forEach((element,index)=>element.textContent=String(index+1))}
 function initialRouteLabel(data){
   if(["PVC","PVP"].includes(data.orderType)&&data.hasCreditArrears)return "Cartera · cliente con mora";

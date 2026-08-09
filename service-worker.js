@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-14-0-maestro-siesa-20260808";
+const CACHE="erp-electroingenieria-v10-15-0-ventas-inventario-trazable-20260808";
 const ASSETS=[
   "./",
   "./index.html",

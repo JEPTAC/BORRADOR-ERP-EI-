@@ -50,11 +50,11 @@ export async function renderInventory(root){
   root.querySelector("#inv-search").onkeydown=event=>{if(event.key==="Enter")load(1)};
   root.querySelector("#search-inventory").onclick=()=>root.querySelector("#inv-search").focus();
   root.querySelector("#inventory-source").onclick=loadSyncStatus;
-  root.querySelector("#low-stock").onclick=()=>{currentItems.sort((a,b)=>Number(a.available)-Number(b.available));root.querySelector("#inv-result").innerHTML=cards(currentItems)};
+  root.querySelector("#low-stock").onclick=()=>{currentItems.sort((a,b)=>Number(a.availableToPromise??a.available)-Number(b.availableToPromise??b.available));root.querySelector("#inv-result").innerHTML=cards(currentItems)};
   root.querySelector("#sync-siesa")?.addEventListener("click",()=>openSiesaSync(async()=>{await loadSyncStatus();await load(1)}));
   root.querySelector("#inventory-help").onclick=()=>guide({title:"Maestro Siesa e inventario",description:"La referencia y el nombre son la identidad oficial del material.",items:[
     {title:"Ventas selecciona, no escribe",detail:"Los asesores buscan materiales en este mismo maestro."},
-    {title:"Inventario conserva ubicación y lote",detail:"Cada fila física de Siesa se mantiene separada por bodega, ubicación, lote y variante."},
+    {title:"Reserva lógica separada",detail:"Ventas reserva cantidades contra el disponible comercial, pero nunca selecciona bodegas, lotes o carretos."},{title:"Inventario conserva ubicación y lote",detail:"Cada fila física de Siesa se mantiene separada por bodega, ubicación, lote y variante."},
     {title:"Pruebas fuera de operación",detail:"Los registros no vinculados al maestro no aparecen en el inventario normal."},
     {title:"Corte usa material y variante exactos",detail:"Un carreto solo se ofrece si pertenece a la misma referencia y, cuando aplique, al mismo color o variante."}
   ]});
@@ -65,7 +65,7 @@ function cards(rows){
   return `<div class="inventory-grid official-inventory-grid">${rows.map(item=>`<article class="inventory-card official-inventory-card">
     <header><div><strong>${fmt.escape(item.reference)}</strong><span class="official-source-badge">SIESA</span></div><span class="badge badge-blue">${fmt.escape(item.unit)}</span></header>
     <div class="inventory-card-body"><h3>${fmt.escape(item.description)}</h3>
-      <div class="inventory-numbers"><div><label>Disponible</label><strong class="success">${fmt.number(item.available,3)}</strong></div><div><label>Comprometido</label><strong>${fmt.number(item.reserved,3)}</strong></div><div><label>Bloqueado</label><strong class="warning">${fmt.number(item.blocked,3)}</strong></div><div><label>Registros físicos</label><strong>${fmt.number(item.lots)}</strong></div></div>
+      <div class="inventory-numbers inventory-numbers-v1015"><div><label>Existencia física</label><strong>${fmt.number(item.physicalExistence??(Number(item.available||0)+Number(item.siesaCommitted||0)+Number(item.blocked||0)),3)}</strong></div><div><label>Disponible Siesa</label><strong>${fmt.number(item.available,3)}</strong></div><div><label>Reservado ERP</label><strong class="info">${fmt.number(item.erpReserved||0,3)}</strong></div><div><label>Disponible para venta</label><strong class="success">${fmt.number(item.availableToPromise??item.available,3)}</strong></div><div><label>Comprometido Siesa</label><strong>${fmt.number(item.siesaCommitted||0,3)}</strong></div><div><label>Bloqueado</label><strong class="warning">${fmt.number(item.blocked,3)}</strong></div><div><label>Registros físicos</label><strong>${fmt.number(item.lots)}</strong></div></div>
       ${Number(item.variantCount||0)>0?`<p class="inventory-variant-note">${fmt.number(item.variantCount)} variante(s) con existencia física separada.</p>`:""}
     </div>
     <footer><span>Referencia y nombre validados</span><button class="btn btn-primary" data-inventory-item="${item.id}">Ver lotes / ajustar</button></footer>

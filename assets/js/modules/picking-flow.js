@@ -204,7 +204,7 @@ async function renderVerification(host,data,{reload,refreshLists}){
   let serverDraft={};
   try{
     const pre=await api.pickingPrecheck(data.order.id);
-    serverDraft=Object.fromEntries((pre.items||[]).map(item=>[item.orderItemId,{result:item.result||"",novelty:item.novelty||""}]));
+    serverDraft=Object.fromEntries((pre.items||[]).map(item=>[item.orderItemId,{result:item.result||"",novelty:item.novelty||"",origins:item.origins||[]}])) ;
   }catch(error){
     console.warn("[ALISTAMIENTO PRECHECK]",error);
   }
@@ -231,6 +231,12 @@ async function renderVerification(host,data,{reload,refreshLists}){
     ${roundHistory(data)}
   `);
   bindClose(host);
+  const itemMap=new Map(processable.map(item=>[item.id,item]));
+  host.querySelectorAll("[data-picking-item]").forEach(row=>{
+    const item=itemMap.get(row.dataset.itemId);
+    row.__savedOrigins=draft[row.dataset.itemId]?.origins||[];
+    if(row.dataset.result==="FOUND"&&!item?.requires_cut)loadOriginPlan(row,item,row.__savedOrigins).then(sync).catch(error=>{row.dataset.originError=error.message;sync()});
+  });
 
   const sync=()=>{
     const rows=[...host.querySelectorAll("[data-picking-item]")];
@@ -239,20 +245,27 @@ async function renderVerification(host,data,{reload,refreshLists}){
     const missing=results.filter(row=>row.result==="MISSING").length;
     const found=results.filter(row=>row.result==="FOUND").length;
     const missingWithoutReason=results.some(row=>row.result==="MISSING"&&!row.novelty);
+    const originPending=[...host.querySelectorAll("[data-picking-item]")].some(row=>row.dataset.result==="FOUND"&&row.dataset.requiresCut!=="true"&&!originSelectionValid(row));
     const counter=host.querySelector("[data-picking-verified]");if(counter)counter.textContent=String(verified);
-    const summary=host.querySelector("[data-picking-summary]");if(summary)summary.innerHTML=summaryMarkup(processable.length,found,missing,verified);
-    const send=host.querySelector("[data-picking-send]");if(send)send.disabled=verified!==processable.length||missingWithoutReason||processable.length===0;
+    const summary=host.querySelector("[data-picking-summary]");if(summary)summary.innerHTML=summaryMarkup(processable.length,found,missing,verified)+(originPending?'<div class="picking-origin-alert">Falta confirmar el origen físico de una o más líneas encontradas.</div>':"");
+    const send=host.querySelector("[data-picking-send]");if(send)send.disabled=verified!==processable.length||missingWithoutReason||originPending||processable.length===0;
     saveDraft(task,results);
   };
 
-  host.querySelectorAll("[data-result]").forEach(button=>button.addEventListener("click",()=>{
+  host.querySelectorAll("[data-result]").forEach(button=>button.addEventListener("click",async()=>{
     const row=button.closest("[data-picking-item]");
     row.querySelectorAll("[data-result]").forEach(item=>{const selected=item===button;item.classList.toggle("selected",selected);item.setAttribute("aria-pressed",String(selected));});
     row.dataset.result=button.dataset.result;
     const novelty=row.querySelector("[data-novelty-wrap]");novelty.hidden=button.dataset.result!=="MISSING";
     const textarea=novelty.querySelector("textarea");textarea.required=button.dataset.result==="MISSING";if(button.dataset.result==="FOUND")textarea.value="";
+    const origin=row.querySelector("[data-origin-wrap]");
+    if(origin)origin.hidden=button.dataset.result!=="FOUND";
+    if(button.dataset.result==="FOUND"&&row.dataset.requiresCut!=="true"){
+      try{await loadOriginPlan(row,itemMap.get(row.dataset.itemId),row.__savedOrigins||[])}catch(error){toast(error.message,"error",6500);row.dataset.originError=error.message}
+    }
     sync();
   }));
+  host.addEventListener("picking:origin-change",sync);
   host.querySelectorAll("[data-picking-item] textarea").forEach(textarea=>textarea.addEventListener("input",sync));
   host.querySelector("[data-picking-send]")?.addEventListener("click",async event=>{
     const results=[...host.querySelectorAll("[data-picking-item]")].map(readRow);
@@ -328,25 +341,74 @@ function shell(data,content){
 function itemRow(item,index,saved={}){
   const result=saved?.result||"";
   const novelty=saved?.novelty||item.metadata?.lastNovelty||"";
-  return `<article class="picking-item-row" data-picking-item data-item-id="${fmt.escape(item.id)}" data-result="${fmt.escape(result)}">
+  return `<article class="picking-item-row" data-picking-item data-item-id="${fmt.escape(item.id)}" data-result="${fmt.escape(result)}" data-requires-cut="${item.requires_cut?"true":"false"}">
     <div class="picking-item-number">${index+1}</div>
     <div class="picking-item-data">
       <div><small>Referencia</small><strong>${fmt.escape(item.reference||item.sku||"—")}</strong></div>
       <div class="description"><small>Mercancía</small><strong>${fmt.escape(item.description)}</strong></div>
       <div><small>Cantidad</small><strong>${fmt.number(item.quantity,3)} ${fmt.escape(item.unit)}</strong></div>
-      <div><small>Ubicación</small><strong>${fmt.escape(item.warehouse_location||"—")}</strong></div>
-      ${item.requires_cut?`<div><small>Corte</small><strong>${item.requested_cut_length?`${fmt.number(item.requested_cut_length,3)} ${fmt.escape(item.unit)}`:"Requiere corte"}</strong></div>`:""}
+      ${item.requires_cut?`<div><small>Origen</small><strong>Corte define el carreto</strong></div><div><small>Corte</small><strong>${item.requested_cut_length?`${fmt.number(item.requested_cut_length,3)} ${fmt.escape(item.unit)}`:"Requiere corte"}</strong></div>`:`<div><small>Origen físico</small><strong>Se confirma al encontrar</strong></div>`}
     </div>
     <div class="picking-mini-actions">
       <button type="button" class="picking-result found ${result==="FOUND"?"selected":""}" data-result="FOUND" aria-pressed="${result==="FOUND"?"true":"false"}"><span class="picking-result-icon" aria-hidden="true">✓</span><span>Encontrado</span></button>
       <button type="button" class="picking-result missing ${result==="MISSING"?"selected":""}" data-result="MISSING" aria-pressed="${result==="MISSING"?"true":"false"}"><span class="picking-result-icon" aria-hidden="true">!</span><span>No encontrado</span></button>
     </div>
+    ${item.requires_cut?`<div class="picking-cut-origin-note" ${result==="FOUND"?"":"hidden"}><strong>Origen trazado por Corte</strong><span>El carreto y el consumo físico ya quedaron registrados en el subflujo de Corte.</span></div>`:`<div class="picking-origin" data-origin-wrap ${result==="FOUND"?"":"hidden"}><div class="picking-origin-loading">Marca Encontrado para consultar lotes y ubicaciones oficiales.</div></div>`}
     <div class="picking-novelty" data-novelty-wrap ${result==="MISSING"?"":"hidden"}>
       <label>¿Por qué no se encontró? *</label>
       <textarea class="control" rows="2" placeholder="Ejemplo: referencia agotada, ubicación vacía o cantidad incompleta" ${result==="MISSING"?"required":""}>${fmt.escape(novelty)}</textarea>
       <small>El faltante quedará trazado en esta ronda y podrá generar una salida parcial.</small>
     </div>
   </article>`;
+}
+
+async function loadOriginPlan(row,item,savedOrigins=[]){
+  if(!row||!item||item.requires_cut)return;
+  const wrap=row.querySelector("[data-origin-wrap]");if(!wrap)return;
+  wrap.hidden=false;
+  if(row.dataset.originLoaded==="true")return;
+  row.dataset.originLoaded="loading";
+  wrap.innerHTML='<div class="picking-origin-loading">Consultando inventario oficial y ubicación…</div>';
+  const plan=await api.pickingOriginPlan(item.id);
+  row.__originPlan=plan;
+  const candidates=plan.candidates||[];
+  const savedMap=new Map((savedOrigins||[]).map(origin=>[origin.lotId,Number(origin.quantity||0)]));
+  const suggestedMap=new Map((plan.suggestedPlan||[]).map(origin=>[origin.lotId,Number(origin.quantity||0)]));
+  const selection=savedMap.size?savedMap:suggestedMap;
+  if(!candidates.length){
+    wrap.innerHTML=`<div class="picking-origin-empty"><strong>Sin existencia física disponible</strong><span>Marca No encontrado o registra una Novedad si el inventario físico no coincide.</span></div>`;
+    row.dataset.originLoaded="true";return;
+  }
+  wrap.innerHTML=`<div class="picking-origin-head"><div><strong>Origen físico</strong><p>El ERP propone de dónde tomar la mercancía. Puedes cambiarlo si físicamente la encuentras en otra ubicación.</p></div><span>${fmt.number(plan.required,3)} ${fmt.escape(plan.unit)}</span></div>
+    ${Number(plan.shortage||0)>0?`<div class="picking-origin-shortage">El inventario actual no alcanza: faltan ${fmt.number(plan.shortage,3)} ${fmt.escape(plan.unit)}.</div>`:""}
+    <div class="picking-origin-options">${candidates.map(candidate=>{const qty=selection.get(candidate.lotId)||0;return `<div class="picking-origin-option ${qty>0?"selected":""}" data-origin-option>
+      <input type="checkbox" data-origin-check value="${fmt.escape(candidate.lotId)}" ${qty>0?"checked":""}>
+      <span class="picking-origin-loc"><strong>${fmt.escape([candidate.warehouseCode,candidate.location].filter(Boolean).join(" · ")||"Ubicación")}</strong><small>${fmt.escape([candidate.locationName,candidate.lotNumber&&`Lote ${candidate.lotNumber}`,candidate.serialNumber].filter(Boolean).join(" · ")||"Sin detalle adicional")}</small></span>
+      <span class="picking-origin-available">Disp. <b>${fmt.number(candidate.available,3)}</b></span>
+      <label class="picking-origin-qty"><small>Tomar</small><input class="control" data-origin-qty type="number" min="0" max="${Number(candidate.available)}" step="any" value="${qty||""}" ${qty>0?"":"disabled"}></label>
+      ${candidate.recommended?'<em>Recomendado</em>':""}
+    </label>`}).join("")}</div>
+    <div class="picking-origin-total" data-origin-total></div>`;
+  row.dataset.originLoaded="true";
+  const update=()=>{
+    wrap.querySelectorAll("[data-origin-option]").forEach(option=>{const check=option.querySelector("[data-origin-check]"),input=option.querySelector("[data-origin-qty]");input.disabled=!check.checked;if(!check.checked)input.value="";option.classList.toggle("selected",check.checked)});
+    const origins=readOrigins(row),sum=origins.reduce((acc,origin)=>acc+origin.quantity,0),required=Number(plan.required||item.quantity||0),valid=Math.abs(sum-required)<=0.0001;
+    row.dataset.originValid=String(valid);
+    const total=wrap.querySelector("[data-origin-total]");if(total){total.className=`picking-origin-total ${valid?"valid":"invalid"}`;total.innerHTML=`<span>Asignado <strong>${fmt.number(sum,3)} / ${fmt.number(required,3)} ${fmt.escape(plan.unit)}</strong></span><b>${valid?"Origen completo":"Ajusta las cantidades"}</b>`;}
+    row.dispatchEvent(new CustomEvent("picking:origin-change",{bubbles:true}));
+  };
+  wrap.querySelectorAll("[data-origin-check]").forEach(check=>check.addEventListener("change",update));
+  wrap.querySelectorAll("[data-origin-qty]").forEach(input=>input.addEventListener("input",update));
+  update();
+}
+
+function readOrigins(row){
+  return [...(row?.querySelectorAll("[data-origin-option]")||[])].filter(option=>option.querySelector("[data-origin-check]")?.checked).map(option=>({lotId:option.querySelector("[data-origin-check]").value,quantity:Number(option.querySelector("[data-origin-qty]").value)||0})).filter(origin=>origin.quantity>0);
+}
+
+function originSelectionValid(row){
+  if(row.dataset.requiresCut==="true")return true;
+  return row.dataset.originLoaded==="true"&&row.dataset.originValid==="true";
 }
 
 function summaryMarkup(total,found,missing,verified){
@@ -412,7 +474,7 @@ function pendingItems(data){return (data.items||[]).filter(item=>!["FULFILLED","
 function hasPartialPending(data){return data?.order?.metadata?.fulfillment?.status==="PARTIAL"&&pendingItems(data).length>0}
 function assigneeName(data){const task=activeTask(data);return task?.assigned_name||data.order.current_assignee_name||data.order.metadata?.receptionAssignment?.pickingProfileName||"Auxiliar asignado"}
 function bindClose(host){host.querySelectorAll("[data-close]").forEach(button=>button.onclick=()=>host.replaceChildren())}
-function readRow(row){return {orderItemId:row.dataset.itemId,result:row.dataset.result||"",novelty:row.querySelector("textarea")?.value.trim()||""}}
+function readRow(row){return {orderItemId:row.dataset.itemId,result:row.dataset.result||"",novelty:row.querySelector("textarea")?.value.trim()||"",origins:row.dataset.result==="FOUND"&&row.dataset.requiresCut!=="true"?readOrigins(row):[]}}
 function draftKey(task){return `${DRAFT_PREFIX}${task?.id||"none"}`}
 function loadDraft(task,items){
   try{
@@ -421,7 +483,7 @@ function loadDraft(task,items){
   }catch{return {}}
 }
 function saveDraft(task,rows){
-  const value=Object.fromEntries(rows.map(row=>[row.orderItemId,{result:row.result,novelty:row.novelty}]));
+  const value=Object.fromEntries(rows.map(row=>[row.orderItemId,{result:row.result,novelty:row.novelty,origins:row.origins||[]}]));
   localStorage.setItem(draftKey(task),JSON.stringify(value));
 }
 function clearDraft(task){localStorage.removeItem(draftKey(task))}

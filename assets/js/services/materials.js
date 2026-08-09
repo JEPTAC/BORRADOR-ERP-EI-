@@ -43,20 +43,52 @@ export function materialPickerHtml(initial={}){
     data-material-id="${fmt.escape(id)}" data-material-reference="${fmt.escape(ref)}"
     data-material-name="${fmt.escape(name)}" data-material-unit="${fmt.escape(unit)}"
     data-material-variant-id="${fmt.escape(variantId)}" data-material-variant-label="${fmt.escape(variantLabel)}">
-    <label class="material-search-label">Material oficial Siesa
+    <label class="material-search-label"><span>Material oficial Siesa</span>
       <input class="control material-search-input" data-material-query autocomplete="off"
-        placeholder="Buscar por referencia, nombre, familia o marca"
+        placeholder="Referencia, nombre, familia o marca"
         value="${selected?fmt.escape(`${ref} · ${name}`):""}">
     </label>
     <div class="material-search-results" data-material-results hidden></div>
     <div class="material-selected-card" data-material-selected ${selected?"":"hidden"}>
-      <div><span data-material-reference-label>${fmt.escape(ref||"—")}</span><strong data-material-name-label>${fmt.escape(name||"Material sin resolver")}</strong></div>
-      <div class="material-selected-meta"><span data-material-unit-label>${fmt.escape(unit)}</span><span data-material-stock-label>Existencia: —</span></div>
+      <div class="material-selected-identity"><span data-material-reference-label>${fmt.escape(ref||"—")}</span><strong data-material-name-label>${fmt.escape(name||"Material sin resolver")}</strong></div>
+      <div class="material-selected-meta">
+        <span data-material-unit-label>${fmt.escape(unit)}</span>
+        <span class="stock-physical" data-material-physical-label>Físico: —</span>
+        <span class="stock-reserved" data-material-reserved-label>Reservado ERP: —</span>
+        <span class="stock-atp" data-material-stock-label>Disponible venta: —</span>
+      </div>
     </div>
     <div class="material-variant-field" data-material-variant-wrap ${variantLabel?"":"hidden"}>
-      <label>Variante / color<select class="control" data-material-variant><option value="${fmt.escape(variantId)}">${fmt.escape(variantLabel||"Selecciona")}</option></select></label>
+      <label>Color / variante<select class="control" data-material-variant><option value="${fmt.escape(variantId)}">${fmt.escape(variantLabel||"Selecciona")}</option></select></label>
     </div>
   </div>`;
+}
+
+function stockSnapshot(material,variantId=null){
+  const variants=Array.isArray(material?.variants)?material.variants:[];
+  const variant=variantId?variants.find(v=>v.id===variantId):null;
+  return {
+    physical:Number(variant?.physicalAvailable??material?.physicalAvailable??0),
+    reserved:Number(variant?.erpReserved??material?.erpReserved??0),
+    available:Number(variant?.availableToPromise??material?.availableToPromise??material?.available??0)
+  };
+}
+
+function updateStockLabels(container){
+  const material=container.__material;
+  if(!material)return;
+  const stock=stockSnapshot(material,container.dataset.materialVariantId||null);
+  const unit=material.unit||"UND";
+  const fmtStock=value=>Number(value||0).toLocaleString("es-CO",{maximumFractionDigits:3});
+  const physical=container.querySelector("[data-material-physical-label]");
+  const reserved=container.querySelector("[data-material-reserved-label]");
+  const atp=container.querySelector("[data-material-stock-label]");
+  if(physical)physical.textContent=`Físico: ${fmtStock(stock.physical)} ${unit}`;
+  if(reserved)reserved.textContent=`Reservado ERP: ${fmtStock(stock.reserved)} ${unit}`;
+  if(atp){atp.textContent=`Disponible venta: ${fmtStock(stock.available)} ${unit}`;atp.classList.toggle("is-empty",stock.available<=0)}
+  container.dataset.materialPhysical=String(stock.physical);
+  container.dataset.materialReserved=String(stock.reserved);
+  container.dataset.materialAtp=String(stock.available);
 }
 
 function displayMaterial(container,material,preferredVariantId=null){
@@ -73,7 +105,6 @@ function displayMaterial(container,material,preferredVariantId=null){
   container.querySelector("[data-material-reference-label]").textContent=material.reference||"—";
   container.querySelector("[data-material-name-label]").textContent=material.name||"—";
   container.querySelector("[data-material-unit-label]").textContent=material.unit||"UND";
-  container.querySelector("[data-material-stock-label]").textContent=`Disponible: ${Number(material.available||0).toLocaleString("es-CO",{maximumFractionDigits:3})} ${material.unit||""}`;
   const variants=Array.isArray(material.variants)?material.variants:[];
   const wrap=container.querySelector("[data-material-variant-wrap]");
   const select=container.querySelector("[data-material-variant]");
@@ -85,7 +116,7 @@ function displayMaterial(container,material,preferredVariantId=null){
     container.dataset.materialVariantLabel="";
   }else{
     wrap.hidden=false;
-    select.innerHTML=`<option value="">${variants.length>1?"Selecciona color / variante":"Variante"}</option>${variants.map(v=>`<option value="${fmt.escape(v.id)}" data-label="${fmt.escape(v.label)}">${fmt.escape(v.label)} · disp. ${Number(v.available||0).toLocaleString("es-CO",{maximumFractionDigits:3})}</option>`).join("")}`;
+    select.innerHTML=`<option value="">${variants.length>1?"Selecciona color / variante":"Variante"}</option>${variants.map(v=>`<option value="${fmt.escape(v.id)}" data-label="${fmt.escape(v.label)}">${fmt.escape(v.label)} · disp. ${Number(v.availableToPromise??v.available??0).toLocaleString("es-CO",{maximumFractionDigits:3})}</option>`).join("")}`;
     let target=preferredVariantId||container.dataset.materialVariantId||"";
     if(!target&&variants.length===1)target=variants[0].id;
     if(target&&variants.some(v=>v.id===target))select.value=target;
@@ -94,6 +125,7 @@ function displayMaterial(container,material,preferredVariantId=null){
     container.dataset.materialVariantId=select.value||"";
     container.dataset.materialVariantLabel=select.value?(option?.dataset.label||option?.textContent?.split(" · ")[0]||""):"";
   }
+  updateStockLabels(container);
   container.dispatchEvent(new CustomEvent("material:selected",{bubbles:true,detail:readMaterialPicker(container,false)}));
 }
 
@@ -126,9 +158,10 @@ export function bindMaterialPicker(container,{onChange}={}){
       const items=await api.materialSearch(text,15);
       if(request!==seq)return;
       results.innerHTML=items.length?items.map(item=>`<button type="button" class="material-result" data-material-result="${fmt.escape(item.id)}">
-        <span>${fmt.escape(item.reference)}</span>
+        <span class="material-result-ref">${fmt.escape(item.reference)}</span>
         <strong>${fmt.escape(item.name)}</strong>
-        <small>${fmt.escape(item.unit)} · Disponible ${Number(item.available||0).toLocaleString("es-CO",{maximumFractionDigits:3})}${item.variants?.length?` · ${item.variants.length} variante(s)`:""}</small>
+        <small>${fmt.escape(item.unit)}${item.variants?.length?` · ${item.variants.length} variante(s)`:""}</small>
+        <div class="material-result-stock"><b>Disponible venta ${Number(item.availableToPromise??item.available??0).toLocaleString("es-CO",{maximumFractionDigits:3})}</b><em>Físico ${Number(item.physicalAvailable||0).toLocaleString("es-CO",{maximumFractionDigits:3})}</em><em>Reservado ERP ${Number(item.erpReserved||0).toLocaleString("es-CO",{maximumFractionDigits:3})}</em></div>
       </button>`).join(""):'<div class="material-search-empty">No existe una coincidencia oficial. Revisa la referencia o el nombre.</div>';
       results.querySelectorAll("[data-material-result]").forEach(button=>button.addEventListener("click",()=>{
         const item=items.find(x=>x.id===button.dataset.materialResult);
@@ -149,6 +182,7 @@ export function bindMaterialPicker(container,{onChange}={}){
       container.querySelector("[data-material-selected]").hidden=true;
       container.querySelector("[data-material-variant-wrap]").hidden=true;
       container.classList.remove("selected");
+      onChange?.(readMaterialPicker(container,false));
     }
     clearTimeout(timer);timer=setTimeout(search,220);
   });
@@ -158,6 +192,7 @@ export function bindMaterialPicker(container,{onChange}={}){
     const option=variant.selectedOptions[0];
     container.dataset.materialVariantId=variant.value||"";
     container.dataset.materialVariantLabel=variant.value?(option?.dataset.label||option?.textContent?.split(" · ")[0]||""):"";
+    updateStockLabels(container);
     onChange?.(readMaterialPicker(container,false));
   });
   container.addEventListener("focusout",()=>setTimeout(()=>{if(!container.contains(document.activeElement))hide()},0));
@@ -172,7 +207,10 @@ export function readMaterialPicker(container,strict=true){
     reference:container?.dataset.materialReference||null,
     sku:container?.dataset.materialReference||null,
     description:container?.dataset.materialName||null,
-    unit:container?.dataset.materialUnit||"UND"
+    unit:container?.dataset.materialUnit||"UND",
+    physicalAvailable:Number(container?.dataset.materialPhysical||0),
+    erpReserved:Number(container?.dataset.materialReserved||0),
+    availableToPromise:Number(container?.dataset.materialAtp||0)
   };
   if(strict&&!result.materialMasterId)throw new Error("Selecciona el material desde el maestro oficial Siesa.");
   if(strict&&container?.dataset.variantRequired==="true"&&!result.materialVariantId)throw new Error(`Selecciona el color o variante de ${result.reference||"la referencia"}.`);
