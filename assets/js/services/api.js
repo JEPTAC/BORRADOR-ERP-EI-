@@ -115,5 +115,15 @@ export const api={
   finalizeShipping:(orderId,payload={})=>mutationRpc("erp_x_shipping_finalize",{p_order_id:orderId,p_payload:payload}),
   shippingSentOrders:(search="",page=1,pageSize=30)=>rpc("erp_x_shipping_sent_orders",{p_search:search||null,p_page:page,p_page_size:pageSize}),
   reportShippingNoDelivery:(orderId,payload)=>mutationRpc("erp_x_shipping_report_no_delivery",{p_order_id:orderId,p_payload:payload}),
+  sandboxCreate:payload=>mutationRpc("erp_x_sandbox_create",{p_payload:payload}),
+  sandboxOrders:(filters={})=>rpc("erp_x_sandbox_list_orders",{p_search:filters.search||null,p_step:filters.step||null,p_status:filters.status||null,p_page:filters.page||1,p_page_size:filters.pageSize||50}),
+  sandboxMove:(orderId,step)=>mutationRpc("erp_x_sandbox_move",{p_order_id:orderId,p_step_code:step}),
+  sandboxDelete:orderId=>mutationRpc("erp_x_sandbox_delete",{p_order_id:orderId}),
+  sandboxClear:()=>mutationRpc("erp_x_sandbox_clear"),
+  sandboxCuttingGroups:(search="",page=1,pageSize=50)=>rpc("erp_x_sandbox_cutting_groups",{p_search:search||null,p_page:page,p_page_size:pageSize}),
+  sandboxCuttingGroup:groupKey=>rpc("erp_x_sandbox_cutting_group",{p_group_key:groupKey}),
+  sandboxCuttingOptimizer:groupKey=>rpc("erp_x_sandbox_cutting_optimizer",{p_group_key:groupKey}),
+  sandboxExecuteCutGroup:(groupKey,payload)=>mutationRpc("erp_x_sandbox_execute_cut_group",{p_group_key:groupKey,p_payload:payload}),
+  sandboxResolveCutRequirement:(requirementId,resolution,payload={})=>mutationRpc("erp_x_sandbox_resolve_cut_requirement",{p_requirement_id:requirementId,p_resolution:resolution,p_payload:payload}),
   audit:(entityType=null,search="",page=1,pageSize=100)=>rpc("erp_x_audit",{p_entity_type:entityType,p_search:search||null,p_page:page,p_page_size:pageSize})
 };

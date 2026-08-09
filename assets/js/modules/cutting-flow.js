@@ -6,14 +6,17 @@ import {parallelWorkFooter} from "./active-work.js";
 
 let currentRoot=null;
 let currentPage=1;
+let sandboxMode=false;
 
 export function isCuttingFlow(data){
   return data?.order?.current_step_code==="CORTE";
 }
 
-export async function renderCutting(root){
+export async function renderCutting(root,{params={}}={}){
   currentRoot=root;
+  sandboxMode=params.sandbox==="1";
   root.innerHTML=`
+    ${sandboxMode?`<section class="sandbox-queue-banner"><strong>MODO SANDBOX · CORTE</strong><span>Carretos y consumos son simulados. Inventario Siesa permanece intacto.</span><button class="btn btn-ghost btn-compact" id="sandbox-cut-back">Volver al Bot</button></section>`:""}
     <section class="page-head cutting-page-head">
       <div><span class="cutting-kicker">Centro de corte</span><h2>Cortes pendientes por referencia</h2><p>Las solicitudes iguales se consolidan para calcular el carreto necesario y ejecutar varios pedidos en una sola operación.</p></div>
       <div class="page-actions"><button class="btn btn-ghost" id="cutting-refresh">Actualizar</button></div>
@@ -31,6 +34,7 @@ export async function renderCutting(root){
       <div id="cutting-result">${loading("Agrupando cortes pendientes…")}</div>
     </section>`;
 
+  root.querySelector("#sandbox-cut-back")?.addEventListener("click",()=>navigate("sandbox"));
   root.querySelector("#cutting-search-button")?.addEventListener("click",()=>loadCuttingGroups(1));
   root.querySelector("#cutting-refresh")?.addEventListener("click",()=>loadCuttingGroups(currentPage));
   root.querySelector("#cutting-search")?.addEventListener("keydown",event=>{if(event.key==="Enter")loadCuttingGroups(1)});
@@ -46,7 +50,7 @@ async function loadCuttingGroups(page=1){
   target.innerHTML=loading("Calculando requerimientos por referencia…");
   try{
     const search=root.querySelector("#cutting-search")?.value.trim()||"";
-    const data=await api.cuttingGroups(search,page,50);
+    const data=await (sandboxMode?api.sandboxCuttingGroups(search,page,50):api.cuttingGroups(search,page,50));
     const rows=data.items||[];
     target.innerHTML=rows.length?`
       <div class="cutting-result-head"><div><strong>${fmt.number(data.pagination?.totalItems||rows.length)} referencia(s)</strong><span>Solo se muestran cortes disponibles para tu usuario.</span></div></div>
@@ -87,14 +91,14 @@ export function renderCuttingOrder(host,data){
     </section>
   </div>`;
   host.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",()=>host.replaceChildren()));
-  host.querySelector("[data-open-cutting]")?.addEventListener("click",()=>{host.replaceChildren();navigate("cutting")});
+  host.querySelector("[data-open-cutting]")?.addEventListener("click",()=>{host.replaceChildren();navigate("cutting",data.order.is_test?{sandbox:"1"}:{})});
 }
 
 async function openCutGroup(groupKey){
   const host=document.querySelector("#modal-root");
   host.innerHTML=`<div class="modal-overlay cutting-overlay"><section class="modal cutting-group-modal"><div class="modal-body">${loading("Preparando el grupo de corte…")}</div></section></div>`;
   try{
-    const [data,optimizer]=await Promise.all([api.cuttingGroup(groupKey),api.cuttingOptimizer(groupKey)]);
+    const [data,optimizer]=await Promise.all([sandboxMode?api.sandboxCuttingGroup(groupKey):api.cuttingGroup(groupKey),sandboxMode?api.sandboxCuttingOptimizer(groupKey):api.cuttingOptimizer(groupKey)]);
     renderCutGroup(host,data,optimizer);
   }catch(error){
     host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><h3>No fue posible abrir el grupo</h3><button class="icon-btn" data-close>×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
@@ -166,7 +170,7 @@ function renderCutGroup(host,data,optimizer={}){
     if(!payload)return;
     event.currentTarget.disabled=true;
     try{
-      const result=await api.executeCutGroup(group.groupKey,payload);
+      const result=await (sandboxMode?api.sandboxExecuteCutGroup(group.groupKey,payload):api.executeCutGroup(group.groupKey,payload));
       toast(`Cortes ejecutados. Quedan ${fmt.number(result.remainingLength,3)} m en el carreto.`,"success",7000);
       host.replaceChildren();
       await loadCuttingGroups(currentPage);
@@ -322,10 +326,10 @@ async function resolveIndividual(host,groupKey,item,mode,button){
   }
   button.disabled=true;
   try{
-    await api.resolveCutRequirement(requirementId,mode,payload);
+    await (sandboxMode?api.sandboxResolveCutRequirement(requirementId,mode,payload):api.resolveCutRequirement(requirementId,mode,payload));
     toast(mode==="FULL_REEL"?"Carreto completo enviado a Alistamiento.":"La referencia quedó marcada como no requiere corte.","success",6500);
     await loadCuttingGroups(currentPage);
-    try{const [latest,optimizer]=await Promise.all([api.cuttingGroup(groupKey),api.cuttingOptimizer(groupKey)]);renderCutGroup(host,latest,optimizer)}catch{host.replaceChildren()}
+    try{const [latest,optimizer]=await Promise.all([sandboxMode?api.sandboxCuttingGroup(groupKey):api.cuttingGroup(groupKey),sandboxMode?api.sandboxCuttingOptimizer(groupKey):api.cuttingOptimizer(groupKey)]);renderCutGroup(host,latest,optimizer)}catch{host.replaceChildren()}
     window.__erpQueueRefresh?.();
   }catch(error){toast(error.message,"error",8000);button.disabled=false}
 }

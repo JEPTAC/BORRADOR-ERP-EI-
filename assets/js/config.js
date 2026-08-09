@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.15.0-ventas-inventario-trazable",
-  build: "2026-08-08.06",
+  version: "10.16.0-sandbox-superadmin",
+  build: "2026-08-09.01",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -42,6 +42,7 @@ export const NAV_GROUPS = [
     {id:"vsm",label:"Flujo y tiempos",icon:"vsm"},
     {id:"reports",label:"Reportes",icon:"reports"},
     {id:"imports",label:"Importar historial",icon:"imports"},
+    {id:"sandbox",label:"Bot de pruebas",icon:"qa"},
     {id:"qa",label:"Pruebas automáticas",icon:"qa"},
     {id:"audit",label:"Auditoría",icon:"audit"},
     {id:"admin",label:"Administración",icon:"admin"}

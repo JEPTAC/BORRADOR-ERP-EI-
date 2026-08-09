@@ -22,6 +22,14 @@ function destination(delivery,order={}){
   };
 }
 function deliveryEvidence(data,taskId){return (data.files||[]).filter(file=>file.file_category==="DELIVERY_EVIDENCE"&&(!taskId||file.task_id===taskId)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]||null}
+
+async function storeShippingFile(data,file,category,taskId){
+  if(data?.order?.is_test){
+    return api.registerDriveFile({orderId:data.order.id,taskId,category,driveFileId:`SANDBOX-${crypto.randomUUID()}`,fileName:file.name,mimeType:file.type||"application/octet-stream",webViewLink:null,webContentLink:null,sizeBytes:file.size||0,metadata:{sandbox:true,bytesUploaded:false}});
+  }
+  return uploadOrderFile(data.order.id,file,category,taskId,data.order.order_number);
+}
+
 function guideFile(data){return (data.files||[]).filter(file=>file.file_category==="SHIPPING_GUIDE").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]||null}
 function canReportNoDelivery(){return hasRole("ventas")||hasRole("super_admin")}
 function canOperateShipping(){return hasRole("super_admin")||hasRole("coordinador_logistico")||hasRole("despacho_nacional")||hasRole("jefe_logistica")}
@@ -119,7 +127,7 @@ function renderClosure(host,data,{refreshLists}){
         const closureTask=activeTask(current);
         if(!closureTask?.id)throw new Error('No se encontró la tarea activa de cierre.');
         button.textContent='Subiendo foto…';
-        const uploaded=await uploadOrderFile(current.order.id,file,'DELIVERY_EVIDENCE',closureTask.id,current.order.order_number);
+        const uploaded=await storeShippingFile(current,file,'DELIVERY_EVIDENCE',closureTask.id);
         if(!uploaded?.file?.id)throw new Error('Google Drive no devolvió el archivo cargado.');
         button.textContent='Cerrando pedido…';
         await api.registerShippingEvidence(current.order.id,{fileId:uploaded.file.id,taskId:closureTask.id});
@@ -186,7 +194,7 @@ async function ensureClosureInProgress(data){
 function openGuideDialog(data,delivery,{reload,refreshLists}){
   modal({title:"Agregar guía",confirmLabel:"Guardar guía",size:"wide",body:`<div class="shipping-dialog-intro"><strong>Información de transporte</strong><p>Registra los datos con los que se identificará el envío.</p></div><div class="form-grid"><div class="field"><label>Número de guía *</label><input class="control" name="trackingNumber" value="${fmt.escape(delivery?.tracking_number||"")}" required autofocus></div><div class="field"><label>Transportadora</label><input class="control" name="carrier" value="${fmt.escape(delivery?.carrier||"")}"></div><div class="field full"><label>Soporte de guía, opcional</label><input class="control" name="guideFile" type="file" accept="image/*,.pdf,application/pdf"></div></div>`,onConfirm:async dialog=>{
     const trackingNumber=dialog.querySelector('[name="trackingNumber"]').value.trim(),carrier=dialog.querySelector('[name="carrier"]').value.trim(),file=dialog.querySelector('[name="guideFile"]').files[0];
-    let fileId=null;if(file){const uploaded=await uploadOrderFile(data.order.id,file,"SHIPPING_GUIDE",activeTask(data)?.id,data.order.order_number);fileId=uploaded?.file?.id||null}
+    let fileId=null;if(file){const uploaded=await storeShippingFile(data,file,"SHIPPING_GUIDE",activeTask(data)?.id);fileId=uploaded?.file?.id||null}
     await api.saveShippingGuide(data.order.id,{trackingNumber,carrier:carrier||null,guideFileId:fileId});toast("Guía guardada.","success");refreshLists?.();setTimeout(()=>reload?.(),80);
   }});
 }

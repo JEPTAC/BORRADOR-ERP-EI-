@@ -198,6 +198,7 @@ async function renderVerification(host,data,{reload,refreshLists}){
   const cutsPending=(data.cutRequirements||[]).filter(item=>String(item.process_status||"").toUpperCase()!=="READY");
   const processable=allPending.filter(item=>{
     if(!item.requires_cut)return true;
+    if(data.order.is_test&&String(item.metadata?.sandboxCutStatus||"").toUpperCase()==="READY")return true;
     const cut=cutMap.get(item.id);
     return cut&&String(cut.process_status||"").toUpperCase()==="READY"&&String(cut.collection_status||"").toUpperCase()==="COLLECTED";
   });

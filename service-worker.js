@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-15-0-ventas-inventario-trazable-20260808";
+const CACHE="erp-electroingenieria-v10-16-sandbox-superadmin-20260809";
 const ASSETS=[
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const ASSETS=[
   "./assets/js/core/icons.js",
   "./assets/js/modules/active-work.js",
   "./assets/js/modules/support-flow.js",
+  "./assets/js/modules/sandbox.js",
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",

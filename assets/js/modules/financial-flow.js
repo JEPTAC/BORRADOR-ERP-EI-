@@ -37,6 +37,14 @@ function registeredInvoice(data){
   if(!task)return rows[0]||null;
   return rows.find(row=>(row.drive_file_id&&fileIds.has(row.drive_file_id))||row.metadata?.taskId===task.id)||null;
 }
+
+async function storeBillingFile(data,file,category,taskId){
+  if(data?.order?.is_test){
+    return api.registerDriveFile({orderId:data.order.id,taskId,category,driveFileId:`SANDBOX-${crypto.randomUUID()}`,fileName:file.name,mimeType:file.type||"application/octet-stream",webViewLink:null,webContentLink:null,sizeBytes:file.size||0,metadata:{sandbox:true,bytesUploaded:false}});
+  }
+  return uploadOrderFile(data.order.id,file,category,taskId,data.order.order_number);
+}
+
 function pvpAnnex(data){return [...currentTaskFiles(data)].reverse().find(file=>String(file.file_category||"").toUpperCase()==="PVP_ANNEX")||null}
 function isCashOrder(order){return ["PVN","PNV"].includes(String(order?.order_type_code||"").toUpperCase())}
 function isPvpOrder(order){return String(order?.order_type_code||"").toUpperCase()==="PVP"}
@@ -308,12 +316,12 @@ function openInvoiceUpload(data,{reload,refreshLists,source}){
     title:"Subir factura",
     confirmLabel:"Guardar factura",
     size:"wide",
-    body:`<div class="billing-upload-note"><strong>Carga directa mediante Google Drive</strong><p>Selecciona la factura en PDF. El ERP registrará automáticamente el nombre y la fecha de carga.</p></div><div class="field"><label>Factura PDF *</label><input class="control" name="file" type="file" accept="application/pdf,.pdf" required autofocus></div>`,
+    body:`<div class="billing-upload-note"><strong>${data.order.is_test?"Archivo simulado · Sandbox":"Carga directa mediante Google Drive"}</strong><p>Selecciona la factura en PDF. El ERP registrará automáticamente el nombre y la fecha de carga.</p></div><div class="field"><label>Factura PDF *</label><input class="control" name="file" type="file" accept="application/pdf,.pdf" required autofocus></div>`,
     onConfirm:async dialog=>{
       const file=dialog.querySelector('[name="file"]').files[0];
       if(!file)throw new Error("Selecciona la factura en PDF.");
       const task=activeTask(data);
-      const uploaded=await uploadOrderFile(data.order.id,file,"INVOICE",task?.id,data.order.order_number);
+      const uploaded=await storeBillingFile(data,file,"INVOICE",task?.id);
       const invoiceNumber=file.name.replace(/\.[^.]+$/u,"").trim()||`FACTURA-${data.order.order_number}`;
       await api.saveInvoice(data.order.id,{
         invoiceNumber,
@@ -336,7 +344,7 @@ function openPvpAnnexUpload(data,{reload,refreshLists}){
     onConfirm:async dialog=>{
       const file=dialog.querySelector('[name="file"]').files[0];
       if(!file)throw new Error("Selecciona el Anexo PVP.");
-      await uploadOrderFile(data.order.id,file,"PVP_ANNEX",activeTask(data)?.id,data.order.order_number);
+      await storeBillingFile(data,file,"PVP_ANNEX",activeTask(data)?.id);
       toast("Anexo PVP cargado correctamente.","success");refresh(refreshLists);setTimeout(()=>reload(),80);
     }
   });

@@ -256,7 +256,7 @@ function bindLineEditor(host,data,draft,callbacks){
   });
   host.querySelector("[data-confirm-lines]")?.addEventListener("click",()=>{
     try{
-      draft.lines=collectEditorLines(editor,true);
+      draft.lines=collectEditorLines(editor,!data.order.is_test);
       draft.stage="ASSIGN";
       persistDraft(data.order.id,draft);
       renderWorkbench(host,data,draft,callbacks);
