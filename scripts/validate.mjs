@@ -82,6 +82,9 @@ check(sql.includes("create or replace function public.erp_x_health_check()")&&sq
 check(executable.includes('runQaV1022')&&!executable.includes('192 combinaciones')&&!executable.includes('202 pruebas'),"La interfaz QA conserva textos o ejecución de la matriz histórica.");
 check(css.includes(".modal-task-panel-shell{")&&css.includes(".modal-task-panel-scrim{")&&css.includes(".modal-task-panel{"),"El panel de tarea integrado no tiene geometría canónica completa.");
 check(fs.existsSync(path.join(root,"sql/migrations/044_release_health_qa_alignment_v10_22.sql")),"Falta la migración final de alineación QA/health V10.22.");
+check(fs.existsSync(path.join(root,"sql/migrations/047_order_cancellation_approval_v10_22_4.sql")),"Falta la migración 047 de cancelación por aprobación.");
+check(sql.includes("erp_x_request_order_cancellation")&&sql.includes("erp_x_decide_order_cancellation")&&sql.includes("trg_guard_cancellation_decision")&&sql.includes("trg_cleanup_cancelled_order"),"La cancelación de pedidos no está protegida integralmente por solicitud, decisión y limpieza operacional.");
+check(executable.includes("Solicitar cancelación")&&executable.includes("requestOrderCancellation")&&executable.includes("decideOrderCancellation"),"El frontend no expone el flujo dedicado de cancelación V10.22.4.");
 check(!fs.existsSync(path.join(root,"sql/02_CORRECCION_RAIZ_COLAS_QA_PEDIDOS.sql")),"El parche raíz V10.4 no debe permanecer como SQL ejecutable de nivel raíz.");
 check(fs.existsSync(path.join(root,"sql/migrations/034_sandbox_parallel_cut_hotfix_v10_16_2.sql")),"La migración 034 debe formar parte del árbol canónico de migraciones.");
 check(sql.includes("create or replace function erp_supply.safe_date")&&sql.includes("create or replace function erp_supply.safe_uuid"),"Falta endurecimiento de contratos de entrada.");

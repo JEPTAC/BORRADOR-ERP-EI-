@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.22.3
+-- ERP Electroingeniería V10.22.4
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -13,6 +13,11 @@ select
   to_regprocedure('public.erp_x_flow_integrity()') is not null as integridad_flujos,
   to_regprocedure('public.erp_x_receipt_progress(uuid)') is not null as progreso_recepcion_pve,
   to_regprocedure('public.erp_x_inventory_filtered(jsonb)') is not null as inventario_lista_filtrable_v10_22_3,
+  to_regprocedure('public.erp_x_inventory_lots(uuid,text)') is not null as rpc_lotes_inventario,
+  to_regprocedure('public.erp_x_request_order_cancellation(uuid,text)') is not null as solicitar_cancelacion_pedido,
+  to_regprocedure('public.erp_x_decide_order_cancellation(uuid,text,text)') is not null as decidir_cancelacion_pedido,
+  case when to_regprocedure('public.erp_x_inventory_lots(uuid,text)') is null then false
+       else position('x.lot_number' in pg_get_functiondef(to_regprocedure('public.erp_x_inventory_lots(uuid,text)')))=0 end as alias_lot_number_corregido,
   to_regprocedure('erp_supply.initial_step(text,text,boolean)') is null as routing_legacy_eliminado,
   to_regprocedure('erp_supply.initial_step(text,text,boolean,boolean,boolean)') is not null as routing_vigente,
   not has_schema_privilege('anon','erp_supply','USAGE') as anon_sin_esquema,
@@ -39,7 +44,17 @@ select
     select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='erp_supply' and c.relname='picking_round_items'
       and t.tgname='trg_require_collected_cut_for_picking' and not t.tgisinternal and t.tgenabled<>'D'
-  ) as gate_corte_recogido_alistamiento;
+  ) as gate_corte_recogido_alistamiento,
+  exists(
+    select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='erp_supply' and c.relname='orders'
+      and t.tgname='trg_cleanup_cancelled_order' and not t.tgisinternal and t.tgenabled<>'D'
+  ) as limpieza_cancelacion_activa,
+  exists(
+    select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='erp_supply' and c.relname='approval_requests'
+      and t.tgname='trg_guard_cancellation_decision' and not t.tgisinternal and t.tgenabled<>'D'
+  ) as decision_cancelacion_solo_jefatura;
 
 select *
 from public.erp_x_health_check()

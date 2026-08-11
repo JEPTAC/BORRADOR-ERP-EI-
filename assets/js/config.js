@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.22.3-inventario-lista-filtrable",
-  build: "2026-08-11.10",
+  version: "10.22.4-cancelacion-pedido",
+  build: "2026-08-11.11",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

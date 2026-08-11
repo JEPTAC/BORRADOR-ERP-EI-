@@ -51,6 +51,8 @@ export const api={
   refreshOperationalSla:()=>mutationRpc("erp_x_refresh_operational_sla"),
   causeAnalytics:(from,to)=>rpc("erp_x_cause_analytics",{p_date_from:from,p_date_to:to}),
   decideApproval:(id,decision,reason)=>mutationRpc("erp_x_decide_approval",{p_request_id:id,p_decision:decision,p_reason:reason}),
+  requestOrderCancellation:(orderId,note)=>mutationRpc("erp_x_request_order_cancellation",{p_order_id:orderId,p_note:note}),
+  decideOrderCancellation:(requestId,decision="APPROVED",reason=null)=>mutationRpc("erp_x_decide_order_cancellation",{p_request_id:requestId,p_decision:decision,p_reason:reason}),
   registerDriveFile:payload=>mutationRpc("erp_x_register_drive_file",{p_payload:payload}),
   materialSearch:(query="",limit=20)=>rpc("erp_x_material_search",{p_query:query||null,p_limit:limit}),
   materialResolve:lines=>rpc("erp_x_material_resolve",{p_lines:lines||[]}),
