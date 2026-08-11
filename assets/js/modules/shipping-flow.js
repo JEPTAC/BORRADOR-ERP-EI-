@@ -63,7 +63,8 @@ function renderDispatch(host,data,{reload,refreshLists}){
   const guideReady=Boolean(delivery?.tracking_number);
   if(!started){
     shell(host,data,`<section class="shipping-take-card"><span class="shipping-route-chip">${fmt.escape(fmt.route(data.order.delivery_route_code))}</span><div class="shipping-take-icon">↗</div><h4>El pedido está listo para despacho</h4><p>Tómalo para registrar la guía y enviarlo directamente al cierre. La dirección ya fue registrada por Ventas.</p><button class="btn btn-primary btn-hero" data-take-shipping>Tomar pedido</button>${task?.status==="WAITING"||task?.status==="BLOCKED"?`<small>El pedido estaba en espera. Al tomarlo se retomará la gestión.</small>`:""}</section>${locationSummary(place)}<details class="simple-details"><summary>Ver información completa del pedido</summary>${shippingSummary(data)}</details>`);
-    host.querySelector("[data-take-shipping]")?.addEventListener("click",async button=>{
+    host.querySelector("[data-take-shipping]")?.addEventListener("click",async event=>{
+      const button=event.currentTarget;
       button.disabled=true;
       try{
         let current=data;let available=actionSet(current);
@@ -88,7 +89,8 @@ function renderDispatch(host,data,{reload,refreshLists}){
     <details class="simple-details"><summary>Ver información completa del pedido</summary>${shippingSummary(data)}</details>`);
 
   host.querySelectorAll("[data-add-guide]").forEach(button=>button.onclick=()=>openGuideDialog(data,delivery,{reload,refreshLists}));
-  host.querySelector("[data-send-closure]")?.addEventListener("click",async button=>{
+  host.querySelector("[data-send-closure]")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;
     button.disabled=true;
     try{await api.sendShippingToClosure(data.order.id,{detail:"Pedido despachado y enviado a cierre",expectedVersion:data.order.version});toast("Pedido enviado a cierre.","success",6000);host.replaceChildren();refreshLists?.();}
     catch(error){toast(error.message,"error",7000);button.disabled=false}

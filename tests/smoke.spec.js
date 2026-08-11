@@ -36,12 +36,12 @@ test("authenticated shell, modules and native API",async({page})=>{
   expect(errors.filter(x=>/firebase|firestore|DocumentRef|QueryRef|snapshot\.forEach|supabase-compat/i.test(x))).toEqual([]);
 });
 
-test("integral 202 verification can be triggered by super admin",async({page})=>{
+test("integral V10.22 verification can be triggered by super admin",async({page})=>{
   test.setTimeout(30*60*1000);
   test.skip(process.env.RUN_INTEGRAL_QA!=="true"||!process.env.ERP_TEST_EMAIL||!process.env.ERP_TEST_PASSWORD,"Set RUN_INTEGRAL_QA=true and credentials");
   await login(page);
   await page.getByRole("button",{name:"Pruebas automáticas"}).click();
   await page.getByRole("button",{name:"Validación integral"}).click();
   await page.getByRole("button",{name:"Iniciar pruebas"}).click();
-  await expect(page.getByText(/Validación completa aprobada: 202 pruebas sin fallos/i)).toBeVisible({timeout:25*60*1000});
+  await expect(page.getByText(/Validación V10\.22 aprobada: 336\/336 rutas, 10\/10 controles y 2 gates de integridad/i)).toBeVisible({timeout:25*60*1000});
 });

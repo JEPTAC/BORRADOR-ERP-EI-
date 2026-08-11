@@ -1,6 +1,6 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
-import {toast} from "../core/ui.js";
+import {toast,taskPanel} from "../core/ui.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 const DRAFT_PREFIX="erp:alistamiento:v10.8:";
@@ -86,14 +86,15 @@ export function renderPickingFlow(host,data,{reload,refreshLists}={}){
       </section>`);
     bindClose(host);
     host.querySelector("[data-picking-take]")?.addEventListener("click",async event=>{
-      event.currentTarget.disabled=true;
+      const button=event.currentTarget;
+      button.disabled=true;
       try{
         await beginPicking(data);
         refreshLists?.();
         await reload?.();
       }catch(error){
         toast(error.message,"error",7000);
-        event.currentTarget.disabled=false;
+        button.disabled=false;
       }
     });
     return;
@@ -191,10 +192,11 @@ function bindPickupSelection(host,items,onConfirm){
     sync();
   }));
   host.querySelector("[data-confirm-cut-pickup]")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;
     const ids=[...host.querySelectorAll("[data-cut-pickup-item].selected")].map(row=>row.dataset.requirementId);
     if(!ids.length)return;
-    event.currentTarget.disabled=true;
-    try{await onConfirm(ids)}catch(error){toast(error.message,"error",7500);event.currentTarget.disabled=false}
+    button.disabled=true;
+    try{await onConfirm(ids)}catch(error){toast(error.message,"error",7500);button.disabled=false}
   });
   sync();
 }
@@ -277,9 +279,10 @@ async function renderVerification(host,data,{reload,refreshLists}){
   host.addEventListener("picking:origin-change",sync);
   host.querySelectorAll("[data-picking-item] textarea").forEach(textarea=>textarea.addEventListener("input",sync));
   host.querySelector("[data-picking-send]")?.addEventListener("click",async event=>{
+    const button=event.currentTarget;
     const results=[...host.querySelectorAll("[data-picking-item]")].map(readRow);
     if(parallel){
-      event.currentTarget.disabled=true;
+      button.disabled=true;
       try{
         await api.savePickingPrecheck(data.order.id,results);
         let latest=await api.getOrder(data.order.id);
@@ -288,7 +291,7 @@ async function renderVerification(host,data,{reload,refreshLists}){
         clearDraft(task);
         toast("Avance de Alistamiento guardado. Corte continúa en paralelo.","success",6500);
         refreshLists?.();host.replaceChildren();
-      }catch(error){toast(error.message,"error",7500);event.currentTarget.disabled=false}
+      }catch(error){toast(error.message,"error",7500);button.disabled=false}
     }else openConfirmation(host,data,task,refreshLists);
   });
   sync();
@@ -311,7 +314,8 @@ function renderPartialResume(host,data,{reload,refreshLists}){
   `);
   bindClose(host);
   host.querySelector("[data-resume-partial]")?.addEventListener("click",async event=>{
-    event.currentTarget.disabled=true;
+    const button=event.currentTarget;
+    button.disabled=true;
     try{
       await api.resumePartialPicking(data.order.id);
       toast("Pedido parcial reabierto en Alistamiento.","success",6000);
@@ -319,7 +323,7 @@ function renderPartialResume(host,data,{reload,refreshLists}){
       await reload?.();
     }catch(error){
       toast(error.message,"error",7000);
-      event.currentTarget.disabled=false;
+      button.disabled=false;
     }
   });
 }
@@ -430,31 +434,21 @@ function openConfirmation(host,data,task,refreshLists){
   const results=[...host.querySelectorAll("[data-picking-item]")].map(readRow);
   const missing=results.filter(row=>row.result==="MISSING");
   const found=results.length-missing.length;
-  const layer=document.createElement("div");
-  layer.className="picking-confirm-layer";
-  layer.innerHTML=`<section class="picking-confirm-dialog">
-    <header><div><span class="picking-step-tag">Confirmación final</span><h4>${missing.length?"Enviar pedido parcial":"Enviar pedido completo"}</h4><p>Esta acción cerrará la ronda actual de Alistamiento.</p></div><button class="icon-btn" data-cancel>×</button></header>
-    <div class="picking-confirm-body">
-      <div class="picking-confirm-counts"><div><small>Encontradas</small><strong>${found}</strong></div><div><small>Pendientes</small><strong>${missing.length}</strong></div></div>
-      ${missing.length?`<div class="picking-confirm-warning"><strong>El pedido continuará con etiqueta de pedido parcial.</strong><p>Cuando termine esta salida y llegue la mercancía faltante, podrás reabrir el mismo pedido desde Alistamiento.</p></div>`:`<div class="picking-confirm-success"><strong>Toda la mercancía fue encontrada.</strong><p>El pedido continuará sin pendientes.</p></div>`}
-    </div>
-    <footer><button class="btn btn-ghost" data-cancel>Volver</button><button class="btn btn-primary" data-confirm-picking>Confirmar y enviar a facturación</button></footer>
-  </section>`;
-  host.append(layer);
-  layer.querySelectorAll("[data-cancel]").forEach(button=>button.onclick=()=>layer.remove());
-  layer.querySelector("[data-confirm-picking]").onclick=async event=>{
-    event.currentTarget.disabled=true;
-    try{
-      const result=await api.confirmPickingRound(data.order.id,{items:results});
-      clearDraft(task);
-      toast(result.partial?`Pedido parcial enviado. Quedaron ${result.missingLines} línea(s) pendientes.`:"Alistamiento completo y enviado a facturación.","success",7500);
-      refreshLists?.();
-      host.replaceChildren();
-    }catch(error){
-      toast(error.message,"error",7500);
-      event.currentTarget.disabled=false;
+  taskPanel(host,{
+    title:missing.length?"Enviar pedido parcial":"Enviar pedido completo",
+    kicker:"Confirmación final · Alistamiento",
+    confirmLabel:"Confirmar y enviar a facturación",
+    body:`<div class="picking-confirm-body"><p class="modal-task-panel-lead">Esta acción cerrará la ronda actual de Alistamiento.</p><div class="picking-confirm-counts"><div><small>Encontradas</small><strong>${found}</strong></div><div><small>Pendientes</small><strong>${missing.length}</strong></div></div>${missing.length?`<div class="picking-confirm-warning"><strong>El pedido continuará con etiqueta de pedido parcial.</strong><p>Cuando termine esta salida y llegue la mercancía faltante, podrás reabrir el mismo pedido desde Alistamiento.</p></div>`:`<div class="picking-confirm-success"><strong>Toda la mercancía fue encontrada.</strong><p>El pedido continuará sin pendientes.</p></div>`}</div>`,
+    onConfirm:async(_panel,button)=>{
+      try{
+        const result=await api.confirmPickingRound(data.order.id,{items:results});
+        clearDraft(task);
+        toast(result.partial?`Pedido parcial enviado. Quedaron ${result.missingLines} línea(s) pendientes.`:"Alistamiento completo y enviado a facturación.","success",7500);
+        refreshLists?.();
+        host.replaceChildren();
+      }catch(error){button.disabled=false;throw error}
     }
-  };
+  });
 }
 
 async function beginPicking(data){

@@ -1,9 +1,22 @@
-ERP Supply Enterprise V10.0.4
+ERP Electroingeniería V10.22.0
 
-El instalador correcto es exclusivamente:
+INSTALACIÓN NUEVA
+=================
+Ejecutar exclusivamente:
   sql/00_INSTALL_ALL.sql
 
-La verificación posterior es:
+Después ejecutar la verificación de solo lectura:
   sql/99_POST_INSTALL_CHECK.sql
 
-No contiene instaladores anteriores ni migraciones individuales defectuosas.
+BASE EXISTENTE
+==============
+No volver a ejecutar el instalador completo.
+Aplicar únicamente las migraciones nuevas que aún no estén instaladas.
+Para esta revisión, la migración nueva es:
+  sql/migrations/041_ux_flow_integrity_qa_v10_22.sql
+  sql/migrations/042_canonical_diagnostics_v10_22.sql
+  sql/migrations/043_flow_integrity_hardening_v10_22.sql
+  sql/migrations/044_release_health_qa_alignment_v10_22.sql
+
+Los archivos de sql/legacy son únicamente históricos y NO deben ejecutarse.
+El instalador canónico ya incorpora las migraciones 034, 035, 036, 038, 039, 040, 041, 042, 043 y 044.

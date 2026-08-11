@@ -1,7 +1,7 @@
 import {api} from "../services/api.js";
 import {state} from "../core/state.js";
 import {fmt} from "../core/format.js";
-import {toast,loading} from "../core/ui.js";
+import {toast,loading,taskPanel} from "../core/ui.js";
 import {downloadDriveFile} from "../services/drive.js";
 import {readOrderPdf} from "../services/pdf-order-reader.js";
 import {materialPickerHtml,bindMaterialPicker,readMaterialPicker,resolveMaterialLines} from "../services/materials.js";
@@ -41,14 +41,15 @@ export function renderOrderReception(host,data,{reload,refreshLists}={}){
       </section>`,false);
     bindClose(host);
     host.querySelector("[data-take-order]")?.addEventListener("click",async event=>{
-      event.currentTarget.disabled=true;
+      const button=event.currentTarget;
+      button.disabled=true;
       try{
         await beginReception(data);
         refreshLists?.();
         await reload?.();
       }catch(error){
         toast(error.message,"error",7000);
-        event.currentTarget.disabled=false;
+        button.disabled=false;
       }
     });
     return;
@@ -334,18 +335,7 @@ function confirmReception(host,data,draft,{reload,refreshLists}={}){
 }
 
 function openSubdialog(host,{title,body,confirmLabel,onConfirm}){
-  const layer=document.createElement("div");
-  layer.className="reception-subdialog-layer";
-  layer.innerHTML=`<section class="modal reception-subdialog"><header class="modal-head"><h3>${fmt.escape(title)}</h3><button type="button" class="icon-btn" data-sub-close>×</button></header><div class="modal-body">${body}</div><footer class="modal-foot"><button type="button" class="btn btn-ghost" data-sub-close>Cancelar</button><button type="button" class="btn btn-primary" data-sub-confirm>${fmt.escape(confirmLabel)}</button></footer></section>`;
-  host.append(layer);
-  layer.querySelectorAll("[data-sub-close]").forEach(button=>button.onclick=()=>layer.remove());
-  layer.querySelector("[data-sub-confirm]").onclick=async event=>{
-    try{
-      const controls=[...layer.querySelectorAll("input,select,textarea")].filter(control=>!control.disabled&&control.type!=="hidden");
-      for(const control of controls)if(!control.checkValidity()){control.reportValidity();control.focus();return}
-      await onConfirm(event.currentTarget);
-    }catch(error){toast(error.message||String(error),"error",7000);event.currentTarget.disabled=false}
-  };
+  return taskPanel(host,{title,body,confirmLabel,kicker:"Confirmación de Recepción",onConfirm:async(_panel,button)=>onConfirm(button)});
 }
 
 export function openPurchaseArrival(order,{refreshLists}={}){

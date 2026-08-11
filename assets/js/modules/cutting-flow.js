@@ -1,6 +1,6 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
-import {empty,loading,paginationHtml,toast} from "../core/ui.js";
+import {empty,loading,paginationHtml,toast,taskPanel} from "../core/ui.js";
 import {navigate} from "../core/router.js";
 import {uploadOrderFile} from "../services/drive.js";
 
@@ -272,10 +272,7 @@ function toggleNoCut(item,show){const panel=item?.querySelector('[data-resolutio
 async function resolveNoCut(host,state,item,button){const id=item?.dataset.requirementId,reason=item?.querySelector("[data-no-cut-reason]")?.value.trim();if(!reason){toast("Escribe el motivo.","error");return}button.disabled=true;try{await (sandboxMode?api.sandboxResolveCutRequirement(id,"NO_CUT",{reason}):api.resolveCutRequirement(id,"NO_CUT",{reason}));toast("Corrección registrada.","success");await openCutGroup(state.groupKey)}catch(error){toast(error.message,"error");button.disabled=false}}
 
 function nestedDialog(host,{title,body,confirmLabel="Confirmar",onConfirm}){
-  const layer=document.createElement("div");layer.className="cut-nested-layer";
-  layer.innerHTML=`<section class="cut-nested-dialog"><header><div><span>ACCIÓN ESPECIAL DE CORTE</span><h4>${fmt.escape(title)}</h4></div><button class="icon-btn" data-nested-close aria-label="Cerrar">×</button></header><div class="cut-nested-body">${body}</div><footer><button class="btn btn-ghost" data-nested-close>Cancelar</button><button class="btn btn-primary" data-nested-confirm>${fmt.escape(confirmLabel)}</button></footer></section>`;
-  host.append(layer);const close=()=>layer.remove();layer.querySelectorAll("[data-nested-close]").forEach(b=>b.onclick=close);
-  layer.querySelector("[data-nested-confirm]").onclick=async event=>{for(const control of layer.querySelectorAll("input,select,textarea")){if(!control.checkValidity()){control.reportValidity();return}}event.currentTarget.disabled=true;try{await onConfirm(layer);close()}catch(error){toast(error.message,"error");event.currentTarget.disabled=false}};
+  return taskPanel(host,{title,body,confirmLabel,kicker:"Acción especial de Corte",tone:"cut-task-panel",onConfirm:async panel=>onConfirm(panel)});
 }
 
 function showStep(host,n){

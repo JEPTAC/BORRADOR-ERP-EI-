@@ -71,8 +71,9 @@ export function renderShell(){
     <main class="main" id="main-content">
       <header class="topbar">
         <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operación</h1><p id="top-subtitle">Visibilidad y control de la operación</p></div></div>
-        <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
+        <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Abrir búsqueda" aria-controls="mobile-search-panel" aria-expanded="false">${icon("search")}</button><button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
       </header>
+      <div class="mobile-search-panel" id="mobile-search-panel" hidden><label>${icon("search")}<input id="mobile-global-search" class="control" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global móvil"></label></div>
       <div class="content" id="page-content"></div>
     </main>
   </div>`;
@@ -139,10 +140,23 @@ function bindShell(){
   document.querySelector("#sidebar-backdrop")?.addEventListener("click",()=>syncSidebar(false));
   document.querySelector("#refresh-page").onclick=()=>window.dispatchEvent(new CustomEvent("erp:refresh"));
   document.querySelector("#quick-order")?.addEventListener("click",()=>{closeMobileSidebar({restoreFocus:false});navigate("sales",{create:"1"})});
-  const search=document.querySelector("#global-search");if(search)search.onkeydown=e=>{if(e.key==="Enter")navigate("orders",{search:search.value})};
+  const runSearch=input=>{const value=input?.value?.trim();if(value)navigate("orders",{search:value})};
+  const search=document.querySelector("#global-search");if(search)search.onkeydown=e=>{if(e.key==="Enter")runSearch(search)};
+  const mobileSearch=document.querySelector("#mobile-global-search");if(mobileSearch)mobileSearch.onkeydown=e=>{if(e.key==="Enter"){runSearch(mobileSearch);toggleMobileSearch(false)}};
+  const mobileSearchPanel=document.querySelector("#mobile-search-panel");
+  const mobileSearchToggle=document.querySelector("#mobile-search-toggle");
+  const toggleMobileSearch=open=>{
+    if(!mobileSearchPanel||!mobileSearchToggle)return;
+    mobileSearchPanel.hidden=!open;
+    mobileSearchToggle.setAttribute("aria-expanded",String(open));
+    mobileSearchToggle.setAttribute("aria-label",open?"Cerrar búsqueda":"Abrir búsqueda");
+    if(open)requestAnimationFrame(()=>mobileSearch?.focus());
+  };
+  mobileSearchToggle?.addEventListener("click",()=>toggleMobileSearch(mobileSearchPanel?.hidden!==true?false:true));
 
   document.addEventListener("keydown",event=>{
     if(event.key==="Escape"&&state.sidebarOpen&&isMobileNavigation()){event.preventDefault();syncSidebar(false);return}
+    if(event.key==="Escape"&&mobileSearchPanel&&!mobileSearchPanel.hidden){event.preventDefault();toggleMobileSearch(false);mobileSearchToggle?.focus();return}
     keepFocusInsideSidebar(event);
   },{signal:shellSignal});
 

@@ -1,6 +1,6 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
-import {toast} from "../core/ui.js";
+import {toast,taskPanel} from "../core/ui.js";
 
 let installed=false;
 
@@ -22,7 +22,6 @@ export function installSupportFlow(){
 
 function enhance(root){
   root.querySelectorAll("section.modal[data-order-id]").forEach(dialog=>{
-    if(dialog.closest("[data-support-subdialog]"))return;
     if(dialog.querySelector("[data-order-support]"))return;
     const body=dialog.querySelector(".modal-body");
     if(!body)return;
@@ -58,7 +57,7 @@ async function loadIssues(zone,orderId){
     const dialog=zone.closest("section.modal");
     if(!open.length){target.innerHTML="";dialog?.classList.remove("order-blocked-by-issue");return;}
     dialog?.classList.add("order-blocked-by-issue");
-    dialog?.querySelectorAll("button").forEach(button=>{if(!button.closest("[data-order-support]")&&!button.matches("[data-close],[data-sub-close]"))button.disabled=true;});
+    dialog?.querySelectorAll("button").forEach(button=>{if(!button.closest("[data-order-support]")&&!button.matches("[data-close],[data-task-panel-close]"))button.disabled=true;});
     target.innerHTML=open.map(issue=>{const level=Number(issue.slaLevel||0),hours=Number(issue.ageBusinessSeconds||0)/3600;return `<article class="support-open-issue ${String(issue.type||"").toLowerCase()} sla-${level}">
       <div><span>${issue.type==="NOVELTY"?"ESPERA CON NOVEDAD":"REPORTE"}${level>=2?` · ${level>=3?"SLA CRÍTICO":"ESCALADO"}`:level===1?" · SLA EN ALERTA":""}</span><strong>${fmt.escape(issue.title||issue.type)}</strong><p>${fmt.escape(issue.detail||"")}</p><small>${fmt.escape(issue.createdBy||"Usuario")} · ${fmt.date(issue.createdAt)} · ${hours<1?Math.round(Number(issue.ageBusinessSeconds||0)/60)+" min":fmt.number(hours,1)+" h"} laborales</small></div>
       <button type="button" class="btn btn-primary btn-compact" data-resolve-issue="${fmt.escape(issue.id)}" data-order-id="${fmt.escape(orderId)}">Abrir y solucionar</button>
@@ -142,26 +141,8 @@ function openApproval(orderId){
 function supportModal({title,body,confirmLabel,onConfirm}){
   const root=document.querySelector("#modal-root");
   if(!root)return;
-  root.querySelector("[data-support-subdialog]")?.remove();
-  const layer=document.createElement("div");
-  layer.className="modal-overlay support-sub-overlay";
-  layer.dataset.supportSubdialog="1";
-  layer.innerHTML=`<section class="modal wide support-sub-modal"><header class="modal-head"><h3>${fmt.escape(title)}</h3><button type="button" class="icon-btn" data-sub-close aria-label="Cerrar">×</button></header><div class="modal-body">${body}</div><footer class="modal-foot"><button type="button" class="btn btn-ghost" data-sub-close>Cancelar</button><button type="button" class="btn btn-primary" data-sub-confirm>${fmt.escape(confirmLabel)}</button></footer></section>`;
-  root.append(layer);
-  const close=()=>layer.remove();
-  layer.querySelectorAll("[data-sub-close]").forEach(button=>button.addEventListener("click",close));
-  layer.addEventListener("click",event=>{if(event.target===layer)close()});
-  layer.querySelector("[data-sub-confirm]")?.addEventListener("click",async event=>{
-    const button=event.currentTarget;
-    const dialog=layer.querySelector(".support-sub-modal");
-    const controls=[...dialog.querySelectorAll("input,select,textarea")].filter(control=>!control.disabled&&control.type!=="hidden");
-    const invalid=controls.find(control=>!control.checkValidity());
-    if(invalid){invalid.reportValidity();invalid.focus();return;}
-    button.disabled=true;
-    try{
-      const outcome=await onConfirm(dialog)||{};
-      close();
-      if(outcome.closeOrder)root.replaceChildren();
-    }catch(error){toast(error.message||String(error),"error",7000);button.disabled=false;}
-  });
+  taskPanel(root,{title,body,confirmLabel,kicker:"Gestión y soporte",onConfirm:async panel=>{
+    const outcome=await onConfirm(panel)||{};
+    if(outcome.closeOrder)root.replaceChildren();
+  }});
 }

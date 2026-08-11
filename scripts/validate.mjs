@@ -30,6 +30,13 @@ for(const html of ["index.html","404.html"]){
 }
 
 const executable=jsFiles.map(read).join("\n");
+const css=read("assets/css/app.css");
+for(const selector of [".modal-overlay",".modal",".modal-head",".modal-body",".modal-foot"]){
+  const escaped=selector.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const count=(css.match(new RegExp(`^${escaped}\\{`,"gm"))||[]).length;
+  check(count===1,`El selector genérico ${selector} debe tener una única definición canónica; encontradas: ${count}`);
+}
+check(!/addEventListener\([^\n]+async\s+button\s*=>/.test(executable),"Se detectó un event listener que trata Event como botón en una acción asíncrona.");
 for(const term of ["supabase-compat","supabase-legacy","window.firebase","DocumentRef","QueryRef","CollectionRef","snapshot.forEach","erp_apply_operations"]){
   check(!executable.includes(term),`Término heredado detectado en JS ejecutable: ${term}`);
 }
@@ -64,8 +71,19 @@ check(sql.includes("p_idempotency_key"),"Falta idempotencia en acciones.");
 check(sql.includes("business_seconds_between"),"Falta cálculo de tiempo laboral.");
 check(sql.includes("trg_validate_task_completion"),"Faltan puertas de cierre por etapa.");
 check(sql.includes("task_checklist"),"Falta checklist obligatorio por tarea.");
-check(sql.includes("total_scenarios) values(v_org,v_actor,192)"),"El bot no declara la matriz de 192 escenarios.");
-check(sql.includes("CTRL-10-CUT-CONSUMPTION")&&sql.includes("run_type='CONTROL_SUITE'"),"La suite de 10 controles empresariales no está completa.");
+check(sql.includes("336")&&sql.includes("financialEntryVariants")&&sql.includes("initial_step(text,text,boolean,boolean,boolean)"),"El bot QA no declara la matriz V10.22 de enrutamiento vigente.");
+check(sql.includes("CTRL-09-RECEIPT-PARTIAL-PROGRESS")&&sql.includes("CTRL-10-CUT-CONSUMPTION")&&sql.includes("run_type='CONTROL_SUITE'"),"La suite V10.22 de controles empresariales no está alineada con Recepción y Corte.");
+check(sql.includes("erp_x_v10_22_self_check")&&sql.includes("CUT_QUEUE_CANONICAL_SOURCE")&&sql.includes("ROUTING_LEGACY_SIGNATURE_REMOVED"),"Falta el autodiagnóstico estructural V10.22.");
+check(sql.includes("drop function if exists erp_supply.initial_step(text,text,boolean)"),"La firma histórica de initial_step sigue habilitada.");
+check(sql.includes("trg_require_collected_cut_for_picking")&&sql.includes("erp_x_flow_integrity"),"Falta el endurecimiento transversal V10.22 entre Corte, Alistamiento y diagnósticos.");
+check(sql.includes("MERCANCIA_OK_V10_22")&&sql.includes("ERP_RECEIPT"),"Mercancía OK PVE no publica inventario mediante la ruta canónica V10.22.");
+check(sql.includes("erp_x_receipt_progress")&&sql.includes("RECEPCION_PVE_V10_22")&&sql.includes("trg_require_complete_receipt_before_task_complete"),"Recepción PVE no contiene progreso acumulado, identidad Siesa estricta y gate de cierre V10.22.");
+check(sql.includes("create or replace function public.erp_x_health_check()")&&sql.includes("Última matriz de 336 rutas aprobada"),"El health check no está alineado con la QA V10.22.");
+check(executable.includes('runQaV1022')&&!executable.includes('192 combinaciones')&&!executable.includes('202 pruebas'),"La interfaz QA conserva textos o ejecución de la matriz histórica.");
+check(css.includes(".modal-task-panel-shell{")&&css.includes(".modal-task-panel-scrim{")&&css.includes(".modal-task-panel{"),"El panel de tarea integrado no tiene geometría canónica completa.");
+check(fs.existsSync(path.join(root,"sql/migrations/044_release_health_qa_alignment_v10_22.sql")),"Falta la migración final de alineación QA/health V10.22.");
+check(!fs.existsSync(path.join(root,"sql/02_CORRECCION_RAIZ_COLAS_QA_PEDIDOS.sql")),"El parche raíz V10.4 no debe permanecer como SQL ejecutable de nivel raíz.");
+check(fs.existsSync(path.join(root,"sql/migrations/034_sandbox_parallel_cut_hotfix_v10_16_2.sql")),"La migración 034 debe formar parte del árbol canónico de migraciones.");
 check(sql.includes("create or replace function erp_supply.safe_date")&&sql.includes("create or replace function erp_supply.safe_uuid"),"Falta endurecimiento de contratos de entrada.");
 
 const manifest=JSON.parse(read("manifest.webmanifest"));

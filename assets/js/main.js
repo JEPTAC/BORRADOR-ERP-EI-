@@ -3,7 +3,7 @@ import {renderLogin,renderShell,updateShell} from "./core/layout.js";
 import {initRouter,navigate} from "./core/router.js";
 import {signIn,getSession,onAuthChange} from "./services/supabase.js";
 import {api} from "./services/api.js";
-import {toast,loading} from "./core/ui.js";
+import {toast,loading,installDialogSystem} from "./core/ui.js";
 import {renderDashboard} from "./modules/dashboard.js";
 import {renderOrders,openOrder} from "./modules/orders.js";
 import {renderQueue} from "./modules/queue.js";
@@ -45,6 +45,8 @@ function bindLogin(){
   const form=document.querySelector("#login-form");if(!form)return;
   form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector("button");btn.disabled=true;try{await signIn(form.email.value.trim(),form.password.value)}catch(err){renderLogin(err.message);bindLogin()}finally{btn.disabled=false}};
 }
+
+installDialogSystem();
 
 async function start(){
   const session=await getSession();setState({session});if(session)await bootAuthenticated();else{renderLogin();bindLogin()}

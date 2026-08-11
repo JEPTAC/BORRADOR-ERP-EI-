@@ -465,15 +465,13 @@ function stageRequirement(data){
   const required=(data.checklist||[]).filter(item=>item.task_id===task?.id&&item.required&&!item.completed);
   const hasApproved=(data.financialValidations||[]).some(row=>row.validation_type===step&&row.decision==="APPROVED");
   const validPo=(data.purchaseOrders||[]).some(row=>["ISSUED","CONFIRMED","PARTIAL","RECEIVED"].includes(row.status));
-  const validReceipt=(data.receipts||[]).some(row=>["PARTIAL","CONFORMING","CLOSED"].includes(row.status));
-  const validCut=(data.cutJobs||[]).some(row=>row.status==="COMPLETED");
+  const validReceipt=(data.receipts||[]).some(row=>["CONFORMING","CLOSED"].includes(row.status));
   const validInvoice=(data.invoices||[]).some(row=>row.status==="REGISTERED");
   const delivered=(data.deliveries||[]).some(row=>row.status==="DELIVERED");
   const domain=(data.actions?.domainActions||[]).map(item=>item.code);
   if(["CARTERA","CAJA"].includes(step)&&!hasApproved&&domain.includes("FINANCIAL"))return {code:"FINANCIAL",title:`Resolver validación de ${fmt.step(step)}`,detail:"Registra la decisión. Si queda aprobada, el ERP finalizará la etapa.",buttonLabel:"Resolver validación"};
   if(step==="COMPRAS"&&!validPo&&domain.includes("PURCHASE"))return {code:"PURCHASE",title:"Registrar la orden de compra",detail:"Solo se solicitará número de orden, proveedor y estado.",buttonLabel:"Registrar orden"};
   if(step==="RECEPCION_MERCANCIA"&&!validReceipt&&domain.includes("RECEIPT"))return {code:"RECEIPT",title:"Confirmar la mercancía recibida",detail:"Verifica cantidades, ubicación y resultado de calidad.",buttonLabel:"Registrar recepción"};
-  if(step==="CORTE"&&order.requires_cut&&!validCut&&domain.includes("CUT"))return {code:"CUT",title:"Registrar el corte realizado",detail:"Selecciona la chipa y registra las medidas reales.",buttonLabel:"Registrar corte"};
   if(step==="FACTURACION"&&!validInvoice&&domain.includes("INVOICE"))return {code:"INVOICE",title:"Registrar la factura",detail:"Ingresa número, fecha y valor. El pedido continuará automáticamente.",buttonLabel:"Registrar factura"};
   if(["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH"].includes(step)&&!delivered&&domain.includes("DELIVERY"))return {code:"DELIVERY",title:"Confirmar el despacho o la entrega",detail:"Marca si fue entregado o si debe reprogramarse.",buttonLabel:"Registrar resultado"};
   if(step==="CLOSURE"&&(!validInvoice||!delivered))return {code:"EXTERNAL",title:"Faltan soportes previos",detail:`${!validInvoice?"No hay factura registrada. ":""}${!delivered?"No hay entrega confirmada.":""}`.trim(),buttonLabel:"Revisar"};
@@ -540,7 +538,6 @@ function resolveRequirement(data,requirement){
   if(requirement.code==="FINANCIAL")return quickFinancial(data);
   if(requirement.code==="PURCHASE")return quickPurchase(data);
   if(requirement.code==="RECEIPT")return quickReceipt(data);
-  if(requirement.code==="CUT")return quickCut(data);
   if(requirement.code==="INVOICE")return quickInvoice(data);
   if(requirement.code==="DELIVERY")return quickDelivery(data);
   if(requirement.code==="CHECKLIST")return quickChecklist(data);
@@ -588,23 +585,40 @@ function quickChecklist(data){
   modal({title:"Confirmar controles",confirmLabel:"Confirmar y finalizar",body:`<div class="simple-form-intro"><strong>Una sola confirmación</strong><p>Revisa la lista y confirma únicamente cuando todos los controles estén realizados.</p></div>${checklistConfirmation(data)}<div class="field"><label>Observación opcional</label><textarea class="control" name="note"></textarea></div>`,onConfirm:async dialog=>{const note=dialog.querySelector('[name="note"]').value.trim()||"Controles verificados";await completeChecklist(data,note);const latest=await api.getOrder(data.order.id);if(actionCodes(latest).has("COMPLETE"))await api.executeAction(data.order.id,"COMPLETE",{detail:note},latest.order.version);toast("Controles confirmados y etapa finalizada.","success");refreshLists()}});
 }
 
-function quickReceipt(data){
-  const items=data.items||[];
-  const rows=items.map(item=>`<div class="simple-receipt-line" data-item="${item.id}"><div><strong>${fmt.escape(item.sku||item.description)}</strong><small>Esperado: ${fmt.number(item.quantity,3)} ${fmt.escape(item.unit)}</small></div><label>Aceptado<input class="control" name="accepted" type="number" min="0" max="${Number(item.quantity)}" step="any" value="${Number(item.quantity)}"></label></div>`).join("");
-  modal({title:"Confirmar recepción de mercancía",confirmLabel:"Guardar recepción",size:"wide",body:`<div class="simple-choice-row">${choice("status","CONFORMING","Conforme","Todo llegó correctamente.",true)}${choice("status","PARTIAL","Parcial","Faltan cantidades o materiales.")}${choice("status","NONCONFORMING","Con novedad","La mercancía presenta rechazo o diferencia.")}</div><div class="form-grid"><div class="field"><label>Orden de compra</label><input class="control" name="purchaseOrder"></div><div class="field"><label>Proveedor</label><input class="control" name="supplierName"></div><div class="field"><label>Ubicación *</label><input class="control" name="location" value="RECEPCION" required></div><div class="field"><label>Lote común</label><input class="control" name="lotNumber"></div></div><div class="simple-receipt-list">${rows}</div><div class="field"><label>Observación</label><textarea class="control" name="note"></textarea></div>${checklistConfirmation(data)}`,onConfirm:async dialog=>{
-    const f=dialogData(dialog);const lines=[...dialog.querySelectorAll("[data-item]")].map(row=>{const item=items.find(x=>x.id===row.dataset.item);const accepted=Number(row.querySelector('[name="accepted"]').value||0);const expected=Number(item.quantity||0);return {orderItemId:item.id,sku:item.sku||null,description:item.description,expectedQuantity:expected,receivedQuantity:accepted,acceptedQuantity:accepted,rejectedQuantity:Math.max(0,expected-accepted),unit:item.unit||"UND",location:f.location,lotNumber:f.lotNumber||null,qualityStatus:f.status==="NONCONFORMING"?"REJECTED":f.status==="PARTIAL"?"CONDITIONAL":"ACCEPTED",metadata:{lotNumber:f.lotNumber||null}}});
-    await api.saveReceipt(data.order.id,{purchaseOrder:f.purchaseOrder||null,supplierName:f.supplierName||null,status:f.status,lines});
+async function quickReceipt(data){
+  const progress=await api.receiptProgress(data.order.id);
+  const previous=new Map((progress?.items||[]).map(item=>[String(item.orderItemId),item]));
+  const items=(data.items||[]).map(item=>{
+    const p=previous.get(String(item.id));
+    const remaining=Math.max(0,Number(p?.remainingQuantity??item.quantity??0));
+    return {...item,_receivedBefore:Number(p?.acceptedQuantity||0),_remaining:remaining};
+  }).filter(item=>item._remaining>0.0001);
+  if(!items.length){
+    toast("Las cantidades aceptadas ya cubren el pedido. Actualiza el pedido para continuar con el cierre de Recepción.","success",6500);
+    return;
+  }
+  const requestId=crypto.randomUUID?.()||`receipt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const rows=items.map(item=>`<div class="simple-receipt-line" data-item="${item.id}"><div><strong>${fmt.escape(item.sku||item.description)}</strong><small>Pendiente: ${fmt.number(item._remaining,3)} de ${fmt.number(item.quantity,3)} ${fmt.escape(item.unit)}${item._receivedBefore?` · ya aceptado ${fmt.number(item._receivedBefore,3)}`:""}</small></div><label>Aceptado<input class="control" name="accepted" type="number" min="0" max="${Number(item._remaining)}" step="any" value="${Number(item._remaining)}"></label></div>`).join("");
+  modal({title:"Confirmar recepción de mercancía",confirmLabel:"Guardar recepción",size:"wide",body:`<div class="simple-choice-row">${choice("status","CONFORMING","Conforme","Con esta llegada se completan todas las cantidades pendientes.",true)}${choice("status","PARTIAL","Parcial","Todavía quedarán cantidades pendientes por recibir.")}${choice("status","NONCONFORMING","Con novedad","Hay cantidad rechazada o una diferencia que debe resolverse.")}</div><div class="form-grid"><div class="field"><label>Orden de compra</label><input class="control" name="purchaseOrder"></div><div class="field"><label>Proveedor</label><input class="control" name="supplierName"></div><div class="field"><label>Ubicación *</label><input class="control" name="location" value="RECEPCION" required></div><div class="field"><label>Lote común</label><input class="control" name="lotNumber"></div></div><div class="simple-receipt-list">${rows}</div><div class="field"><label>Observación</label><textarea class="control" name="note"></textarea></div>${checklistConfirmation(data)}`,onConfirm:async dialog=>{
+    const f=dialogData(dialog);
+    const captured=[...dialog.querySelectorAll("[data-item]")].map(row=>{
+      const item=items.find(x=>x.id===row.dataset.item);
+      const accepted=Number(row.querySelector('[name="accepted"]').value||0);
+      const pending=Number(item._remaining||0);
+      if(!Number.isFinite(accepted)||accepted<0||accepted>pending)throw new Error(`Cantidad aceptada inválida para ${item.sku||item.description}`);
+      if(f.status==="CONFORMING"&&Math.abs(accepted-pending)>0.0001)throw new Error("Una recepción Conforme debe cubrir toda la cantidad pendiente. Usa Parcial o Con novedad si aún faltará mercancía.");
+      const received=f.status==="NONCONFORMING"?pending:accepted;
+      const rejected=f.status==="NONCONFORMING"?Math.max(0,pending-accepted):0;
+      return {orderItemId:item.id,sku:item.sku||null,reference:item.reference||null,description:item.description,expectedQuantity:Number(item.quantity||0),receivedQuantity:received,acceptedQuantity:accepted,rejectedQuantity:rejected,unit:item.unit||"UND",location:f.location,lotNumber:f.lotNumber||null,qualityStatus:f.status==="NONCONFORMING"?"REJECTED":f.status==="PARTIAL"?"CONDITIONAL":"ACCEPTED",metadata:{lotNumber:f.lotNumber||null,materialMasterId:item.material_master_id||item.metadata?.materialMasterId||null,materialVariantId:item.material_variant_id||item.metadata?.materialVariantId||null}};
+    });
+    const lines=f.status==="PARTIAL"?captured.filter(line=>line.receivedQuantity>0):captured;
+    if(!lines.length)throw new Error("Debes registrar al menos una cantidad recibida mayor que cero.");
+    await api.saveReceipt(data.order.id,{requestId,purchaseOrder:f.purchaseOrder||null,supplierName:f.supplierName||null,status:f.status,lines});
     if(f.status==="CONFORMING")return finalizeAfterDomain(data.order.id,"Recepción confirmada y etapa finalizada");
     const latest=await api.getOrder(data.order.id);const reason=f.note||"Recepción pendiente de resolución";if(actionCodes(latest).has("WAIT"))await api.executeAction(data.order.id,"WAIT",{reason},latest.order.version);toast("Recepción registrada. El pedido queda pendiente de resolución.","success");refreshLists();
   }});
 }
 
-async function quickCut(data){
-  const lots=await api.inventoryLots(null,"");const items=(data.items||[]).filter(item=>item.requires_cut);
-  if(!lots.length)return toast("No hay chipas o lotes disponibles.","error");if(!items.length)return toast("El pedido no tiene materiales para corte.","error");
-  const first=items[0];
-  modal({title:"Registrar corte",confirmLabel:"Guardar corte y continuar",body:`<div class="form-grid"><div class="field full"><label>Chipa o lote *</label><select class="control" name="inventoryLotId" required><option value="">Seleccione…</option>${lots.map(lot=>`<option value="${lot.id}">${fmt.escape(lot.sku)} · ${fmt.escape(lot.location)} · disponible ${fmt.number(lot.available,3)} ${fmt.escape(lot.unit)}</option>`).join("")}</select></div><div class="field full"><label>Material *</label><select class="control" name="orderItemId" required>${items.map(item=>`<option value="${item.id}" data-length="${item.requested_cut_length||""}">${fmt.escape(item.sku||item.description)}</option>`).join("")}</select></div><div class="field"><label>Longitud solicitada *</label><input class="control" name="requestedLength" type="number" step="any" min="0" value="${first.requested_cut_length||""}" required></div><div class="field"><label>Longitud real *</label><input class="control" name="actualLength" type="number" step="any" min="0" value="${first.requested_cut_length||""}" required></div><div class="field"><label>Desperdicio</label><input class="control" name="scrapLength" type="number" step="any" min="0" value="0"></div></div>${checklistConfirmation(data)}`,onConfirm:async dialog=>{const f=dialogData(dialog);await api.saveCutJob(data.order.id,{inventoryLotId:f.inventoryLotId,orderItemId:f.orderItemId,requestedLength:f.requestedLength,actualLength:f.actualLength,scrapLength:f.scrapLength||0});await finalizeAfterDomain(data.order.id,"Corte registrado y etapa finalizada")}});
-}
 
 function quickInvoice(data){
   modal({title:"Registrar factura",confirmLabel:"Guardar factura y continuar",body:`<div class="form-grid"><div class="field"><label>Número de factura *</label><input class="control" name="invoiceNumber" required autofocus></div><div class="field"><label>Fecha *</label><input class="control" name="invoiceDate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Valor</label><input class="control" name="amount" type="number" step="any"></div></div>${checklistConfirmation(data)}`,onConfirm:async dialog=>{const f=dialogData(dialog);const payload={invoiceNumber:f.invoiceNumber,invoiceDate:f.invoiceDate,currency:"COP"};if(f.amount)payload.amount=f.amount;await api.saveInvoice(data.order.id,payload);await finalizeAfterDomain(data.order.id,"Factura registrada y pedido liberado")}});
