@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.18.0-corte-referencia-multi-carreto",
-  build: "2026-08-09.03",
+  version: "10.19.0-sandbox-reconstruido",
+  build: "2026-08-11.01",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

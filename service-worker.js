@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-18-corte-referencia-multi-carreto-20260809";
+const CACHE="erp-electroingenieria-v10-19-sandbox-reconstruido-20260811";
 const ASSETS=[
   "./",
   "./index.html",
