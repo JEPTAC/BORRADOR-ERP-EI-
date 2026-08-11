@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.23.1
+-- ERP Electroingeniería V10.24.0
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -18,6 +18,10 @@ select
   to_regprocedure('public.erp_x_decide_order_cancellation(uuid,text,text)') is not null as decidir_cancelacion_pedido,
   to_regprocedure('public.erp_x_work_my_day(date)') is not null as mi_jornada_v10_23,
   to_regprocedure('public.erp_x_work_create_catalog_item(jsonb)') is not null as catalogo_dinamico_v10_23_1,
+  to_regprocedure('public.erp_x_work_propose_assignment(jsonb)') is not null as propuesta_actividad_v10_24,
+  to_regprocedure('public.erp_x_work_pending_approvals()') is not null as bandeja_aprobacion_v10_24,
+  to_regprocedure('public.erp_x_work_decide_assignment(uuid,text,text,boolean)') is not null as decision_actividad_v10_24,
+  to_regprocedure('public.erp_x_work_occupation(date,date,uuid)') is not null as ocupacion_integrada_v10_24,
   to_regprocedure('public.erp_x_work_save_assignment(jsonb)') is not null as planificador_v10_23,
   to_regprocedure('public.erp_x_work_ledger(date,date,uuid)') is not null as libro_mayor_tiempo_v10_23,
   to_regprocedure('public.erp_x_work_analytics(date,date,uuid)') is not null as analitica_capacidad_v10_23,
@@ -96,3 +100,12 @@ select
 -- Ejecutar con Super Admin, Gerencia, Jefatura Logística o Auditoría.
 select * from public.erp_x_work_health();
 
+
+
+-- V10.24 · Gobierno y ocupación integrada.
+select
+  exists(select 1 from erp_supply.roles where code='lider_logistica' and active) as rol_lider_logistico_activo,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='work_assignments' and column_name='approval_status') as gobierno_aprobacion_activo,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='work_assignments' and column_name='request_reason') as motivo_solicitud_activo,
+  pg_get_functiondef('erp_supply.work_classified_business_seconds(uuid,timestamptz,timestamptz)'::regprocedure) like '%cut_executions%' as ocupacion_incluye_corte,
+  pg_get_functiondef('public.erp_x_work_start(uuid,uuid,jsonb)'::regprocedure) like '%approval_status%' as inicio_respeta_aprobacion;

@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-23-1-catalogo-dinamico-actividades-20260811";
+const CACHE="erp-electroingenieria-v10-24-0-gobierno-actividades-ocupacion-20260811";
 const ASSETS=[
   "./",
   "./index.html",
