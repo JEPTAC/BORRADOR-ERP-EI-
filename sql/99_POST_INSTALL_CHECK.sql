@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.22.4
+-- ERP Electroingeniería V10.23.0
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -16,6 +16,11 @@ select
   to_regprocedure('public.erp_x_inventory_lots(uuid,text)') is not null as rpc_lotes_inventario,
   to_regprocedure('public.erp_x_request_order_cancellation(uuid,text)') is not null as solicitar_cancelacion_pedido,
   to_regprocedure('public.erp_x_decide_order_cancellation(uuid,text,text)') is not null as decidir_cancelacion_pedido,
+  to_regprocedure('public.erp_x_work_my_day(date)') is not null as mi_jornada_v10_23,
+  to_regprocedure('public.erp_x_work_save_assignment(jsonb)') is not null as planificador_v10_23,
+  to_regprocedure('public.erp_x_work_ledger(date,date,uuid)') is not null as libro_mayor_tiempo_v10_23,
+  to_regprocedure('public.erp_x_work_analytics(date,date,uuid)') is not null as analitica_capacidad_v10_23,
+  to_regprocedure('public.erp_x_work_health()') is not null as diagnostico_actividades_v10_23,
   case when to_regprocedure('public.erp_x_inventory_lots(uuid,text)') is null then false
        else position('x.lot_number' in pg_get_functiondef(to_regprocedure('public.erp_x_inventory_lots(uuid,text)')))=0 end as alias_lot_number_corregido,
   to_regprocedure('erp_supply.initial_step(text,text,boolean)') is null as routing_legacy_eliminado,
@@ -68,3 +73,23 @@ order by section,check_name;
 -- Ejecutar como Super Admin para una comprobación completa de arquitectura y datos:
 select public.erp_x_v10_22_self_check();
 select public.erp_x_flow_integrity();
+
+-- V10.23 · Estructura y salud del subsistema transversal de actividades.
+select
+  exists(select 1 from erp_supply.modules where code='workforce' and active) as modulo_mi_jornada_activo,
+  not exists(
+    select 1 from erp_supply.roles r
+    where r.active and not exists(
+      select 1 from erp_supply.role_module_permissions p
+      where p.role_code=r.code and p.module_code='workforce' and p.can_read and p.can_create
+    )
+  ) as todos_los_roles_con_mi_jornada,
+  to_regclass('erp_supply.work_activity_catalog') is not null as catalogo_actividades,
+  to_regclass('erp_supply.work_assignments') is not null as planificacion_actividades,
+  to_regclass('erp_supply.work_executions') is not null as ejecuciones_cronometradas,
+  to_regclass('erp_supply.work_evidence') is not null as evidencias_actividades,
+  to_regclass('erp_supply.work_delivery_reviews') is not null as revision_entregables;
+
+-- Ejecutar con Super Admin, Gerencia, Jefatura Logística o Auditoría.
+select * from public.erp_x_work_health();
+

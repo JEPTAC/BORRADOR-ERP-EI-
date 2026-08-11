@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-22-4-cancelacion-pedido-20260811";
+const CACHE="erp-electroingenieria-v10-23-0-gestion-actividades-capacidad-20260811";
 const ASSETS=[
   "./",
   "./index.html",
@@ -11,6 +11,8 @@ const ASSETS=[
   "./assets/js/core/icons.js",
   "./assets/js/core/layout.js",
   "./assets/js/modules/active-work.js",
+  "./assets/js/modules/work-clock.js",
+  "./assets/js/modules/workforce.js",
   "./assets/js/modules/order-cancellation.js",
   "./assets/js/modules/support-flow.js",
   "./assets/js/modules/sandbox.js",

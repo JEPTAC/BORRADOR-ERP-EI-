@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.22.4-cancelacion-pedido",
-  build: "2026-08-11.11",
+  version: "10.23.0-gestion-actividades-capacidad",
+  build: "2026-08-11.12",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -35,6 +35,9 @@ export const NAV_GROUPS = [
     {id:"cutting",label:"Corte",icon:"cutting",step:"CORTE"},
     {id:"billing",label:"Facturación",icon:"billing",step:"FACTURACION"},
     {id:"shipping",label:"Despachos y entregas",icon:"shipping",steps:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]}
+  ]},
+  {label:"Personas y productividad",items:[
+    {id:"workforce",label:"Mi jornada y actividades",icon:"timer"}
   ]},
   {label:"Control y análisis",items:[
     {id:"inventory",label:"Inventario",icon:"inventory"},

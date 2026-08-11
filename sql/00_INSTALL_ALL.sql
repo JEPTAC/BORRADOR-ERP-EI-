@@ -20990,3 +20990,1613 @@ grant execute on function public.erp_x_list_approvals(text,integer,integer) to a
 
 notify pgrst,'reload schema';
 commit;
+
+-- ============================================================================
+-- V10.23.0 · Gestión de actividades, capacidad y productividad responsable
+-- Migraciones canónicas 048 → 050
+-- ============================================================================
+-- ERP EI V10.23.0
+-- Gestión transversal de actividades, planificación, evidencias y entregables.
+-- Toda persona del ERP recibe acceso a Mi Jornada; Jefatura Logística y Gerencia
+-- obtienen capacidades de planificación según su ámbito de responsabilidad.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. MÓDULO Y PERMISOS
+-- ---------------------------------------------------------------------------
+insert into erp_supply.modules(code,name,description,icon,sort_order)
+values(
+  'workforce',
+  'Mi jornada y actividades',
+  'Actividades varias, entregables, planificación, evidencias y analítica de capacidad',
+  'timer',
+  135
+)
+on conflict(code) do update set
+  name=excluded.name,
+  description=excluded.description,
+  icon=excluded.icon,
+  sort_order=excluded.sort_order,
+  active=true;
+
+-- El portal es transversal: absolutamente todos los roles activos pueden usar su jornada.
+insert into erp_supply.role_module_permissions(
+  role_code,module_code,can_read,can_create,can_update,can_approve,can_admin
+)
+select r.code,'workforce',true,true,true,
+       (r.code in('super_admin','gerencia','jefe_logistica')),
+       (r.code in('super_admin','gerencia','jefe_logistica'))
+from erp_supply.roles r
+where r.active
+on conflict(role_code,module_code) do update set
+  can_read=true,
+  can_create=true,
+  can_update=true,
+  can_approve=excluded.can_approve,
+  can_admin=excluded.can_admin;
+
+-- ---------------------------------------------------------------------------
+-- 2. CATÁLOGO CANÓNICO DE ACTIVIDADES
+-- ---------------------------------------------------------------------------
+create table if not exists erp_supply.work_activity_catalog(
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  code text not null,
+  name text not null,
+  description text,
+  activity_group text not null default 'GENERAL'
+    check(activity_group in('LOGISTICS','COMMERCIAL','FINANCE','PURCHASING','MANAGEMENT','GENERAL','IMPROVEMENT')),
+  activity_kind text not null default 'ACTIVITY'
+    check(activity_kind in('ACTIVITY','DELIVERABLE')),
+  standard_minutes integer check(standard_minutes is null or standard_minutes>0),
+  evidence_policy text not null default 'FINAL_PHOTO'
+    check(evidence_policy in('NONE','FINAL_PHOTO','BEFORE_AFTER','FILE','LINK','ERP_REFERENCE')),
+  acceptance_required boolean not null default false,
+  team_allowed boolean not null default false,
+  allowed_roles text[] not null default '{}'::text[],
+  active boolean not null default true,
+  sort_order integer not null default 100,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(organization_id,code)
+);
+
+create index if not exists idx_work_activity_catalog_org
+on erp_supply.work_activity_catalog(organization_id,activity_group,active,sort_order);
+
+-- ---------------------------------------------------------------------------
+-- 3. PLANIFICACIÓN Y ASIGNACIONES
+-- ---------------------------------------------------------------------------
+create table if not exists erp_supply.work_assignments(
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  catalog_id uuid references erp_supply.work_activity_catalog(id),
+  series_id uuid,
+  title text not null,
+  description text,
+  assignment_kind text not null default 'ACTIVITY'
+    check(assignment_kind in('ACTIVITY','DELIVERABLE')),
+  status text not null default 'PUBLISHED'
+    check(status in('DRAFT','PUBLISHED','CANCELLED')),
+  priority text not null default 'MEDIUM'
+    check(priority in('LOW','MEDIUM','HIGH','URGENT','CRITICAL')),
+  planned_start timestamptz,
+  planned_end timestamptz,
+  due_at timestamptz,
+  estimated_minutes integer check(estimated_minutes is null or estimated_minutes>0),
+  evidence_policy text not null default 'FINAL_PHOTO'
+    check(evidence_policy in('NONE','FINAL_PHOTO','BEFORE_AFTER','FILE','LINK','ERP_REFERENCE')),
+  acceptance_required boolean not null default false,
+  assigned_by uuid not null references erp_supply.profiles(id),
+  related_entity_type text,
+  related_entity_id text,
+  recurrence jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check(planned_end is null or planned_start is not null),
+  check(planned_end is null or planned_end>planned_start),
+  check(assignment_kind<>'DELIVERABLE' or due_at is not null)
+);
+
+create index if not exists idx_work_assignments_window
+on erp_supply.work_assignments(organization_id,planned_start,planned_end,status);
+create index if not exists idx_work_assignments_due
+on erp_supply.work_assignments(organization_id,due_at,status);
+create index if not exists idx_work_assignments_series
+on erp_supply.work_assignments(series_id) where series_id is not null;
+
+create table if not exists erp_supply.work_assignment_members(
+  id uuid primary key default gen_random_uuid(),
+  assignment_id uuid not null references erp_supply.work_assignments(id) on delete cascade,
+  profile_id uuid not null references erp_supply.profiles(id),
+  status text not null default 'PLANNED'
+    check(status in('PLANNED','READY','IN_PROGRESS','WAITING_EVIDENCE','SUBMITTED','COMPLETED','RETURNED','CANCELLED')),
+  assigned_at timestamptz not null default now(),
+  first_started_at timestamptz,
+  submitted_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  unique(assignment_id,profile_id)
+);
+
+create index if not exists idx_work_assignment_members_profile
+on erp_supply.work_assignment_members(profile_id,status,assigned_at desc);
+
+-- ---------------------------------------------------------------------------
+-- 4. EJECUCIÓN, PAUSAS, EVIDENCIAS Y REVISIÓN
+-- ---------------------------------------------------------------------------
+create table if not exists erp_supply.work_executions(
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  assignment_id uuid references erp_supply.work_assignments(id) on delete set null,
+  assignment_member_id uuid references erp_supply.work_assignment_members(id) on delete set null,
+  catalog_id uuid not null references erp_supply.work_activity_catalog(id),
+  profile_id uuid not null references erp_supply.profiles(id),
+  source text not null default 'MANUAL' check(source in('MANUAL','PLANNED','ERP_LINKED')),
+  status text not null default 'IN_PROGRESS'
+    check(status in('IN_PROGRESS','PAUSED','WAITING_EVIDENCE','SUBMITTED','COMPLETED','RETURNED','CANCELLED')),
+  title_snapshot text not null,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  elapsed_seconds bigint not null default 0,
+  active_seconds bigint not null default 0,
+  business_seconds bigint not null default 0,
+  paused_seconds bigint not null default 0,
+  start_delay_seconds bigint,
+  deviation_ratio numeric(12,4),
+  deviation_reason text,
+  result_note text,
+  related_entity_type text,
+  related_entity_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_work_open_execution_per_profile
+on erp_supply.work_executions(profile_id)
+where status in('IN_PROGRESS','PAUSED');
+create index if not exists idx_work_executions_profile_time
+on erp_supply.work_executions(profile_id,started_at desc);
+create index if not exists idx_work_executions_assignment
+on erp_supply.work_executions(assignment_id,profile_id,started_at desc);
+
+create table if not exists erp_supply.work_execution_pauses(
+  id uuid primary key default gen_random_uuid(),
+  execution_id uuid not null references erp_supply.work_executions(id) on delete cascade,
+  reason_code text not null default 'OTHER',
+  note text,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  created_by uuid references erp_supply.profiles(id),
+  ended_by uuid references erp_supply.profiles(id),
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create unique index if not exists uq_work_open_pause_per_execution
+on erp_supply.work_execution_pauses(execution_id)
+where ended_at is null;
+
+create table if not exists erp_supply.work_evidence(
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  execution_id uuid not null references erp_supply.work_executions(id) on delete cascade,
+  profile_id uuid not null references erp_supply.profiles(id),
+  evidence_type text not null
+    check(evidence_type in('BEFORE_PHOTO','AFTER_PHOTO','FINAL_PHOTO','FILE','LINK','ERP_REFERENCE')),
+  drive_file_id text,
+  file_name text,
+  mime_type text,
+  size_bytes bigint,
+  web_view_link text,
+  external_value text,
+  note text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_work_evidence_execution
+on erp_supply.work_evidence(execution_id,created_at);
+
+create table if not exists erp_supply.work_delivery_reviews(
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references erp_supply.organizations(id),
+  execution_id uuid not null references erp_supply.work_executions(id),
+  assignment_id uuid references erp_supply.work_assignments(id),
+  decision text not null check(decision in('ACCEPTED','RETURNED')),
+  note text,
+  reviewed_by uuid not null references erp_supply.profiles(id),
+  reviewed_at timestamptz not null default now(),
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists erp_supply.work_activity_events(
+  id bigint generated always as identity primary key,
+  organization_id uuid not null references erp_supply.organizations(id),
+  execution_id uuid references erp_supply.work_executions(id) on delete cascade,
+  assignment_id uuid references erp_supply.work_assignments(id) on delete cascade,
+  profile_id uuid references erp_supply.profiles(id),
+  actor_profile_id uuid references erp_supply.profiles(id),
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_work_activity_events_timeline
+on erp_supply.work_activity_events(organization_id,created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- 5. TOUCH TRIGGERS
+-- ---------------------------------------------------------------------------
+drop trigger if exists trg_work_activity_catalog_touch on erp_supply.work_activity_catalog;
+create trigger trg_work_activity_catalog_touch before update on erp_supply.work_activity_catalog
+for each row execute function erp_supply.touch_updated_at();
+
+drop trigger if exists trg_work_assignments_touch on erp_supply.work_assignments;
+create trigger trg_work_assignments_touch before update on erp_supply.work_assignments
+for each row execute function erp_supply.touch_updated_at();
+
+drop trigger if exists trg_work_executions_touch on erp_supply.work_executions;
+create trigger trg_work_executions_touch before update on erp_supply.work_executions
+for each row execute function erp_supply.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- 6. CATÁLOGO INICIAL. Puede administrarse después sin cambiar código.
+-- ---------------------------------------------------------------------------
+insert into erp_supply.work_activity_catalog(
+  organization_id,code,name,description,activity_group,activity_kind,standard_minutes,
+  evidence_policy,acceptance_required,team_allowed,allowed_roles,sort_order,metadata
+)
+select o.id,x.code,x.name,x.description,x.activity_group,x.activity_kind,x.standard_minutes,
+       x.evidence_policy,x.acceptance_required,x.team_allowed,x.allowed_roles,x.sort_order,
+       jsonb_build_object('seedVersion','10.23.0','editable',true)
+from erp_supply.organizations o
+cross join (values
+  ('LOG_ORGANIZE_WAREHOUSE','Organización de bodega','Orden, clasificación y disposición de materiales o zonas.','LOGISTICS','ACTIVITY',60,'BEFORE_AFTER',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia','despacho_nacional']::text[],10),
+  ('LOG_CLEAN_WORKAREA','Limpieza de zona de trabajo','Limpieza y acondicionamiento de una zona operativa.','LOGISTICS','ACTIVITY',30,'BEFORE_AFTER',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia','despacho_nacional']::text[],20),
+  ('LOG_LOADING','Cargue','Cargue de mercancía, vehículo o unidad logística.','LOGISTICS','ACTIVITY',45,'FINAL_PHOTO',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia','despacho_nacional']::text[],30),
+  ('LOG_UNLOADING','Descargue','Descargue de mercancía y disposición inicial.','LOGISTICS','ACTIVITY',60,'FINAL_PHOTO',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia','despacho_nacional']::text[],40),
+  ('LOG_CYCLE_COUNT','Conteo físico / inventario','Conteo físico, verificación o conciliación de existencias.','LOGISTICS','ACTIVITY',60,'FINAL_PHOTO',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia']::text[],50),
+  ('LOG_RELOCATION','Reubicación de material','Movimiento y reubicación interna de materiales.','LOGISTICS','ACTIVITY',45,'FINAL_PHOTO',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia']::text[],60),
+  ('LOG_SUPPORT_PICKING','Apoyo a alistamiento','Apoyo temporal a actividades de alistamiento.','LOGISTICS','ACTIVITY',30,'NONE',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte']::text[],70),
+  ('LOG_SUPPORT_CUTTING','Apoyo a corte','Apoyo temporal a operación de corte.','LOGISTICS','ACTIVITY',30,'NONE',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte']::text[],80),
+  ('LOG_MAINTENANCE','Mantenimiento básico / 5S','Mantenimiento autónomo, inspección o actividad 5S.','IMPROVEMENT','ACTIVITY',45,'BEFORE_AFTER',false,true,array['jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte','recepcion_mercancia','despacho_nacional']::text[],90),
+  ('GEN_MEETING','Reunión de trabajo','Reunión operativa o administrativa.','GENERAL','ACTIVITY',30,'NONE',false,true,'{}'::text[],110),
+  ('GEN_TRAINING','Capacitación','Formación, inducción o transferencia de conocimiento.','IMPROVEMENT','ACTIVITY',60,'NONE',false,true,'{}'::text[],120),
+  ('GEN_CONTINUOUS_IMPROVEMENT','Mejora continua','Análisis, estandarización o implementación de mejora.','IMPROVEMENT','ACTIVITY',60,'FILE',false,true,'{}'::text[],130),
+  ('GEN_ADMIN','Gestión administrativa','Actividad administrativa no cubierta por un flujo ERP.','GENERAL','ACTIVITY',45,'NONE',false,false,'{}'::text[],140),
+  ('MGT_DELIVERABLE','Entregable de gestión','Entregable con fecha límite, evidencia y aceptación del responsable.','MANAGEMENT','DELIVERABLE',120,'FILE',true,false,array['ventas','jefe_logistica','compras','cartera']::text[],200)
+) as x(code,name,description,activity_group,activity_kind,standard_minutes,evidence_policy,acceptance_required,team_allowed,allowed_roles,sort_order)
+where o.active
+on conflict(organization_id,code) do update set
+  name=excluded.name,
+  description=excluded.description,
+  activity_group=excluded.activity_group,
+  activity_kind=excluded.activity_kind,
+  standard_minutes=excluded.standard_minutes,
+  evidence_policy=excluded.evidence_policy,
+  acceptance_required=excluded.acceptance_required,
+  team_allowed=excluded.team_allowed,
+  allowed_roles=excluded.allowed_roles,
+  sort_order=excluded.sort_order,
+  active=true,
+  metadata=erp_supply.work_activity_catalog.metadata||jsonb_build_object('seedVersion','10.23.0');
+
+-- El esquema interno continúa inaccesible desde navegador.
+revoke all on all tables in schema erp_supply from public,anon,authenticated;
+revoke all on all sequences in schema erp_supply from public,anon,authenticated;
+
+commit;
+
+-- ERP EI V10.23.0
+-- API transaccional de Mi Jornada: cronómetro, pausas, evidencias,
+-- planificación por equipo, recurrencias y entregables con aceptación.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. REGLAS DE ACCESO Y MÉTRICAS
+-- ---------------------------------------------------------------------------
+create or replace function erp_supply.work_catalog_allowed(
+  p_catalog_id uuid,
+  p_profile_id uuid default null
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+  select exists(
+    select 1
+    from erp_supply.work_activity_catalog c
+    join erp_supply.profiles p on p.id=coalesce(p_profile_id,erp_supply.current_profile_id())
+    where c.id=p_catalog_id
+      and c.organization_id=p.organization_id
+      and c.active
+      and (
+        coalesce(array_length(c.allowed_roles,1),0)=0
+        or exists(
+          select 1 from erp_supply.profile_roles pr
+          where pr.profile_id=p.id and pr.role_code=any(c.allowed_roles)
+        )
+      )
+  )
+$$;
+
+revoke all on function erp_supply.work_catalog_allowed(uuid,uuid) from public;
+
+create or replace function erp_supply.can_manage_work_profile(
+  p_profile_id uuid,
+  p_assignment_kind text default 'ACTIVITY'
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+  select
+    erp_supply.has_role('super_admin')
+    or (
+      erp_supply.has_role('jefe_logistica')
+      and upper(coalesce(p_assignment_kind,'ACTIVITY'))='ACTIVITY'
+      and exists(
+        select 1 from erp_supply.profile_roles pr
+        where pr.profile_id=p_profile_id
+          and pr.role_code=any(array[
+            'jefe_logistica','coordinador_logistico','aux_logistica','auxiliar_corte',
+            'recepcion_mercancia','despacho_nacional'
+          ]::text[])
+      )
+    )
+    or (
+      erp_supply.has_role('gerencia')
+      and upper(coalesce(p_assignment_kind,'DELIVERABLE'))='DELIVERABLE'
+      and exists(
+        select 1 from erp_supply.profile_roles pr
+        where pr.profile_id=p_profile_id
+          and pr.role_code=any(array['ventas','jefe_logistica','compras','cartera']::text[])
+      )
+    )
+$$;
+
+revoke all on function erp_supply.can_manage_work_profile(uuid,text) from public;
+
+create or replace function erp_supply.work_execution_metrics(p_execution_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_exec erp_supply.work_executions%rowtype;
+  v_end timestamptz;
+  v_elapsed bigint:=0;
+  v_pause bigint:=0;
+  v_pause_business bigint:=0;
+  v_business bigint:=0;
+  v_active bigint:=0;
+begin
+  select * into v_exec from erp_supply.work_executions where id=p_execution_id;
+  if not found then return '{}'::jsonb; end if;
+
+  v_end:=coalesce(v_exec.ended_at,now());
+  v_elapsed:=greatest(0,extract(epoch from(v_end-v_exec.started_at))::bigint);
+
+  select
+    coalesce(sum(greatest(0,extract(epoch from(coalesce(p.ended_at,v_end)-p.started_at))::bigint)),0),
+    coalesce(sum(erp_supply.business_seconds_between(
+      v_exec.organization_id,
+      p.started_at,
+      least(coalesce(p.ended_at,v_end),v_end)
+    )),0)
+  into v_pause,v_pause_business
+  from erp_supply.work_execution_pauses p
+  where p.execution_id=v_exec.id and p.started_at<v_end;
+
+  v_business:=greatest(0,erp_supply.business_seconds_between(v_exec.organization_id,v_exec.started_at,v_end)-v_pause_business);
+  v_active:=greatest(0,v_elapsed-v_pause);
+
+  return jsonb_build_object(
+    'elapsedSeconds',v_elapsed,
+    'pausedSeconds',v_pause,
+    'activeSeconds',v_active,
+    'businessSeconds',v_business,
+    'endedAt',v_end
+  );
+end;
+$$;
+
+revoke all on function erp_supply.work_execution_metrics(uuid) from public;
+
+create or replace function erp_supply.work_evidence_complete(p_execution_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_policy text;
+begin
+  select coalesce(a.evidence_policy,c.evidence_policy,'NONE')
+  into v_policy
+  from erp_supply.work_executions e
+  join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+  left join erp_supply.work_assignments a on a.id=e.assignment_id
+  where e.id=p_execution_id;
+
+  if v_policy is null then return false; end if;
+  if v_policy='NONE' then return true; end if;
+  if v_policy='FINAL_PHOTO' then
+    return exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type in('FINAL_PHOTO','AFTER_PHOTO'));
+  end if;
+  if v_policy='BEFORE_AFTER' then
+    return exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type='BEFORE_PHOTO')
+       and exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type='AFTER_PHOTO');
+  end if;
+  if v_policy='FILE' then
+    return exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type='FILE');
+  end if;
+  if v_policy='LINK' then
+    return exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type='LINK' and nullif(trim(external_value),'') is not null);
+  end if;
+  if v_policy='ERP_REFERENCE' then
+    return exists(select 1 from erp_supply.work_evidence where execution_id=p_execution_id and evidence_type='ERP_REFERENCE' and nullif(trim(external_value),'') is not null);
+  end if;
+  return false;
+end;
+$$;
+
+revoke all on function erp_supply.work_evidence_complete(uuid) from public;
+
+create or replace function erp_supply.sync_work_execution_completion(p_execution_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_exec erp_supply.work_executions%rowtype;
+  v_assignment erp_supply.work_assignments%rowtype;
+  v_catalog erp_supply.work_activity_catalog%rowtype;
+  v_evidence_ok boolean:=false;
+  v_acceptance boolean:=false;
+  v_status text;
+begin
+  select * into v_exec from erp_supply.work_executions where id=p_execution_id for update;
+  if not found then raise exception 'Actividad no disponible'; end if;
+  if v_exec.ended_at is null then return jsonb_build_object('status',v_exec.status,'evidenceComplete',false); end if;
+  if v_exec.status in('RETURNED','CANCELLED') then return jsonb_build_object('status',v_exec.status,'evidenceComplete',false); end if;
+
+  select * into v_catalog from erp_supply.work_activity_catalog where id=v_exec.catalog_id;
+  if v_exec.assignment_id is not null then select * into v_assignment from erp_supply.work_assignments where id=v_exec.assignment_id; end if;
+
+  v_evidence_ok:=erp_supply.work_evidence_complete(v_exec.id);
+  v_acceptance:=coalesce(v_assignment.acceptance_required,v_catalog.acceptance_required,false);
+  v_status:=case when not v_evidence_ok then 'WAITING_EVIDENCE' when v_acceptance then 'SUBMITTED' else 'COMPLETED' end;
+
+  update erp_supply.work_executions set status=v_status where id=v_exec.id;
+  if v_exec.assignment_member_id is not null then
+    update erp_supply.work_assignment_members
+    set status=case when v_status='WAITING_EVIDENCE' then 'WAITING_EVIDENCE' when v_status='SUBMITTED' then 'SUBMITTED' else 'COMPLETED' end,
+        submitted_at=case when v_status='SUBMITTED' then coalesce(submitted_at,now()) else submitted_at end,
+        completed_at=case when v_status='COMPLETED' then coalesce(completed_at,now()) else completed_at end
+    where id=v_exec.assignment_member_id;
+  end if;
+
+  return jsonb_build_object('status',v_status,'evidenceComplete',v_evidence_ok,'acceptanceRequired',v_acceptance);
+end;
+$$;
+
+revoke all on function erp_supply.sync_work_execution_completion(uuid) from public;
+
+-- ---------------------------------------------------------------------------
+-- 2. CATÁLOGO Y MI JORNADA
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_catalog()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+begin
+  return coalesce((
+    select jsonb_agg(to_jsonb(x) order by x."sortOrder",x.name)
+    from(
+      select
+        c.id,c.code,c.name,c.description,c.activity_group "activityGroup",c.activity_kind "activityKind",
+        c.standard_minutes "standardMinutes",c.evidence_policy "evidencePolicy",
+        c.acceptance_required "acceptanceRequired",c.team_allowed "teamAllowed",c.sort_order "sortOrder",
+        h.samples,
+        h."medianMinutes",
+        h."p80Minutes"
+      from erp_supply.work_activity_catalog c
+      left join lateral(
+        select
+          count(*)::integer samples,
+          round((percentile_cont(.5) within group(order by e.active_seconds)/60.0)::numeric,1) "medianMinutes",
+          round((percentile_cont(.8) within group(order by e.active_seconds)/60.0)::numeric,1) "p80Minutes"
+        from erp_supply.work_executions e
+        where e.catalog_id=c.id and e.status='COMPLETED' and e.active_seconds>0
+      ) h on true
+      where c.organization_id=v_org and c.active and (
+        erp_supply.work_catalog_allowed(c.id,v_actor)
+        or erp_supply.has_role('super_admin')
+        or (erp_supply.has_role('gerencia') and c.activity_kind='DELIVERABLE')
+        or (erp_supply.has_role('jefe_logistica') and c.activity_kind='ACTIVITY' and c.activity_group in('LOGISTICS','IMPROVEMENT','GENERAL'))
+      )
+    ) x
+  ),'[]'::jsonb);
+end;
+$$;
+
+revoke all on function public.erp_x_work_catalog() from public,anon;
+grant execute on function public.erp_x_work_catalog() to authenticated;
+
+create or replace function public.erp_x_work_my_day(p_day date default current_date)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_tz text:=coalesce((select timezone from erp_supply.organizations where id=v_org),'America/Bogota');
+  v_day date:=coalesce(p_day,current_date);
+  v_start timestamptz:=(v_day::timestamp at time zone v_tz);
+  v_end timestamptz:=((v_day+1)::timestamp at time zone v_tz);
+  v_active jsonb;
+begin
+  select to_jsonb(x) into v_active from(
+    select e.id,e.status,e.source,e.title_snapshot "title",e.started_at "startedAt",e.ended_at "endedAt",
+           e.assignment_id "assignmentId",e.catalog_id "catalogId",c.name "catalogName",
+           coalesce(a.evidence_policy,c.evidence_policy) "evidencePolicy",
+           coalesce(a.estimated_minutes,c.standard_minutes) "estimatedMinutes",
+           a.planned_start "plannedStart",a.planned_end "plannedEnd",a.due_at "dueAt",
+           erp_supply.work_execution_metrics(e.id) metrics,
+           (select coalesce(jsonb_agg(jsonb_build_object('id',w.id,'type',w.evidence_type,'fileName',w.file_name,'webViewLink',w.web_view_link,'value',w.external_value,'createdAt',w.created_at) order by w.created_at),'[]'::jsonb) from erp_supply.work_evidence w where w.execution_id=e.id) evidence
+    from erp_supply.work_executions e
+    join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+    left join erp_supply.work_assignments a on a.id=e.assignment_id
+    where e.profile_id=v_actor and e.status in('IN_PROGRESS','PAUSED')
+    order by e.started_at desc limit 1
+  ) x;
+
+  return jsonb_build_object(
+    'day',v_day,
+    'active',v_active,
+    'catalog',public.erp_x_work_catalog(),
+    'today',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."plannedStart" nulls last,x."dueAt" nulls last,x.priority),'[]'::jsonb)
+      from(
+        select a.id,m.id "memberId",a.title,a.description,a.assignment_kind "kind",a.priority,
+               a.planned_start "plannedStart",a.planned_end "plannedEnd",a.due_at "dueAt",
+               a.estimated_minutes "estimatedMinutes",a.evidence_policy "evidencePolicy",a.acceptance_required "acceptanceRequired",
+               m.status "memberStatus",c.name "catalogName",c.code "catalogCode",c.id "catalogId",
+               a.related_entity_type "relatedEntityType",a.related_entity_id "relatedEntityId"
+        from erp_supply.work_assignment_members m
+        join erp_supply.work_assignments a on a.id=m.assignment_id
+        left join erp_supply.work_activity_catalog c on c.id=a.catalog_id
+        where m.profile_id=v_actor and a.organization_id=v_org and a.status='PUBLISHED'
+          and m.status not in('COMPLETED','CANCELLED')
+          and (
+            (a.planned_start>=v_start and a.planned_start<v_end)
+            or (a.planned_start is null and a.due_at>=v_start and a.due_at<v_end)
+          )
+      ) x
+    ),
+    'overdue',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."dueAt"),'[]'::jsonb)
+      from(
+        select a.id,m.id "memberId",a.title,a.assignment_kind "kind",a.priority,a.due_at "dueAt",a.estimated_minutes "estimatedMinutes",
+               m.status "memberStatus",c.name "catalogName",c.id "catalogId",a.evidence_policy "evidencePolicy"
+        from erp_supply.work_assignment_members m
+        join erp_supply.work_assignments a on a.id=m.assignment_id
+        left join erp_supply.work_activity_catalog c on c.id=a.catalog_id
+        where m.profile_id=v_actor and a.organization_id=v_org and a.status='PUBLISHED'
+          and m.status not in('COMPLETED','CANCELLED','SUBMITTED') and a.due_at<v_start
+      ) x
+    ),
+    'upcoming',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."nextAt"),'[]'::jsonb)
+      from(
+        select a.id,a.title,a.assignment_kind "kind",a.priority,a.planned_start "plannedStart",a.due_at "dueAt",
+               coalesce(a.planned_start,a.due_at) "nextAt",m.status "memberStatus",c.name "catalogName"
+        from erp_supply.work_assignment_members m
+        join erp_supply.work_assignments a on a.id=m.assignment_id
+        left join erp_supply.work_activity_catalog c on c.id=a.catalog_id
+        where m.profile_id=v_actor and a.organization_id=v_org and a.status='PUBLISHED'
+          and m.status not in('COMPLETED','CANCELLED')
+          and coalesce(a.planned_start,a.due_at)>=v_end
+          and coalesce(a.planned_start,a.due_at)<v_end+interval '7 days'
+        order by coalesce(a.planned_start,a.due_at) limit 12
+      ) x
+    ),
+    'history',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."startedAt" desc),'[]'::jsonb)
+      from(
+        select e.id,e.title_snapshot "title",e.status,e.started_at "startedAt",e.ended_at "endedAt",
+               e.active_seconds "activeSeconds",e.business_seconds "businessSeconds",e.paused_seconds "pausedSeconds",
+               c.name "catalogName",c.activity_group "activityGroup",e.result_note "resultNote",
+               coalesce(a.evidence_policy,c.evidence_policy) "evidencePolicy",
+               coalesce(a.acceptance_required,c.acceptance_required,false) "acceptanceRequired",
+               (select coalesce(jsonb_agg(jsonb_build_object('id',w.id,'type',w.evidence_type,'fileName',w.file_name,'webViewLink',w.web_view_link,'value',w.external_value,'createdAt',w.created_at) order by w.created_at),'[]'::jsonb) from erp_supply.work_evidence w where w.execution_id=e.id) evidence
+        from erp_supply.work_executions e join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+        left join erp_supply.work_assignments a on a.id=e.assignment_id
+        where e.profile_id=v_actor and e.started_at>=v_start and e.started_at<v_end
+        order by e.started_at desc limit 30
+      ) x
+    ),
+    'summary',jsonb_build_object(
+      'completed',(select count(*) from erp_supply.work_executions e where e.profile_id=v_actor and e.status='COMPLETED' and e.ended_at>=v_start and e.ended_at<v_end),
+      'activeSeconds',(select coalesce(sum(e.active_seconds),0) from erp_supply.work_executions e where e.profile_id=v_actor and e.ended_at>=v_start and e.ended_at<v_end and e.status in('COMPLETED','SUBMITTED','WAITING_EVIDENCE')),
+      'plannedMinutes',(select coalesce(sum(a.estimated_minutes),0) from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id where m.profile_id=v_actor and a.status='PUBLISHED' and a.planned_start>=v_start and a.planned_start<v_end),
+      'pendingEvidence',(select count(*) from erp_supply.work_executions e where e.profile_id=v_actor and e.status='WAITING_EVIDENCE'),
+      'pendingReview',(select count(*) from erp_supply.work_executions e where e.profile_id=v_actor and e.status='SUBMITTED')
+    ),
+    'permissions',jsonb_build_object(
+      'canPlanLogistics',erp_supply.has_role('jefe_logistica') or erp_supply.has_role('super_admin'),
+      'canPlanDeliverables',erp_supply.has_role('gerencia') or erp_supply.has_role('super_admin'),
+      'canViewTeam',erp_supply.has_role('jefe_logistica') or erp_supply.has_role('gerencia') or erp_supply.has_role('super_admin')
+    ),
+    'serverTime',now(),
+    'version','10.23.0'
+  );
+end;
+$$;
+
+revoke all on function public.erp_x_work_my_day(date) from public,anon;
+grant execute on function public.erp_x_work_my_day(date) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 3. CRONÓMETRO PERSONAL
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_start(
+  p_catalog_id uuid,
+  p_assignment_id uuid default null,
+  p_payload jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_catalog erp_supply.work_activity_catalog%rowtype;
+  v_assignment erp_supply.work_assignments%rowtype;
+  v_member erp_supply.work_assignment_members%rowtype;
+  v_exec erp_supply.work_executions%rowtype;
+  v_title text;
+  v_delay bigint:=0;
+begin
+  if exists(select 1 from erp_supply.work_executions where profile_id=v_actor and status in('IN_PROGRESS','PAUSED')) then
+    raise exception 'Ya tienes una actividad cronometrada. Finalízala antes de iniciar otra.';
+  end if;
+
+  select * into v_catalog from erp_supply.work_activity_catalog
+  where id=p_catalog_id and organization_id=v_org and active;
+  if not found or not erp_supply.work_catalog_allowed(p_catalog_id,v_actor) then
+    raise exception 'Actividad no disponible para tu perfil' using errcode='42501';
+  end if;
+
+  if p_assignment_id is not null then
+    select * into v_assignment from erp_supply.work_assignments
+    where id=p_assignment_id and organization_id=v_org and status='PUBLISHED' for update;
+    if not found then raise exception 'La actividad programada ya no está disponible'; end if;
+    select * into v_member from erp_supply.work_assignment_members
+    where assignment_id=v_assignment.id and profile_id=v_actor for update;
+    if not found then raise exception 'Esta actividad no está asignada a tu perfil' using errcode='42501'; end if;
+    if v_member.status in('COMPLETED','CANCELLED') then raise exception 'Esta actividad ya fue cerrada'; end if;
+    if v_assignment.catalog_id is not null and v_assignment.catalog_id<>p_catalog_id then raise exception 'El tipo de actividad no coincide con la programación'; end if;
+    v_title:=v_assignment.title;
+    if v_assignment.planned_start is not null then v_delay:=abs(extract(epoch from(now()-v_assignment.planned_start))::bigint); end if;
+  else
+    v_title:=coalesce(nullif(trim(p_payload->>'title'),''),v_catalog.name);
+  end if;
+
+  insert into erp_supply.work_executions(
+    organization_id,assignment_id,assignment_member_id,catalog_id,profile_id,source,status,title_snapshot,
+    started_at,start_delay_seconds,related_entity_type,related_entity_id,metadata
+  ) values(
+    v_org,p_assignment_id,case when p_assignment_id is null then null else v_member.id end,
+    v_catalog.id,v_actor,case when p_assignment_id is null then 'MANUAL' else 'PLANNED' end,'IN_PROGRESS',v_title,
+    now(),v_delay,nullif(trim(p_payload->>'relatedEntityType'),''),nullif(trim(p_payload->>'relatedEntityId'),''),
+    jsonb_build_object('startedVersion','10.23.0','startNote',nullif(trim(p_payload->>'note'),''))
+  ) returning * into v_exec;
+
+  if p_assignment_id is not null then
+    update erp_supply.work_assignment_members
+    set status='IN_PROGRESS',first_started_at=coalesce(first_started_at,now())
+    where id=v_member.id;
+  end if;
+
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_org,v_exec.id,p_assignment_id,v_actor,v_actor,'STARTED',jsonb_build_object('title',v_title,'catalogId',v_catalog.id,'version','10.23.0'));
+
+  return jsonb_build_object('success',true,'executionId',v_exec.id,'status',v_exec.status,'startedAt',v_exec.started_at,'title',v_title);
+end;
+$$;
+
+revoke all on function public.erp_x_work_start(uuid,uuid,jsonb) from public,anon;
+grant execute on function public.erp_x_work_start(uuid,uuid,jsonb) to authenticated;
+
+create or replace function public.erp_x_work_pause(
+  p_execution_id uuid,
+  p_reason_code text default 'OTHER',
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_exec erp_supply.work_executions%rowtype;
+begin
+  select * into v_exec from erp_supply.work_executions
+  where id=p_execution_id and profile_id=v_actor and organization_id=erp_supply.current_org_id() for update;
+  if not found then raise exception 'Actividad no disponible'; end if;
+  if v_exec.status<>'IN_PROGRESS' then raise exception 'Solo una actividad en ejecución puede pausarse'; end if;
+
+  insert into erp_supply.work_execution_pauses(execution_id,reason_code,note,created_by)
+  values(v_exec.id,upper(coalesce(nullif(trim(p_reason_code),''),'OTHER')),nullif(trim(p_note),''),v_actor);
+  update erp_supply.work_executions set status='PAUSED' where id=v_exec.id;
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_exec.organization_id,v_exec.id,v_exec.assignment_id,v_actor,v_actor,'PAUSED',jsonb_build_object('reasonCode',p_reason_code,'note',p_note));
+  return jsonb_build_object('success',true,'status','PAUSED','metrics',erp_supply.work_execution_metrics(v_exec.id));
+end;
+$$;
+
+revoke all on function public.erp_x_work_pause(uuid,text,text) from public,anon;
+grant execute on function public.erp_x_work_pause(uuid,text,text) to authenticated;
+
+create or replace function public.erp_x_work_resume(p_execution_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_exec erp_supply.work_executions%rowtype;
+begin
+  select * into v_exec from erp_supply.work_executions
+  where id=p_execution_id and profile_id=v_actor and organization_id=erp_supply.current_org_id() for update;
+  if not found then raise exception 'Actividad no disponible'; end if;
+  if v_exec.status<>'PAUSED' then raise exception 'La actividad no está pausada'; end if;
+
+  update erp_supply.work_execution_pauses set ended_at=now(),ended_by=v_actor
+  where execution_id=v_exec.id and ended_at is null;
+  update erp_supply.work_executions set status='IN_PROGRESS' where id=v_exec.id;
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_exec.organization_id,v_exec.id,v_exec.assignment_id,v_actor,v_actor,'RESUMED','{}'::jsonb);
+  return jsonb_build_object('success',true,'status','IN_PROGRESS','metrics',erp_supply.work_execution_metrics(v_exec.id));
+end;
+$$;
+
+revoke all on function public.erp_x_work_resume(uuid) from public,anon;
+grant execute on function public.erp_x_work_resume(uuid) to authenticated;
+
+create or replace function public.erp_x_work_finish(
+  p_execution_id uuid,
+  p_payload jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_exec erp_supply.work_executions%rowtype;
+  v_metrics jsonb;
+  v_estimated integer;
+  v_ratio numeric;
+  v_sync jsonb;
+begin
+  select * into v_exec from erp_supply.work_executions
+  where id=p_execution_id and profile_id=v_actor and organization_id=erp_supply.current_org_id() for update;
+  if not found then raise exception 'Actividad no disponible'; end if;
+  if v_exec.status not in('IN_PROGRESS','PAUSED') then raise exception 'La actividad ya fue finalizada'; end if;
+  if coalesce((
+    select coalesce(a.evidence_policy,c.evidence_policy)
+    from erp_supply.work_activity_catalog c
+    left join erp_supply.work_assignments a on a.id=v_exec.assignment_id
+    where c.id=v_exec.catalog_id
+  ),'NONE')='BEFORE_AFTER' and not exists(
+    select 1 from erp_supply.work_evidence w where w.execution_id=v_exec.id and w.evidence_type='BEFORE_PHOTO'
+  ) then
+    raise exception 'Debes tomar la foto inicial antes de finalizar la actividad';
+  end if;
+
+  update erp_supply.work_execution_pauses set ended_at=now(),ended_by=v_actor
+  where execution_id=v_exec.id and ended_at is null;
+  update erp_supply.work_executions set ended_at=now() where id=v_exec.id;
+
+  v_metrics:=erp_supply.work_execution_metrics(v_exec.id);
+  select coalesce(a.estimated_minutes,c.standard_minutes) into v_estimated
+  from erp_supply.work_executions e
+  join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+  left join erp_supply.work_assignments a on a.id=e.assignment_id
+  where e.id=v_exec.id;
+  if coalesce(v_estimated,0)>0 then
+    v_ratio:=round(((v_metrics->>'activeSeconds')::numeric/(v_estimated*60.0))::numeric,4);
+  end if;
+
+  update erp_supply.work_executions
+  set elapsed_seconds=coalesce((v_metrics->>'elapsedSeconds')::bigint,0),
+      active_seconds=coalesce((v_metrics->>'activeSeconds')::bigint,0),
+      business_seconds=coalesce((v_metrics->>'businessSeconds')::bigint,0),
+      paused_seconds=coalesce((v_metrics->>'pausedSeconds')::bigint,0),
+      deviation_ratio=v_ratio,
+      deviation_reason=nullif(trim(p_payload->>'deviationReason'),''),
+      result_note=nullif(trim(p_payload->>'resultNote'),''),
+      metadata=metadata||jsonb_build_object('finishedVersion','10.23.0','finishedAt',now())
+  where id=v_exec.id;
+
+  v_sync:=erp_supply.sync_work_execution_completion(v_exec.id);
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_exec.organization_id,v_exec.id,v_exec.assignment_id,v_actor,v_actor,'FINISHED',jsonb_build_object('metrics',v_metrics,'completion',v_sync,'deviationReason',p_payload->>'deviationReason'));
+
+  return jsonb_build_object('success',true,'executionId',v_exec.id,'metrics',v_metrics,'completion',v_sync);
+end;
+$$;
+
+revoke all on function public.erp_x_work_finish(uuid,jsonb) from public,anon;
+grant execute on function public.erp_x_work_finish(uuid,jsonb) to authenticated;
+
+create or replace function public.erp_x_work_register_evidence(
+  p_execution_id uuid,
+  p_payload jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_exec erp_supply.work_executions%rowtype;
+  v_type text:=upper(trim(coalesce(p_payload->>'evidenceType','')));
+  v_evidence erp_supply.work_evidence%rowtype;
+  v_sync jsonb;
+begin
+  select * into v_exec from erp_supply.work_executions
+  where id=p_execution_id and profile_id=v_actor and organization_id=erp_supply.current_org_id() for update;
+  if not found then raise exception 'Actividad no disponible'; end if;
+  if v_exec.status in('CANCELLED','RETURNED') then raise exception 'La ejecución no acepta nuevas evidencias'; end if;
+  if v_type not in('BEFORE_PHOTO','AFTER_PHOTO','FINAL_PHOTO','FILE','LINK','ERP_REFERENCE') then raise exception 'Tipo de evidencia inválido'; end if;
+  if v_type='BEFORE_PHOTO' and v_exec.ended_at is not null then raise exception 'La foto inicial debe tomarse antes de finalizar la actividad'; end if;
+  if v_type in('AFTER_PHOTO','FINAL_PHOTO') and v_exec.ended_at is null then raise exception 'La foto final se anexa al terminar la actividad'; end if;
+  if v_type in('LINK','ERP_REFERENCE') and nullif(trim(p_payload->>'externalValue'),'') is null then raise exception 'Debe registrar el enlace o referencia'; end if;
+  if v_type in('BEFORE_PHOTO','AFTER_PHOTO','FINAL_PHOTO','FILE') and nullif(trim(p_payload->>'driveFileId'),'') is null then raise exception 'No se recibió el archivo de evidencia'; end if;
+
+  insert into erp_supply.work_evidence(
+    organization_id,execution_id,profile_id,evidence_type,drive_file_id,file_name,mime_type,size_bytes,
+    web_view_link,external_value,note,metadata
+  ) values(
+    v_exec.organization_id,v_exec.id,v_actor,v_type,nullif(trim(p_payload->>'driveFileId'),''),
+    nullif(trim(p_payload->>'fileName'),''),nullif(trim(p_payload->>'mimeType'),''),
+    erp_supply.safe_numeric(p_payload->>'sizeBytes')::bigint,nullif(trim(p_payload->>'webViewLink'),''),
+    nullif(trim(p_payload->>'externalValue'),''),nullif(trim(p_payload->>'note'),''),
+    coalesce(p_payload->'metadata','{}'::jsonb)||jsonb_build_object('version','10.23.0')
+  ) returning * into v_evidence;
+
+  if v_exec.ended_at is not null then v_sync:=erp_supply.sync_work_execution_completion(v_exec.id); else v_sync:=jsonb_build_object('status',v_exec.status); end if;
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_exec.organization_id,v_exec.id,v_exec.assignment_id,v_actor,v_actor,'EVIDENCE_ADDED',jsonb_build_object('evidenceId',v_evidence.id,'evidenceType',v_type));
+
+  return jsonb_build_object('success',true,'evidenceId',v_evidence.id,'completion',v_sync);
+end;
+$$;
+
+revoke all on function public.erp_x_work_register_evidence(uuid,jsonb) from public,anon;
+grant execute on function public.erp_x_work_register_evidence(uuid,jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 4. EQUIPO Y PLANIFICACIÓN
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_people(p_assignment_kind text default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_kind text:=upper(nullif(trim(coalesce(p_assignment_kind,'')),''));
+begin
+  if not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('gerencia') or erp_supply.has_role('auditoria')) then
+    raise exception 'No tienes permisos para consultar el equipo' using errcode='42501';
+  end if;
+  return coalesce((
+    select jsonb_agg(to_jsonb(x) order by x.name)
+    from(
+      select p.id,p.display_name name,p.email,p.employee_code "employeeCode",
+             array_agg(distinct pr.role_code order by pr.role_code) roles,
+             ae.title_snapshot "activeTitle",ae.started_at "activeStartedAt",
+             coalesce(load7.planned_minutes,0) "plannedMinutes7d"
+      from erp_supply.profiles p
+      join erp_supply.profile_roles pr on pr.profile_id=p.id
+      left join lateral(
+        select e.title_snapshot,e.started_at from erp_supply.work_executions e
+        where e.profile_id=p.id and e.status in('IN_PROGRESS','PAUSED') order by e.started_at desc limit 1
+      ) ae on true
+      left join lateral(
+        select coalesce(sum(a.estimated_minutes),0)::bigint planned_minutes
+        from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id
+        where m.profile_id=p.id and a.status='PUBLISHED' and coalesce(a.planned_start,a.due_at)>=now() and coalesce(a.planned_start,a.due_at)<now()+interval '7 days'
+      ) load7 on true
+      where p.organization_id=v_org and p.active
+        and (
+          erp_supply.has_role('auditoria')
+          or (v_kind is not null and erp_supply.can_manage_work_profile(p.id,v_kind))
+          or (v_kind is null and (erp_supply.can_manage_work_profile(p.id,'ACTIVITY') or erp_supply.can_manage_work_profile(p.id,'DELIVERABLE')))
+        )
+      group by p.id,p.display_name,p.email,p.employee_code,ae.title_snapshot,ae.started_at,load7.planned_minutes
+    ) x
+  ),'[]'::jsonb);
+end;
+$$;
+
+revoke all on function public.erp_x_work_people(text) from public,anon;
+grant execute on function public.erp_x_work_people(text) to authenticated;
+
+create or replace function public.erp_x_work_planner(p_from date,p_to date)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_from date:=coalesce(p_from,current_date-date_part('dow',current_date)::int);
+  v_to date:=coalesce(p_to,v_from+6);
+  v_tz text:=coalesce((select timezone from erp_supply.organizations where id=v_org),'America/Bogota');
+  v_start timestamptz:=(v_from::timestamp at time zone v_tz);
+  v_end timestamptz:=((v_to+1)::timestamp at time zone v_tz);
+begin
+  if v_to<v_from or v_to-v_from>62 then raise exception 'Rango de planificación inválido'; end if;
+  if not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('gerencia')) then
+    raise exception 'No tienes permisos de planificación' using errcode='42501';
+  end if;
+
+  return jsonb_build_object(
+    'from',v_from,'to',v_to,
+    'people',public.erp_x_work_people(null),
+    'assignments',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."plannedStart" nulls last,x."dueAt" nulls last,x.title),'[]'::jsonb)
+      from(
+        select a.id,a.series_id "seriesId",a.title,a.description,a.assignment_kind "kind",a.status,a.priority,
+               a.planned_start "plannedStart",a.planned_end "plannedEnd",a.due_at "dueAt",a.estimated_minutes "estimatedMinutes",
+               a.evidence_policy "evidencePolicy",a.acceptance_required "acceptanceRequired",a.catalog_id "catalogId",c.name "catalogName",
+               p.id "profileId",p.display_name "profileName",m.id "memberId",m.status "memberStatus",a.assigned_by "assignedBy",
+               a.recurrence,a.metadata
+        from erp_supply.work_assignments a
+        join erp_supply.work_assignment_members m on m.assignment_id=a.id
+        join erp_supply.profiles p on p.id=m.profile_id
+        left join erp_supply.work_activity_catalog c on c.id=a.catalog_id
+        where a.organization_id=v_org and a.status<>'CANCELLED'
+          and erp_supply.can_manage_work_profile(p.id,a.assignment_kind)
+          and (
+            (a.planned_start is not null and a.planned_start<v_end and coalesce(a.planned_end,a.planned_start+interval '1 minute')>v_start)
+            or (a.planned_start is null and a.due_at>=v_start and a.due_at<v_end)
+          )
+      ) x
+    ),
+    'permissions',jsonb_build_object(
+      'logistics',erp_supply.has_role('jefe_logistica') or erp_supply.has_role('super_admin'),
+      'deliverables',erp_supply.has_role('gerencia') or erp_supply.has_role('super_admin'),
+      'all',erp_supply.has_role('super_admin')
+    ),
+    'serverTime',now(),'version','10.23.0'
+  );
+end;
+$$;
+
+revoke all on function public.erp_x_work_planner(date,date) from public,anon;
+grant execute on function public.erp_x_work_planner(date,date) to authenticated;
+
+create or replace function public.erp_x_work_save_assignment(p_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_kind text:=upper(coalesce(nullif(trim(p_payload->>'kind'),''),'ACTIVITY'));
+  v_catalog erp_supply.work_activity_catalog%rowtype;
+  v_catalog_id uuid:=erp_supply.safe_uuid(p_payload->>'catalogId');
+  v_title text:=trim(coalesce(p_payload->>'title',''));
+  v_description text:=nullif(trim(p_payload->>'description'),'');
+  v_priority text:=upper(coalesce(nullif(trim(p_payload->>'priority'),''),'MEDIUM'));
+  v_base_start timestamptz:=nullif(trim(p_payload->>'plannedStart'),'')::timestamptz;
+  v_base_end timestamptz:=nullif(trim(p_payload->>'plannedEnd'),'')::timestamptz;
+  v_base_due timestamptz:=nullif(trim(p_payload->>'dueAt'),'')::timestamptz;
+  v_estimated integer:=nullif(trim(p_payload->>'estimatedMinutes'),'')::integer;
+  v_evidence text:=upper(nullif(trim(p_payload->>'evidencePolicy'),''));
+  v_acceptance boolean:=coalesce((p_payload->>'acceptanceRequired')::boolean,v_kind='DELIVERABLE');
+  v_force boolean:=coalesce((p_payload->>'force')::boolean,false);
+  v_frequency text:=upper(coalesce(nullif(trim(p_payload#>>'{recurrence,frequency}'),''),'NONE'));
+  v_until date:=nullif(trim(p_payload#>>'{recurrence,until}'),'')::date;
+  v_series uuid:=case when v_frequency='NONE' then null else gen_random_uuid() end;
+  v_occurrence integer:=0;
+  v_occurrence_start timestamptz;
+  v_occurrence_end timestamptz;
+  v_occurrence_due timestamptz;
+  v_anchor_date date;
+  v_conflicts jsonb:='[]'::jsonb;
+  v_created jsonb:='[]'::jsonb;
+  v_assignment_id uuid;
+  v_profile_id uuid;
+  v_roles text[]:=erp_supply.current_roles();
+begin
+  if not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('gerencia')) then raise exception 'No tienes permisos para asignar actividades' using errcode='42501'; end if;
+  if v_kind not in('ACTIVITY','DELIVERABLE') then raise exception 'Tipo de asignación inválido'; end if;
+  if v_kind='ACTIVITY' and not (erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica')) then raise exception 'Solo Jefatura Logística puede programar actividades operativas'; end if;
+  if v_kind='DELIVERABLE' and not (erp_supply.has_role('super_admin') or erp_supply.has_role('gerencia')) then raise exception 'Solo Gerencia puede asignar entregables con fecha límite'; end if;
+  if v_priority not in('LOW','MEDIUM','HIGH','URGENT','CRITICAL') then raise exception 'Prioridad inválida'; end if;
+  if coalesce(jsonb_typeof(p_payload->'profileIds'),'')<>'array' or coalesce(jsonb_array_length(p_payload->'profileIds'),0)=0 then raise exception 'Selecciona al menos una persona'; end if;
+  if v_frequency not in('NONE','DAILY','WEEKLY','MONTHLY') then raise exception 'Recurrencia inválida'; end if;
+
+  if v_catalog_id is not null then
+    select * into v_catalog from erp_supply.work_activity_catalog where id=v_catalog_id and organization_id=v_org and active;
+    if not found then raise exception 'Tipo de actividad no disponible'; end if;
+    if v_kind<>v_catalog.activity_kind and not (v_kind='ACTIVITY' and v_catalog.activity_kind='ACTIVITY') then raise exception 'El catálogo no corresponde al tipo de asignación'; end if;
+  end if;
+  if v_title='' then v_title:=coalesce(v_catalog.name,'Actividad programada'); end if;
+  v_estimated:=coalesce(v_estimated,v_catalog.standard_minutes,60);
+  v_evidence:=coalesce(v_evidence,v_catalog.evidence_policy,case when v_kind='DELIVERABLE' then 'FILE' else 'FINAL_PHOTO' end);
+  if v_evidence not in('NONE','FINAL_PHOTO','BEFORE_AFTER','FILE','LINK','ERP_REFERENCE') then raise exception 'Política de evidencia inválida'; end if;
+  if v_kind='DELIVERABLE' and v_base_due is null then raise exception 'El entregable necesita una fecha límite'; end if;
+  if v_base_end is not null and (v_base_start is null or v_base_end<=v_base_start) then raise exception 'El horario de finalización debe ser posterior al inicio'; end if;
+  if v_kind='ACTIVITY' and (v_base_start is null or v_base_end is null) then raise exception 'La actividad programada necesita fecha y hora de inicio y finalización'; end if;
+  if v_frequency<>'NONE' and v_until is null then raise exception 'La recurrencia necesita una fecha final'; end if;
+
+  for v_profile_id in select (value#>>'{}')::uuid from jsonb_array_elements(p_payload->'profileIds') loop
+    if not exists(select 1 from erp_supply.profiles where id=v_profile_id and organization_id=v_org and active) then raise exception 'Uno de los usuarios no está disponible'; end if;
+    if not erp_supply.can_manage_work_profile(v_profile_id,v_kind) then raise exception 'No tienes permiso para planificar a una de las personas seleccionadas' using errcode='42501'; end if;
+    if v_catalog_id is not null and not erp_supply.work_catalog_allowed(v_catalog_id,v_profile_id) then raise exception 'La actividad seleccionada no está habilitada para uno de los perfiles'; end if;
+  end loop;
+
+  -- Primera pasada: detectar conflictos en toda la serie antes de escribir.
+  loop
+    exit when v_occurrence>=120;
+    v_occurrence_start:=case v_frequency
+      when 'DAILY' then v_base_start+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_start+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_start+(v_occurrence||' months')::interval
+      else v_base_start end;
+    v_occurrence_end:=case when v_base_end is null then null else case v_frequency
+      when 'DAILY' then v_base_end+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_end+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_end+(v_occurrence||' months')::interval
+      else v_base_end end end;
+    v_occurrence_due:=case when v_base_due is null then null else case v_frequency
+      when 'DAILY' then v_base_due+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_due+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_due+(v_occurrence||' months')::interval
+      else v_base_due end end;
+    v_anchor_date:=coalesce(v_occurrence_start::date,v_occurrence_due::date);
+    exit when v_frequency<>'NONE' and v_anchor_date>v_until;
+
+    if v_occurrence_start is not null and v_occurrence_end is not null then
+      for v_profile_id in select (value#>>'{}')::uuid from jsonb_array_elements(p_payload->'profileIds') loop
+        if exists(
+          select 1 from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id
+          where m.profile_id=v_profile_id and a.status='PUBLISHED'
+            and a.planned_start is not null and a.planned_end is not null
+            and tstzrange(a.planned_start,a.planned_end,'[)') && tstzrange(v_occurrence_start,v_occurrence_end,'[)')
+        ) then
+          v_conflicts:=v_conflicts||jsonb_build_array(jsonb_build_object(
+            'profileId',v_profile_id,'plannedStart',v_occurrence_start,'plannedEnd',v_occurrence_end,'conflictType','OVERLAP','message','Ya existe una actividad en ese horario'
+          ));
+        end if;
+        if erp_supply.business_seconds_between(v_org,v_occurrence_start,v_occurrence_end)
+             < greatest(0,extract(epoch from(v_occurrence_end-v_occurrence_start))::bigint)-60 then
+          v_conflicts:=v_conflicts||jsonb_build_array(jsonb_build_object(
+            'profileId',v_profile_id,'plannedStart',v_occurrence_start,'plannedEnd',v_occurrence_end,
+            'conflictType','OUTSIDE_WORKING_TIME','message','El bloque invade tiempo no laborable, almuerzo, fin de semana o festivo'
+          ));
+        end if;
+      end loop;
+    end if;
+
+    exit when v_frequency='NONE';
+    v_occurrence:=v_occurrence+1;
+  end loop;
+
+  if jsonb_array_length(v_conflicts)>0 and not v_force then
+    return jsonb_build_object('success',false,'requiresConfirmation',true,'conflicts',v_conflicts,'createdIds','[]'::jsonb);
+  end if;
+
+  v_occurrence:=0;
+  loop
+    exit when v_occurrence>=120;
+    v_occurrence_start:=case v_frequency
+      when 'DAILY' then v_base_start+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_start+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_start+(v_occurrence||' months')::interval
+      else v_base_start end;
+    v_occurrence_end:=case when v_base_end is null then null else case v_frequency
+      when 'DAILY' then v_base_end+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_end+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_end+(v_occurrence||' months')::interval
+      else v_base_end end end;
+    v_occurrence_due:=case when v_base_due is null then null else case v_frequency
+      when 'DAILY' then v_base_due+(v_occurrence||' days')::interval
+      when 'WEEKLY' then v_base_due+(v_occurrence*7||' days')::interval
+      when 'MONTHLY' then v_base_due+(v_occurrence||' months')::interval
+      else v_base_due end end;
+    v_anchor_date:=coalesce(v_occurrence_start::date,v_occurrence_due::date);
+    exit when v_frequency<>'NONE' and v_anchor_date>v_until;
+
+    insert into erp_supply.work_assignments(
+      organization_id,catalog_id,series_id,title,description,assignment_kind,status,priority,
+      planned_start,planned_end,due_at,estimated_minutes,evidence_policy,acceptance_required,assigned_by,
+      related_entity_type,related_entity_id,recurrence,metadata
+    ) values(
+      v_org,v_catalog_id,v_series,v_title,v_description,v_kind,'PUBLISHED',v_priority,
+      v_occurrence_start,v_occurrence_end,v_occurrence_due,v_estimated,v_evidence,v_acceptance,v_actor,
+      nullif(trim(p_payload->>'relatedEntityType'),''),nullif(trim(p_payload->>'relatedEntityId'),''),
+      coalesce(p_payload->'recurrence','{}'::jsonb),
+      coalesce(p_payload->'metadata','{}'::jsonb)||jsonb_build_object('createdVersion','10.23.0','forcedConflict',v_force)
+    ) returning id into v_assignment_id;
+
+    insert into erp_supply.work_assignment_members(assignment_id,profile_id,status)
+    select v_assignment_id,(value#>>'{}')::uuid,'PLANNED'
+    from jsonb_array_elements(p_payload->'profileIds');
+
+    insert into erp_supply.work_activity_events(organization_id,assignment_id,actor_profile_id,event_type,payload)
+    values(v_org,v_assignment_id,v_actor,'ASSIGNMENT_PUBLISHED',jsonb_build_object('kind',v_kind,'profileIds',p_payload->'profileIds','plannedStart',v_occurrence_start,'dueAt',v_occurrence_due,'seriesId',v_series));
+
+    v_created:=v_created||jsonb_build_array(v_assignment_id);
+    exit when v_frequency='NONE';
+    v_occurrence:=v_occurrence+1;
+  end loop;
+
+  return jsonb_build_object('success',true,'requiresConfirmation',false,'conflicts',v_conflicts,'createdIds',v_created,'seriesId',v_series,'version','10.23.0');
+end;
+$$;
+
+revoke all on function public.erp_x_work_save_assignment(jsonb) from public,anon;
+grant execute on function public.erp_x_work_save_assignment(jsonb) to authenticated;
+
+create or replace function public.erp_x_work_cancel_assignment(p_assignment_id uuid,p_note text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_assignment erp_supply.work_assignments%rowtype;
+begin
+  select * into v_assignment from erp_supply.work_assignments where id=p_assignment_id and organization_id=v_org for update;
+  if not found then raise exception 'Asignación no disponible'; end if;
+  if not exists(select 1 from erp_supply.work_assignment_members m where m.assignment_id=v_assignment.id and erp_supply.can_manage_work_profile(m.profile_id,v_assignment.assignment_kind)) then raise exception 'No autorizado' using errcode='42501'; end if;
+  if exists(select 1 from erp_supply.work_executions e where e.assignment_id=v_assignment.id and e.status in('IN_PROGRESS','PAUSED')) then raise exception 'No puedes cancelar una actividad que alguien está ejecutando en este momento'; end if;
+
+  update erp_supply.work_assignments set status='CANCELLED',metadata=metadata||jsonb_build_object('cancelledBy',v_actor,'cancelledAt',now(),'cancelNote',nullif(trim(p_note),''),'version','10.23.0') where id=v_assignment.id;
+  update erp_supply.work_assignment_members set status='CANCELLED',cancelled_at=now() where assignment_id=v_assignment.id and status not in('COMPLETED','CANCELLED');
+  update erp_supply.work_executions set status='CANCELLED',metadata=metadata||jsonb_build_object('cancelledWithAssignment',true,'version','10.23.0') where assignment_id=v_assignment.id and status in('WAITING_EVIDENCE','SUBMITTED','RETURNED');
+  insert into erp_supply.work_activity_events(organization_id,assignment_id,actor_profile_id,event_type,payload)
+  values(v_org,v_assignment.id,v_actor,'ASSIGNMENT_CANCELLED',jsonb_build_object('note',p_note));
+  return jsonb_build_object('success',true,'assignmentId',v_assignment.id,'status','CANCELLED');
+end;
+$$;
+
+revoke all on function public.erp_x_work_cancel_assignment(uuid,text) from public,anon;
+grant execute on function public.erp_x_work_cancel_assignment(uuid,text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 5. ACEPTACIÓN DE ENTREGABLES
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_review_delivery(
+  p_execution_id uuid,
+  p_decision text,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_exec erp_supply.work_executions%rowtype;
+  v_assignment erp_supply.work_assignments%rowtype;
+  v_decision text:=upper(trim(coalesce(p_decision,'')));
+begin
+  select * into v_exec from erp_supply.work_executions where id=p_execution_id and organization_id=erp_supply.current_org_id() for update;
+  if not found or v_exec.assignment_id is null then raise exception 'Entregable no disponible'; end if;
+  select * into v_assignment from erp_supply.work_assignments where id=v_exec.assignment_id;
+  if v_assignment.assignment_kind<>'DELIVERABLE' then raise exception 'Esta ejecución no es un entregable'; end if;
+  if not erp_supply.can_manage_work_profile(v_exec.profile_id,'DELIVERABLE') then raise exception 'No autorizado para revisar este entregable' using errcode='42501'; end if;
+  if v_exec.status<>'SUBMITTED' then raise exception 'El entregable no está pendiente de revisión'; end if;
+  if v_decision not in('ACCEPTED','RETURNED') then raise exception 'Decisión inválida'; end if;
+  if v_decision='RETURNED' and nullif(trim(p_note),'') is null then raise exception 'Indica qué debe corregirse'; end if;
+
+  insert into erp_supply.work_delivery_reviews(organization_id,execution_id,assignment_id,decision,note,reviewed_by)
+  values(v_exec.organization_id,v_exec.id,v_assignment.id,v_decision,nullif(trim(p_note),''),v_actor);
+
+  if v_decision='ACCEPTED' then
+    update erp_supply.work_executions set status='COMPLETED',metadata=metadata||jsonb_build_object('acceptedBy',v_actor,'acceptedAt',now(),'version','10.23.0') where id=v_exec.id;
+    update erp_supply.work_assignment_members set status='COMPLETED',completed_at=coalesce(completed_at,now()) where id=v_exec.assignment_member_id;
+  else
+    update erp_supply.work_executions set status='RETURNED',metadata=metadata||jsonb_build_object('returnedBy',v_actor,'returnedAt',now(),'returnNote',p_note,'version','10.23.0') where id=v_exec.id;
+    update erp_supply.work_assignment_members set status='RETURNED' where id=v_exec.assignment_member_id;
+  end if;
+
+  insert into erp_supply.work_activity_events(organization_id,execution_id,assignment_id,profile_id,actor_profile_id,event_type,payload)
+  values(v_exec.organization_id,v_exec.id,v_assignment.id,v_exec.profile_id,v_actor,'DELIVERY_REVIEWED',jsonb_build_object('decision',v_decision,'note',p_note));
+  return jsonb_build_object('success',true,'executionId',v_exec.id,'decision',v_decision,'status',case when v_decision='ACCEPTED' then 'COMPLETED' else 'RETURNED' end);
+end;
+$$;
+
+revoke all on function public.erp_x_work_review_delivery(uuid,text,text) from public,anon;
+grant execute on function public.erp_x_work_review_delivery(uuid,text,text) to authenticated;
+
+-- Reconciliación de permisos para los RPC nuevos.
+do $$
+declare r record;begin
+  for r in select p.oid::regprocedure sig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'erp_x_work_%'
+  loop
+    execute format('revoke all on function %s from public,anon',r.sig);
+    execute format('grant execute on function %s to authenticated',r.sig);
+  end loop;
+end $$;
+
+notify pgrst,'reload schema';
+commit;
+
+-- ERP EI V10.23.0
+-- Libro mayor de tiempo, capacidad, productividad responsable y diagnósticos.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. TIEMPO CLASIFICADO SIN DOBLE CONTEO
+-- Une intervalos de procesos ERP y actividades antes de calcular utilización.
+-- ---------------------------------------------------------------------------
+create or replace function erp_supply.work_classified_business_seconds(
+  p_profile_id uuid,
+  p_start timestamptz,
+  p_end timestamptz
+)
+returns bigint
+language sql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+  with profile_ctx as(
+    select p.organization_id,o.timezone
+    from erp_supply.profiles p join erp_supply.organizations o on o.id=p.organization_id
+    where p.id=p_profile_id
+  ),
+  calendar_ctx as(
+    select c.id,c.timezone
+    from erp_supply.work_calendars c join profile_ctx pc on pc.organization_id=c.organization_id
+    where c.active order by c.created_at limit 1
+  ),
+  entries as(
+    select s.started_at start_at,least(coalesce(s.ended_at,now()),p_end) end_at
+    from erp_supply.task_sessions s
+    join erp_supply.order_tasks t on t.id=s.task_id
+    join erp_supply.orders o on o.id=t.order_id
+    join profile_ctx pc on pc.organization_id=o.organization_id
+    where s.profile_id=p_profile_id and s.started_at<p_end and coalesce(s.ended_at,now())>p_start
+    union all
+    select e.started_at,least(coalesce(e.ended_at,now()),p_end)
+    from erp_supply.work_executions e join profile_ctx pc on pc.organization_id=e.organization_id
+    where e.profile_id=p_profile_id and e.status<>'CANCELLED' and e.started_at<p_end and coalesce(e.ended_at,now())>p_start
+  ),
+  business_segments as(
+    select
+      ((d::date+s.start_time) at time zone c.timezone) seg_start,
+      ((d::date+s.end_time) at time zone c.timezone) seg_end
+    from calendar_ctx c
+    join erp_supply.work_calendar_segments s on s.calendar_id=c.id
+    cross join lateral generate_series(p_start::date,p_end::date,interval '1 day') d
+    join profile_ctx pc on true
+    where extract(isodow from d)::int=s.iso_weekday
+      and not exists(select 1 from erp_supply.holidays h where h.organization_id=pc.organization_id and h.holiday_date=d::date)
+  ),
+  intersections as(
+    select tstzrange(greatest(e.start_at,b.seg_start,p_start),least(e.end_at,b.seg_end,p_end),'[)') r
+    from entries e cross join business_segments b
+    where e.start_at<b.seg_end and e.end_at>b.seg_start and greatest(e.start_at,b.seg_start,p_start)<least(e.end_at,b.seg_end,p_end)
+  ),
+  merged as(
+    select unnest(range_agg(r)) r from intersections
+  )
+  select coalesce(sum(extract(epoch from(upper(r)-lower(r)))::bigint),0) from merged
+$$;
+
+revoke all on function erp_supply.work_classified_business_seconds(uuid,timestamptz,timestamptz) from public;
+
+-- ---------------------------------------------------------------------------
+-- 2. LIBRO MAYOR DE TIEMPO
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_ledger(
+  p_from date,
+  p_to date,
+  p_profile_id uuid default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_profile uuid:=coalesce(p_profile_id,v_actor);
+  v_tz text:=coalesce((select timezone from erp_supply.organizations where id=v_org),'America/Bogota');
+  v_from date:=coalesce(p_from,current_date);
+  v_to date:=coalesce(p_to,v_from);
+  v_start timestamptz:=(v_from::timestamp at time zone v_tz);
+  v_end timestamptz:=((v_to+1)::timestamp at time zone v_tz);
+begin
+  if v_to<v_from or v_to-v_from>92 then raise exception 'Rango de tiempo inválido'; end if;
+  if v_profile<>v_actor and not (
+    erp_supply.has_role('super_admin') or erp_supply.has_role('auditoria')
+    or erp_supply.can_manage_work_profile(v_profile,'ACTIVITY')
+    or erp_supply.can_manage_work_profile(v_profile,'DELIVERABLE')
+  ) then raise exception 'No autorizado para consultar esta jornada' using errcode='42501'; end if;
+  if not exists(select 1 from erp_supply.profiles where id=v_profile and organization_id=v_org) then raise exception 'Perfil no disponible'; end if;
+
+  return jsonb_build_object(
+    'profileId',v_profile,'from',v_from,'to',v_to,
+    'entries',(
+      with entries as(
+        select 'ERP:'||s.id::text entry_id,'ERP_PROCESS' source_type,
+               o.order_number||' · '||ws.name title,s.started_at start_at,coalesce(s.ended_at,now()) end_at,
+               case when s.ended_at is null then erp_supply.business_seconds_between(v_org,s.started_at,now()) else s.business_seconds end business_seconds,
+               greatest(0,extract(epoch from(coalesce(s.ended_at,now())-s.started_at))::bigint) active_seconds,
+               t.status status,o.id::text related_id,o.order_number related_label
+        from erp_supply.task_sessions s
+        join erp_supply.order_tasks t on t.id=s.task_id
+        join erp_supply.orders o on o.id=t.order_id
+        join erp_supply.workflow_steps ws on ws.code=t.step_code
+        where s.profile_id=v_profile and o.organization_id=v_org and s.started_at<v_end and coalesce(s.ended_at,now())>v_start
+        union all
+        select 'ACT:'||e.id::text,'ACTIVITY',e.title_snapshot,e.started_at,coalesce(e.ended_at,now()),
+               case when e.ended_at is null then coalesce((erp_supply.work_execution_metrics(e.id)->>'businessSeconds')::bigint,0) else e.business_seconds end,
+               case when e.ended_at is null then coalesce((erp_supply.work_execution_metrics(e.id)->>'activeSeconds')::bigint,0) else e.active_seconds end,
+               e.status,e.assignment_id::text,c.name
+        from erp_supply.work_executions e join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+        where e.profile_id=v_profile and e.organization_id=v_org and e.status<>'CANCELLED' and e.started_at<v_end and coalesce(e.ended_at,now())>v_start
+      )
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'id',e.entry_id,'sourceType',e.source_type,'title',e.title,'startedAt',e.start_at,'endedAt',e.end_at,
+        'businessSeconds',e.business_seconds,'activeSeconds',e.active_seconds,'status',e.status,
+        'relatedId',e.related_id,'relatedLabel',e.related_label,
+        'overlap',exists(select 1 from entries o where o.entry_id<>e.entry_id and tstzrange(o.start_at,o.end_at,'[)') && tstzrange(e.start_at,e.end_at,'[)'))
+      ) order by e.start_at),'[]'::jsonb) from entries e
+    ),
+    'scheduledBusinessSeconds',erp_supply.business_seconds_between(v_org,v_start,v_end),
+    'classifiedBusinessSeconds',erp_supply.work_classified_business_seconds(v_profile,v_start,v_end),
+    'unclassifiedBusinessSeconds',greatest(0,erp_supply.business_seconds_between(v_org,v_start,v_end)-erp_supply.work_classified_business_seconds(v_profile,v_start,v_end)),
+    'serverTime',now(),'version','10.23.0'
+  );
+end;
+$$;
+
+revoke all on function public.erp_x_work_ledger(date,date,uuid) from public,anon;
+grant execute on function public.erp_x_work_ledger(date,date,uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 3. ANALÍTICA DE CAPACIDAD Y CUMPLIMIENTO
+-- No construye rankings personales: mide carga, cumplimiento, desvíos y causas.
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_analytics(
+  p_from date,
+  p_to date,
+  p_profile_id uuid default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+declare
+  v_actor uuid:=erp_supply.require_profile();
+  v_org uuid:=erp_supply.current_org_id();
+  v_tz text:=coalesce((select timezone from erp_supply.organizations where id=v_org),'America/Bogota');
+  v_from date:=coalesce(p_from,current_date-29);
+  v_to date:=coalesce(p_to,current_date);
+  v_start timestamptz:=(v_from::timestamp at time zone v_tz);
+  v_end timestamptz:=((v_to+1)::timestamp at time zone v_tz);
+  v_manager boolean:=erp_supply.has_role('super_admin') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('gerencia') or erp_supply.has_role('auditoria');
+  v_profiles uuid[];
+  v_scheduled bigint:=0;
+  v_classified bigint:=0;
+  v_p uuid;
+begin
+  if v_to<v_from or v_to-v_from>366 then raise exception 'Rango analítico inválido'; end if;
+  if p_profile_id is not null then
+    if p_profile_id<>v_actor and not(
+      erp_supply.has_role('super_admin') or erp_supply.has_role('auditoria')
+      or erp_supply.can_manage_work_profile(p_profile_id,'ACTIVITY')
+      or erp_supply.can_manage_work_profile(p_profile_id,'DELIVERABLE')
+    ) then raise exception 'No autorizado' using errcode='42501'; end if;
+    v_profiles:=array[p_profile_id];
+  elsif v_manager then
+    select coalesce(array_agg(p.id),'{}'::uuid[]) into v_profiles
+    from erp_supply.profiles p where p.organization_id=v_org and p.active and(
+      erp_supply.has_role('super_admin') or erp_supply.has_role('auditoria')
+      or erp_supply.can_manage_work_profile(p.id,'ACTIVITY') or erp_supply.can_manage_work_profile(p.id,'DELIVERABLE')
+    );
+  else
+    v_profiles:=array[v_actor];
+  end if;
+  if coalesce(array_length(v_profiles,1),0)=0 then v_profiles:=array[v_actor]; end if;
+
+  foreach v_p in array v_profiles loop
+    v_scheduled:=v_scheduled+erp_supply.business_seconds_between(v_org,v_start,v_end);
+    v_classified:=v_classified+erp_supply.work_classified_business_seconds(v_p,v_start,v_end);
+  end loop;
+
+  return jsonb_build_object(
+    'from',v_from,'to',v_to,'profileIds',to_jsonb(v_profiles),
+    'summary',jsonb_build_object(
+      'people',coalesce(array_length(v_profiles,1),0),
+      'scheduledBusinessSeconds',v_scheduled,
+      'classifiedBusinessSeconds',v_classified,
+      'unclassifiedBusinessSeconds',greatest(0,v_scheduled-v_classified),
+      'utilizationPct',case when v_scheduled=0 then 0 else round((100.0*v_classified/v_scheduled)::numeric,1) end,
+      'activityActiveSeconds',(select coalesce(sum(e.active_seconds),0) from erp_supply.work_executions e where e.organization_id=v_org and e.profile_id=any(v_profiles) and e.started_at<v_end and coalesce(e.ended_at,now())>v_start and e.status<>'CANCELLED'),
+      'plannedMinutes',(select coalesce(sum(a.estimated_minutes),0) from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id where m.profile_id=any(v_profiles) and a.organization_id=v_org and a.status<>'CANCELLED' and coalesce(a.planned_start,a.due_at)>=v_start and coalesce(a.planned_start,a.due_at)<v_end),
+      'completedAssignments',(select count(*) from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id where m.profile_id=any(v_profiles) and a.organization_id=v_org and m.completed_at>=v_start and m.completed_at<v_end),
+      'onTimePct',(
+        select case when count(*)=0 then 0 else round(100.0*count(*) filter(where m.completed_at<=coalesce(a.due_at,a.planned_end,m.completed_at))/count(*),1) end
+        from erp_supply.work_assignment_members m join erp_supply.work_assignments a on a.id=m.assignment_id
+        where m.profile_id=any(v_profiles) and a.organization_id=v_org and m.completed_at>=v_start and m.completed_at<v_end
+      ),
+      'startAdherencePct',(
+        select case when count(*)=0 then 0 else round(100.0*count(*) filter(where coalesce(e.start_delay_seconds,0)<=300)/count(*),1) end
+        from erp_supply.work_executions e where e.profile_id=any(v_profiles) and e.assignment_id is not null and e.started_at>=v_start and e.started_at<v_end
+      ),
+      'pendingReviews',(select count(*) from erp_supply.work_executions e join erp_supply.work_assignments a on a.id=e.assignment_id where e.profile_id=any(v_profiles) and e.status='SUBMITTED' and a.assignment_kind='DELIVERABLE')
+    ),
+    'activityGroups',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."activeSeconds" desc),'[]'::jsonb) from(
+        select c.activity_group "group",sum(e.active_seconds)::bigint "activeSeconds",count(*)::integer executions
+        from erp_supply.work_executions e join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+        where e.profile_id=any(v_profiles) and e.started_at>=v_start and e.started_at<v_end and e.status<>'CANCELLED'
+        group by c.activity_group
+      ) x
+    ),
+    'topActivities',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."activeSeconds" desc),'[]'::jsonb) from(
+        select c.id,c.name,c.activity_group "group",sum(e.active_seconds)::bigint "activeSeconds",count(*)::integer executions,
+               round((percentile_cont(.5) within group(order by e.active_seconds)/60.0)::numeric,1) "medianMinutes",
+               round((percentile_cont(.8) within group(order by e.active_seconds)/60.0)::numeric,1) "p80Minutes"
+        from erp_supply.work_executions e join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+        where e.profile_id=any(v_profiles) and e.started_at>=v_start and e.started_at<v_end and e.status<>'CANCELLED' and e.active_seconds>0
+        group by c.id,c.name,c.activity_group order by sum(e.active_seconds) desc limit 12
+      ) x
+    ),
+    'deviationCauses',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x.executions desc),'[]'::jsonb) from(
+        select e.deviation_reason reason,count(*)::integer executions,sum(e.active_seconds)::bigint "activeSeconds"
+        from erp_supply.work_executions e
+        where e.profile_id=any(v_profiles) and e.started_at>=v_start and e.started_at<v_end and nullif(trim(e.deviation_reason),'') is not null
+        group by e.deviation_reason
+      ) x
+    ),
+    'teamNow',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."profileName"),'[]'::jsonb) from(
+        select p.id "profileId",p.display_name "profileName",e.id "executionId",e.title_snapshot title,e.status,e.started_at "startedAt",c.activity_group "group"
+        from erp_supply.work_executions e join erp_supply.profiles p on p.id=e.profile_id join erp_supply.work_activity_catalog c on c.id=e.catalog_id
+        where e.profile_id=any(v_profiles) and e.status in('IN_PROGRESS','PAUSED')
+      ) x
+    ),
+    'pendingReviews',(
+      select coalesce(jsonb_agg(to_jsonb(x) order by x."dueAt" nulls last,x."submittedAt"),'[]'::jsonb) from(
+        select e.id "executionId",a.id "assignmentId",a.title,p.id "profileId",p.display_name "profileName",a.due_at "dueAt",m.submitted_at "submittedAt",e.result_note "resultNote",
+               (select coalesce(jsonb_agg(jsonb_build_object('type',w.evidence_type,'fileName',w.file_name,'webViewLink',w.web_view_link,'value',w.external_value) order by w.created_at),'[]'::jsonb) from erp_supply.work_evidence w where w.execution_id=e.id) evidence
+        from erp_supply.work_executions e join erp_supply.work_assignments a on a.id=e.assignment_id
+        join erp_supply.work_assignment_members m on m.id=e.assignment_member_id join erp_supply.profiles p on p.id=e.profile_id
+        where e.profile_id=any(v_profiles) and e.status='SUBMITTED' and a.assignment_kind='DELIVERABLE'
+          and (erp_supply.has_role('super_admin') or erp_supply.has_role('auditoria') or erp_supply.can_manage_work_profile(e.profile_id,'DELIVERABLE'))
+      ) x
+    ),
+    'version','10.23.0','serverTime',now()
+  );
+end;
+$$;
+
+revoke all on function public.erp_x_work_analytics(date,date,uuid) from public,anon;
+grant execute on function public.erp_x_work_analytics(date,date,uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 4. DIAGNÓSTICO ESPECÍFICO DEL SUBSISTEMA
+-- ---------------------------------------------------------------------------
+create or replace function public.erp_x_work_health()
+returns table(check_name text,ok boolean,detail text)
+language plpgsql
+stable
+security definer
+set search_path=erp_supply,public,auth,pg_catalog
+as $$
+begin
+  perform erp_supply.require_profile();
+  if not (erp_supply.has_role('super_admin') or erp_supply.has_role('gerencia') or erp_supply.has_role('jefe_logistica') or erp_supply.has_role('auditoria')) then
+    raise exception 'No autorizado para diagnóstico de actividades' using errcode='42501';
+  end if;
+
+  return query
+  select 'Módulo transversal para todos los roles',
+         not exists(
+           select 1 from erp_supply.roles r where r.active and not exists(
+             select 1 from erp_supply.role_module_permissions p where p.role_code=r.code and p.module_code='workforce' and p.can_read and p.can_create
+           )
+         ),
+         'Todos los roles activos deben poder consultar y registrar Mi Jornada';
+
+  return query
+  select 'Una actividad cronometrada por persona',
+         not exists(select 1 from erp_supply.work_executions e where e.status in('IN_PROGRESS','PAUSED') group by e.profile_id having count(*)>1),
+         'No puede existir más de una actividad varias cronometrada simultáneamente por perfil';
+
+  return query
+  select 'Pausas consistentes',
+         not exists(
+           select 1 from erp_supply.work_execution_pauses p join erp_supply.work_executions e on e.id=p.execution_id
+           where p.ended_at is null and e.status<>'PAUSED'
+         ),
+         'Toda pausa abierta debe corresponder a una ejecución PAUSED';
+
+  return query
+  select 'Entregables aceptados coherentes',
+         not exists(
+           select 1 from erp_supply.work_executions e join erp_supply.work_assignments a on a.id=e.assignment_id
+           where a.assignment_kind='DELIVERABLE' and e.status='COMPLETED' and a.acceptance_required
+             and not exists(select 1 from erp_supply.work_delivery_reviews r where r.execution_id=e.id and r.decision='ACCEPTED')
+         ),
+         'Un entregable con aceptación obligatoria solo se completa después de ser aceptado';
+
+  return query
+  select 'Asignaciones canceladas sin ejecución activa',
+         not exists(
+           select 1 from erp_supply.work_assignments a join erp_supply.work_executions e on e.assignment_id=a.id
+           where a.status='CANCELLED' and e.status in('IN_PROGRESS','PAUSED')
+         ),
+         'Una asignación cancelada no puede seguir corriendo';
+end;
+$$;
+
+revoke all on function public.erp_x_work_health() from public,anon;
+grant execute on function public.erp_x_work_health() to authenticated;
+
+notify pgrst,'reload schema';
+commit;
+

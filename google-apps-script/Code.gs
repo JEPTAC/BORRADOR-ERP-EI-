@@ -108,8 +108,8 @@ function validateRequest_(request) {
   if (!request.accessToken) {
     throw new Error('La sesión del ERP no fue recibida.');
   }
-  if (!request.orderId) {
-    throw new Error('No se recibió el pedido.');
+  if (!request.orderId && !request.contextId) {
+    throw new Error('No se recibió el contexto del archivo.');
   }
   if (!request.fileName || !request.dataBase64) {
     throw new Error('No se recibió el archivo.');
@@ -200,15 +200,16 @@ function saveFile_(request, session) {
       root,
       String(new Date().getFullYear())
     );
-    const orderFolder = findOrCreateFolder_(
+    const contextType = String(request.contextType || 'ORDER').toUpperCase();
+    const contextId = request.contextId || request.orderId;
+    const contextLabel = request.contextLabel || request.orderNumber || contextId;
+    const contextPrefix = contextType === 'ACTIVITY' ? 'ACTIVIDAD_' : 'PEDIDO_';
+    const contextFolder = findOrCreateFolder_(
       yearFolder,
-      'PEDIDO_' + safeName_(
-        request.orderNumber || request.orderId,
-        'SIN_NUMERO'
-      )
+      contextPrefix + safeName_(contextLabel, 'SIN_REFERENCIA')
     );
     categoryFolder = findOrCreateFolder_(
-      orderFolder,
+      contextFolder,
       safeName_(request.category || 'EVIDENCE', 'EVIDENCE')
     );
   } finally {
@@ -216,9 +217,13 @@ function saveFile_(request, session) {
   }
 
   const file = categoryFolder.createFile(blob);
+  const contextType = String(request.contextType || 'ORDER').toUpperCase();
+  const contextId = request.contextId || request.orderId;
+  const contextLabel = request.contextLabel || request.orderNumber || contextId;
   file.setDescription([
     'ERP EI',
-    'Pedido: ' + String(request.orderNumber || request.orderId),
+    (contextType === 'ACTIVITY' ? 'Actividad: ' : 'Pedido: ') + String(contextLabel),
+    'Contexto: ' + String(contextId),
     'Categoría: ' + String(request.category || 'EVIDENCE'),
     'Usuario ERP: ' + String(
       session.profile.name ||
