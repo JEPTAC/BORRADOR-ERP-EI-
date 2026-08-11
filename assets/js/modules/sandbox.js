@@ -204,23 +204,23 @@ function orderRow(o){
         <strong>${fmt.escape(o.orderNumber)}</strong>
         <small>${fmt.escape(o.clientName)}</small>
       </div>
-      <div class="lab-col">
+      <div class="lab-col lab-col-stage">
         <small>Etapa</small>
         <strong>${fmt.escape(fmt.step(o.currentStep))}</strong>
       </div>
-      <div class="lab-col">
+      <div class="lab-col lab-col-state">
         <small>Estado</small>
         <div>${statusBadge(o.status)}</div>
       </div>
-      <div class="lab-col">
+      <div class="lab-col lab-col-type">
         <small>Tipo y prioridad</small>
         <div class="lab-stacked-meta"><b>${fmt.escape(o.orderType||"TEST")}</b>${priorityBadge(o.priority)}</div>
       </div>
-      <div class="lab-col">
+      <div class="lab-col lab-col-scenario">
         <small>Escenario</small>
         <div class="lab-scenario-meta"><b>${fmt.escape(o.scenario||"Manual")}</b>${parallel?'<span class="lab-inline-badge">Paralelo</span>':''}</div>
       </div>
-      <div class="lab-col lab-col-actions">
+      <div class="lab-col lab-col-actions" aria-label="Acciones del pedido">
         <button class="btn btn-primary btn-compact" data-sb-open="${o.id}">${action}</button>
         ${parallel
           ? `<button class="btn btn-ghost btn-compact" data-sb-picking="${o.id}">Alistamiento</button><button class="btn btn-warning btn-compact" data-sb-cutting="${o.id}">Corte</button>`
