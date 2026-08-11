@@ -1422,3 +1422,23 @@ th{color:#fff!important}
   .lab-order-row>.lab-col,.lab-col-main,.lab-col-actions{grid-area:auto}
   .lab-col-actions{justify-content:flex-start}
 }
+
+/* =====================================================================
+   V10.20 · CORTE MEDIDO POR REFERENCIA + EVIDENCIA OBLIGATORIA
+   ===================================================================== */
+.cut-start-modal,.cut-paused-modal,.cut-evidence-modal{width:min(980px,96vw)}
+.cut-start-intro,.cut-evidence-summary,.cut-paused-card{display:grid;gap:9px;padding:22px;border:1px solid #dce6f1;border-radius:18px;background:linear-gradient(180deg,#fbfdff,#f7faff)}
+.cut-start-intro>span,.cut-evidence-summary>span,.cut-paused-card>span{font-size:10px;font-weight:900;letter-spacing:.11em;text-transform:uppercase;color:#1a5cc6}
+.cut-start-intro h4,.cut-evidence-summary h4,.cut-paused-card h4{margin:0;color:#132f56;font-size:25px;letter-spacing:-.03em}
+.cut-start-intro p,.cut-evidence-summary p,.cut-paused-card p{margin:0;color:#61758d;font-size:14px;line-height:1.6}
+.cut-start-button{width:100%;margin-top:18px;min-height:60px!important;border-radius:15px!important;font-size:16px!important}
+.cut-start-note,.cut-evidence-help{display:block;margin-top:9px;text-align:center;color:#74849a;font-size:11px}
+.cut-session-bar{position:sticky;top:-20px;z-index:10;display:grid;grid-template-columns:1.1fr 1fr .8fr auto;gap:10px;align-items:center;margin:-4px 0 16px;padding:12px;border:1px solid #d8e5f4;border-radius:15px;background:rgba(255,255,255,.96);box-shadow:0 9px 24px rgba(8,32,76,.08);backdrop-filter:blur(10px)}
+.cut-session-bar>div{display:grid;gap:2px;padding:4px 8px}.cut-session-bar small{font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#7a899c}.cut-session-bar strong{font-size:14px;color:#183957}.cut-session-bar [data-cut-timer]{color:#0c55bd;font-size:18px}
+.cut-paused-card{max-width:720px;margin:30px auto;text-align:center;justify-items:center;padding:34px}.cut-paused-card>div{display:grid;gap:4px;padding:12px 18px;border-radius:12px;background:#fff;border:1px solid #e1e8f0}.cut-paused-card>div small{color:#7a899c}.cut-paused-card>div strong{color:#193957}
+.cut-pause-help{padding:12px 14px;border-radius:12px;background:#f3f7fd;color:#536b88;font-size:12px;line-height:1.5}
+.cut-evidence-summary{max-width:900px;margin:0 auto;padding:28px}.cut-evidence-summary>span,.cut-evidence-summary>h4,.cut-evidence-summary>p{text-align:center}.cut-evidence-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}.cut-evidence-metrics>div{display:grid;gap:4px;padding:14px;border-radius:13px;background:#fff;border:1px solid #dfe8f2}.cut-evidence-metrics small{font-size:9px;font-weight:900;text-transform:uppercase;color:#7c8ca0}.cut-evidence-metrics strong{font-size:17px;color:#173b67}.cut-evidence-ready{display:grid;gap:4px;margin-top:10px;padding:16px;border-radius:14px;background:#edf9f3;border:1px solid #bfe4d0;color:#17663d;text-align:center}.cut-evidence-ready strong{font-size:16px}.cut-evidence-ready span{font-size:12px}.cut-evidence-summary .btn-hero{width:100%;min-height:60px!important;margin-top:8px;border-radius:15px!important;font-size:16px!important}
+.cut-reference-progress{grid-template-columns:repeat(4,minmax(0,1fr))}
+.cut-reference-order>.badge{align-self:center;justify-self:end}
+.cutting-group-row .badge-warning{color:#795600;background:#fff3cc;border:1px solid #edd27c}
+@media(max-width:760px){.cut-session-bar{position:static;grid-template-columns:1fr 1fr}.cut-session-bar .btn{grid-column:1/-1}.cut-evidence-metrics{grid-template-columns:1fr 1fr}.cut-reference-progress{grid-template-columns:repeat(2,minmax(0,1fr))}}
