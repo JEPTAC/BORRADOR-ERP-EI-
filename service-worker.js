@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-20-corte-tiempo-evidencia-20260811";
+const CACHE="erp-electroingenieria-v10-21-corte-guiado-20260811";
 const ASSETS=[
   "./",
   "./index.html",
