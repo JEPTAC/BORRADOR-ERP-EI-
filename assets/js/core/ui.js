@@ -26,7 +26,7 @@ export function toast(message,type="success",duration=4200){
 }
 
 function visibleFocusable(container){
-  return [...container.querySelectorAll(FOCUSABLE)].filter(el=>el.offsetParent!==null&&!el.closest('[aria-hidden="true"]'));
+  return [...container.querySelectorAll(FOCUSABLE)].filter(el=>el.offsetParent!==null&&!el.closest('[aria-hidden="true"]')&&!el.closest('[inert]'));
 }
 
 function activeDialog(root){
@@ -129,8 +129,14 @@ export function taskPanel(host,{title,body,confirmLabel="Confirmar",cancelLabel=
   wrapper.innerHTML=`<div class="modal-task-panel-scrim" aria-hidden="true"></div><section class="modal-task-panel ${fmt.escape(tone)}" role="region" aria-labelledby="${titleId}" tabindex="-1"><header><div><span>${fmt.escape(kicker)}</span><h4 id="${titleId}">${fmt.escape(title||"Acción")}</h4></div><button type="button" class="icon-btn" data-task-panel-close aria-label="Cerrar acción">×</button></header><div class="modal-task-panel-body">${body||""}</div><footer><button type="button" class="btn btn-ghost" data-task-panel-close>${fmt.escape(cancelLabel)}</button>${confirmLabel?`<button type="button" class="btn btn-primary" data-task-panel-confirm>${fmt.escape(confirmLabel)}</button>`:""}</footer></section>`;
   parent.append(wrapper);
   parent.classList.add("has-task-panel");
+  const contextState=[...parent.children].filter(node=>node!==wrapper).map(node=>({node,inert:node.hasAttribute("inert"),ariaHidden:node.getAttribute("aria-hidden")}));
+  contextState.forEach(({node})=>{node.setAttribute("inert","");node.setAttribute("aria-hidden","true")});
   const panel=wrapper.querySelector('.modal-task-panel');
   const close=()=>{
+    contextState.forEach(({node,inert,ariaHidden})=>{
+      if(!inert)node.removeAttribute("inert");
+      if(ariaHidden===null)node.removeAttribute("aria-hidden");else node.setAttribute("aria-hidden",ariaHidden);
+    });
     wrapper.remove();
     parent.classList.remove("has-task-panel");
     onClose?.();

@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-22-1-responsive-estructural-20260811";
+const CACHE="erp-electroingenieria-v10-22-2-operatividad-movil-20260811";
 const ASSETS=[
   "./",
   "./index.html",
