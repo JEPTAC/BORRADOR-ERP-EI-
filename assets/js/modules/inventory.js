@@ -1,38 +1,138 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
 import {can} from "../core/state.js";
-import {empty,loading,paginationHtml,wizard,toast,actionCards,guide,modal} from "../core/ui.js";
-import {workspaceIntro,choice} from "../core/guided.js";
+import {empty,loading,paginationHtml,wizard,toast,guide,modal} from "../core/ui.js";
+import {choice} from "../core/guided.js";
 import {syncSiesaFile} from "../services/materials.js";
 
 let currentItems=[];
 let currentPage=1;
+let requestSequence=0;
+
+const DEFAULT_FILTERS=Object.freeze({
+  search:"",unit:"",warehouse:"",itemType:"",stock:"",variants:"ALL",sort:"reference_asc",pageSize:50
+});
+
+function unitLabel(unit){
+  const code=String(unit||"UND").toUpperCase();
+  const labels={M:"Metros",UND:"Unidades",UN:"Unidades",KG:"Kilogramos",GR:"Gramos",G:"Gramos",LT:"Litros",L:"Litros",M2:"Metros²",M3:"Metros³",PAR:"Pares",JGO:"Juegos",ROLLO:"Rollos"};
+  return labels[code]?`${labels[code]} (${code})`:code;
+}
+function typeLabel(type){return String(type||"").toUpperCase()==="CUTTABLE"?"Cortable":"Estándar"}
+function stockClass(value){return Number(value||0)>0?"is-positive":"is-zero"}
+function criteriaText(item){
+  const criteria=Array.isArray(item?.attributes?.criteria)?item.attributes.criteria:[];
+  return criteria.map(row=>row?.name).filter(Boolean).slice(0,3);
+}
+function warehousesText(item){
+  const values=Array.isArray(item?.warehouses)?item.warehouses.filter(Boolean):[];
+  if(!values.length)return "Sin bodega informada";
+  if(values.length<=3)return `Bodega ${values.join(" · ")}`;
+  return `Bodegas ${values.slice(0,2).join(" · ")} +${values.length-2}`;
+}
 
 export async function renderInventory(root){
   const canUpdate=can("inventory","canUpdate");
+  const filters={...DEFAULT_FILTERS};
+  let facets={units:[],warehouses:[]};
+  let searchTimer=null;
+
   root.innerHTML=`
-    <section class="page-head"><div><h2>Maestro de materiales e inventario</h2><p>Una sola fuente de verdad para Ventas, Recepción, Inventario y Corte. Solo se muestran materiales oficiales vinculados a Siesa.</p></div><div class="page-actions">${canUpdate?'<button class="btn btn-primary" id="sync-siesa">Actualizar maestro Siesa</button>':""}<button class="btn btn-ghost" id="inventory-help">Ver guía</button></div></section>
-    ${workspaceIntro({title:"Inventario oficial",description:"Referencia y nombre se protegen con el maestro Siesa. Los registros de prueba quedan fuera de esta operación sin borrar su historial.",cards:actionCards([
-      {id:"search-inventory",title:"Buscar material oficial",description:"Busca por referencia, nombre, familia o marca.",icon:"⌕",tone:"primary"},
-      {id:"inventory-source",title:"Fuente Siesa",description:"Consulta la última actualización y el número de materiales cargados.",icon:"✓",tone:"success"},
-      {id:"low-stock",title:"Menor disponibilidad",description:"Ordena los resultados visibles por existencia disponible.",icon:"!",tone:"warning"}
-    ])})}
-    <section class="material-master-strip" id="material-master-strip">${loading("Consultando estado del maestro…")}</section>
-    <section class="card card-pad">
-      <div class="toolbar"><input class="control search-wide" id="inv-search" placeholder="Referencia, material, familia o marca"><button class="btn btn-primary" id="inv-filter">Buscar</button></div>
-      <div class="selection-hint"><strong>Catálogo operacional</strong><span>Los movimientos manuales solo se permiten cuando la referencia y el nombre corresponden al maestro oficial.</span></div>
-      <div id="inv-result">${loading()}</div>
+    <section class="page-head inventory-page-head">
+      <div><h2>Inventario</h2><p>Lista operacional del maestro oficial Siesa. Busca, filtra y abre únicamente el material que necesitas.</p></div>
+      <div class="page-actions">${canUpdate?'<button class="btn btn-primary" id="sync-siesa">Actualizar maestro Siesa</button>':""}<button class="btn btn-ghost" id="inventory-help">Ver guía</button></div>
+    </section>
+    <section class="material-master-strip inventory-master-strip" id="material-master-strip">${loading("Consultando estado del maestro…")}</section>
+    <section class="card inventory-browser">
+      <div class="inventory-browser-head">
+        <label class="inventory-search-field" for="inv-search"><span>Buscar material</span><div><input class="control" id="inv-search" autocomplete="off" placeholder="Referencia, nombre, familia, marca o código"><button class="inventory-search-clear" type="button" id="inv-clear-search" aria-label="Limpiar búsqueda" hidden>×</button></div></label>
+        <button class="btn btn-ghost inventory-filter-toggle" id="inv-filter-toggle" type="button" aria-expanded="false">Filtros <span id="inv-filter-count" hidden>0</span></button>
+      </div>
+      <div class="inventory-filter-panel" id="inv-filter-panel">
+        <label><span>Unidad de medida</span><select class="control" id="inv-unit"><option value="">Todas las unidades</option></select></label>
+        <label><span>Bodega</span><select class="control" id="inv-warehouse"><option value="">Todas las bodegas</option></select></label>
+        <label><span>Disponibilidad</span><select class="control" id="inv-stock"><option value="">Todos</option><option value="AVAILABLE">Disponible para venta</option><option value="OUT">Sin disponible para venta</option><option value="PHYSICAL">Con existencia física</option><option value="RESERVED">Con reserva ERP</option><option value="BLOCKED">Con cantidad bloqueada</option></select></label>
+        <label><span>Tipo de material</span><select class="control" id="inv-type"><option value="">Todos los tipos</option><option value="STANDARD">Estándar</option><option value="CUTTABLE">Cortable</option></select></label>
+        <label><span>Variantes</span><select class="control" id="inv-variants"><option value="ALL">Todos</option><option value="YES">Con variantes</option><option value="NO">Sin variantes</option></select></label>
+        <label><span>Ordenar por</span><select class="control" id="inv-sort"><option value="reference_asc">Referencia A–Z</option><option value="name_asc">Nombre A–Z</option><option value="atp_desc">Mayor disponible</option><option value="atp_asc">Menor disponible</option><option value="physical_desc">Mayor existencia física</option><option value="reserved_desc">Mayor reserva ERP</option><option value="lots_desc">Mayor número de registros</option></select></label>
+        <label><span>Filas por página</span><select class="control" id="inv-page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label>
+        <button class="btn btn-ghost inventory-clear-filters" type="button" id="inv-clear-filters">Limpiar filtros</button>
+      </div>
+      <div class="inventory-active-filters" id="inv-active-filters" hidden></div>
+      <div class="inventory-summary" id="inv-summary" aria-live="polite"></div>
+      <div id="inv-result">${loading("Consultando inventario oficial…")}</div>
     </section>`;
 
-  async function load(page=1){
+  const result=root.querySelector("#inv-result");
+  const filterPanel=root.querySelector("#inv-filter-panel");
+  const filterToggle=root.querySelector("#inv-filter-toggle");
+  const searchInput=root.querySelector("#inv-search");
+  const searchClear=root.querySelector("#inv-clear-search");
+
+  function payload(page=1){return {...filters,page,pageSize:Number(filters.pageSize||50)}}
+  function activeCount(){return [filters.unit,filters.warehouse,filters.itemType,filters.stock,filters.variants!=="ALL"?filters.variants:""].filter(Boolean).length}
+  function syncFilterCount(){
+    const count=activeCount();
+    const badge=root.querySelector("#inv-filter-count");
+    badge.textContent=String(count);badge.hidden=!count;
+  }
+  function facetOptions(select,rows,selected,allLabel,labeler=value=>value){
+    const values=new Set((rows||[]).map(row=>String(row.value)));
+    const preserved=selected&&!values.has(String(selected))?[{value:selected,count:0}]:[];
+    const options=[`<option value="">${fmt.escape(allLabel)}</option>`,...[...preserved,...(rows||[])].map(row=>`<option value="${fmt.escape(row.value)}">${fmt.escape(labeler(row.value))}${Number(row.count)>0?` · ${fmt.number(row.count)}`:""}</option>`)].join("");
+    select.innerHTML=options;
+    select.value=selected||"";
+  }
+  function renderActiveFilters(){
+    const target=root.querySelector("#inv-active-filters");
+    const chips=[];
+    if(filters.unit)chips.push(["unit",unitLabel(filters.unit)]);
+    if(filters.warehouse)chips.push(["warehouse",`Bodega ${filters.warehouse}`]);
+    if(filters.stock)chips.push(["stock",({AVAILABLE:"Disponible",OUT:"Sin disponible",PHYSICAL:"Con existencia física",RESERVED:"Con reserva ERP",BLOCKED:"Con bloqueado"})[filters.stock]||filters.stock]);
+    if(filters.itemType)chips.push(["itemType",typeLabel(filters.itemType)]);
+    if(filters.variants!=="ALL")chips.push(["variants",filters.variants==="YES"?"Con variantes":"Sin variantes"]);
+    target.hidden=!chips.length;
+    target.innerHTML=chips.map(([key,label])=>`<button type="button" data-clear-filter="${key}">${fmt.escape(label)} <span aria-hidden="true">×</span></button>`).join("");
+    target.querySelectorAll("[data-clear-filter]").forEach(button=>button.onclick=()=>{
+      const key=button.dataset.clearFilter;
+      filters[key]=key==="variants"?"ALL":"";
+      const map={unit:"#inv-unit",warehouse:"#inv-warehouse",stock:"#inv-stock",itemType:"#inv-type",variants:"#inv-variants"};
+      const control=root.querySelector(map[key]);if(control)control.value=filters[key];
+      load(1);
+    });
+  }
+  function renderSummary(summary={},pagination={}){
+    root.querySelector("#inv-summary").innerHTML=`
+      <div class="inventory-result-count"><strong>${fmt.number(pagination.totalItems??summary.materials??0)}</strong><span>materiales encontrados</span></div>
+      <div class="inventory-summary-stats">
+        <span><b>${fmt.number(summary.availableMaterials||0)}</b> disponibles</span>
+        <span><b>${fmt.number(summary.outMaterials||0)}</b> sin disponible</span>
+        <span><b>${fmt.number(summary.reservedMaterials||0)}</b> con reserva ERP</span>
+        <span><b>${fmt.number(summary.blockedMaterials||0)}</b> con bloqueo</span>
+      </div>`;
+  }
+  function syncFacetControls(){
+    facetOptions(root.querySelector("#inv-unit"),facets.units,filters.unit,"Todas las unidades",unitLabel);
+    facetOptions(root.querySelector("#inv-warehouse"),facets.warehouses,filters.warehouse,"Todas las bodegas",value=>`Bodega ${value}`);
+  }
+
+  async function load(page=1,{quiet=false}={}){
     currentPage=page;
-    const target=root.querySelector("#inv-result");
-    target.innerHTML=loading("Consultando inventario oficial…");
-    const data=await api.inventory(root.querySelector("#inv-search").value,page,50);
-    currentItems=data.items||[];
-    target.innerHTML=currentItems.length?`${cards(currentItems)}${paginationHtml(data.pagination)}`:empty("Sin coincidencias oficiales","Ajusta la búsqueda o actualiza el maestro Siesa.");
-    target.querySelectorAll("[data-inventory-item]").forEach(button=>button.onclick=()=>movementWizard(load,button.dataset.inventoryItem));
-    target.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>load(Number(button.dataset.page)));
+    const seq=++requestSequence;
+    if(!quiet)result.innerHTML=loading("Consultando inventario oficial…");
+    try{
+      const data=await api.inventoryFiltered(payload(page));
+      if(seq!==requestSequence)return;
+      currentItems=data.items||[];
+      facets=data.facets||facets;
+      syncFacetControls();syncFilterCount();renderActiveFilters();renderSummary(data.summary,data.pagination);
+      result.innerHTML=currentItems.length?`${inventoryList(currentItems)}${paginationHtml(data.pagination)}`:empty("No hay materiales con estos filtros","Prueba otra unidad, bodega, disponibilidad o limpia los filtros.");
+      result.querySelectorAll("[data-inventory-item]").forEach(button=>button.onclick=()=>movementWizard(load,button.dataset.inventoryItem));
+      result.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>load(Number(button.dataset.page)));
+    }catch(error){
+      if(seq!==requestSequence)return;
+      result.innerHTML=empty("No fue posible consultar el inventario",error.message);
+    }
   }
 
   async function loadSyncStatus(){
@@ -46,35 +146,63 @@ export async function renderInventory(root){
     }catch(error){strip.innerHTML=`<div><strong>Estado no disponible</strong><span>${fmt.escape(error.message)}</span></div>`}
   }
 
-  root.querySelector("#inv-filter").onclick=()=>load(1);
-  root.querySelector("#inv-search").onkeydown=event=>{if(event.key==="Enter")load(1)};
-  root.querySelector("#search-inventory").onclick=()=>root.querySelector("#inv-search").focus();
-  root.querySelector("#inventory-source").onclick=loadSyncStatus;
-  root.querySelector("#low-stock").onclick=()=>{currentItems.sort((a,b)=>Number(a.availableToPromise??a.available)-Number(b.availableToPromise??b.available));root.querySelector("#inv-result").innerHTML=cards(currentItems)};
+  function bindSelect(id,key){root.querySelector(id).addEventListener("change",event=>{filters[key]=event.currentTarget.value;load(1)})}
+  bindSelect("#inv-unit","unit");bindSelect("#inv-warehouse","warehouse");bindSelect("#inv-stock","stock");bindSelect("#inv-type","itemType");bindSelect("#inv-variants","variants");bindSelect("#inv-sort","sort");
+  root.querySelector("#inv-page-size").addEventListener("change",event=>{filters.pageSize=Number(event.currentTarget.value)||50;load(1)});
+  searchInput.addEventListener("input",()=>{
+    filters.search=searchInput.value.trim();searchClear.hidden=!filters.search;
+    clearTimeout(searchTimer);searchTimer=setTimeout(()=>load(1,{quiet:true}),320);
+  });
+  searchInput.addEventListener("keydown",event=>{if(event.key==="Enter"){clearTimeout(searchTimer);load(1)}});
+  searchClear.onclick=()=>{clearTimeout(searchTimer);searchInput.value="";filters.search="";searchClear.hidden=true;searchInput.focus();load(1)};
+  filterToggle.onclick=()=>{const open=filterPanel.classList.toggle("is-open");filterToggle.setAttribute("aria-expanded",String(open))};
+  root.querySelector("#inv-clear-filters").onclick=()=>{
+    Object.assign(filters,{...DEFAULT_FILTERS,search:filters.search});
+    root.querySelector("#inv-stock").value="";root.querySelector("#inv-type").value="";root.querySelector("#inv-variants").value="ALL";root.querySelector("#inv-sort").value="reference_asc";root.querySelector("#inv-page-size").value="50";
+    load(1);
+  };
   root.querySelector("#sync-siesa")?.addEventListener("click",()=>openSiesaSync(async()=>{await loadSyncStatus();await load(1)}));
-  root.querySelector("#inventory-help").onclick=()=>guide({title:"Maestro Siesa e inventario",description:"La referencia y el nombre son la identidad oficial del material.",items:[
-    {title:"Ventas selecciona, no escribe",detail:"Los asesores buscan materiales en este mismo maestro."},
-    {title:"Reserva lógica separada",detail:"Ventas reserva cantidades contra el disponible comercial, pero nunca selecciona bodegas, lotes o carretos."},{title:"Inventario conserva ubicación y lote",detail:"Cada fila física de Siesa se mantiene separada por bodega, ubicación, lote y variante."},
-    {title:"Pruebas fuera de operación",detail:"Los registros no vinculados al maestro no aparecen en el inventario normal."},
-    {title:"Corte usa material y variante exactos",detail:"Un carreto solo se ofrece si pertenece a la misma referencia y, cuando aplique, al mismo color o variante."}
+  root.querySelector("#inventory-help").onclick=()=>guide({title:"Cómo navegar el inventario",description:"La lista usa exclusivamente materiales oficiales Siesa y todos los filtros se aplican en Supabase sobre el inventario completo.",items:[
+    {title:"Busca por identidad o clasificación",detail:"Puedes escribir referencia, nombre, familia, marca o información contenida en los criterios Siesa."},
+    {title:"Combina filtros",detail:"Unidad de medida, bodega, disponibilidad, tipo de material y presencia de variantes pueden utilizarse al mismo tiempo."},
+    {title:"Disponible para venta",detail:"Es el disponible Siesa menos las reservas activas del ERP; por eso puede ser menor que la existencia física."},
+    {title:"Abre solo lo necesario",detail:"Ver lotes / ajustar muestra los registros físicos de la referencia seleccionada sin perder la posición de la lista."}
   ]});
+
   await Promise.all([load(),loadSyncStatus()]);
 }
 
-function cards(rows){
-  return `<div class="inventory-grid official-inventory-grid">${rows.map(item=>`<article class="inventory-card official-inventory-card">
-    <header><div><strong>${fmt.escape(item.reference)}</strong><span class="official-source-badge">SIESA</span></div><span class="badge badge-blue">${fmt.escape(item.unit)}</span></header>
-    <div class="inventory-card-body"><h3>${fmt.escape(item.description)}</h3>
-      <div class="inventory-numbers inventory-numbers-v1015"><div><label>Existencia física</label><strong>${fmt.number(item.physicalExistence??(Number(item.available||0)+Number(item.siesaCommitted||0)+Number(item.blocked||0)),3)}</strong></div><div><label>Disponible Siesa</label><strong>${fmt.number(item.available,3)}</strong></div><div><label>Reservado ERP</label><strong class="info">${fmt.number(item.erpReserved||0,3)}</strong></div><div><label>Disponible para venta</label><strong class="success">${fmt.number(item.availableToPromise??item.available,3)}</strong></div><div><label>Comprometido Siesa</label><strong>${fmt.number(item.siesaCommitted||0,3)}</strong></div><div><label>Bloqueado</label><strong class="warning">${fmt.number(item.blocked,3)}</strong></div><div><label>Registros físicos</label><strong>${fmt.number(item.lots)}</strong></div></div>
-      ${Number(item.variantCount||0)>0?`<p class="inventory-variant-note">${fmt.number(item.variantCount)} variante(s) con existencia física separada.</p>`:""}
+function inventoryList(rows){
+  return `<div class="inventory-list" role="table" aria-label="Materiales del inventario">
+    <div class="inventory-list-head" role="row"><span>Material</span><span>Unidad</span><span>Existencia física</span><span>Reservado ERP</span><span>Disponible venta</span><span>Registros</span><span></span></div>
+    <div class="inventory-list-body">${rows.map(item=>inventoryRow(item)).join("")}</div>
+  </div>`;
+}
+
+function inventoryRow(item){
+  const criteria=criteriaText(item);
+  const atp=Number(item.availableToPromise??item.available??0);
+  const physical=Number(item.physicalExistence??0);
+  const reserved=Number(item.erpReserved||0);
+  const lots=Number(item.lots||0);
+  return `<article class="inventory-list-row" role="row">
+    <div class="inventory-material-cell" role="cell">
+      <div class="inventory-reference-line"><strong>${fmt.escape(item.reference||item.sku||"—")}</strong><span class="official-source-badge">SIESA</span>${Number(item.variantCount||0)>0?`<span class="inventory-mini-badge">${fmt.number(item.variantCount)} variante${Number(item.variantCount)===1?"":"s"}</span>`:""}</div>
+      <h3>${fmt.escape(item.description||"Material sin nombre")}</h3>
+      <div class="inventory-material-meta"><span>${fmt.escape(typeLabel(item.itemType))}</span><span>${fmt.escape(warehousesText(item))}</span>${criteria.map(text=>`<span>${fmt.escape(text)}</span>`).join("")}</div>
     </div>
-    <footer><span>Referencia y nombre validados</span><button class="btn btn-primary" data-inventory-item="${item.id}">Ver lotes / ajustar</button></footer>
-  </article>`).join("")}</div>`;
+    <div class="inventory-value-cell" role="cell"><small>Unidad</small><strong>${fmt.escape(item.unit||"UND")}</strong><span>${fmt.escape(unitLabel(item.unit).replace(/\s*\([^)]*\)$/,""))}</span></div>
+    <div class="inventory-value-cell" role="cell"><small>Existencia física</small><strong>${fmt.number(physical,3)}</strong><span>${fmt.escape(item.unit||"UND")}</span></div>
+    <div class="inventory-value-cell inventory-reserved-cell" role="cell"><small>Reservado ERP</small><strong>${fmt.number(reserved,3)}</strong><span>${reserved>0?"Reserva activa":"Sin reserva"}</span></div>
+    <div class="inventory-value-cell inventory-atp-cell ${stockClass(atp)}" role="cell"><small>Disponible venta</small><strong>${fmt.number(atp,3)}</strong><span>${atp>0?"Disponible":"Sin disponible"}</span></div>
+    <div class="inventory-value-cell" role="cell"><small>Registros</small><strong>${fmt.number(lots)}</strong><span>${Number(item.blocked||0)>0?`${fmt.number(item.blocked,3)} bloqueado`:Number(item.siesaCommitted||0)>0?`${fmt.number(item.siesaCommitted,3)} comprometido`:"Lotes / ubicaciones"}</span></div>
+    <div class="inventory-row-action" role="cell"><button class="btn btn-primary" data-inventory-item="${item.id}">Ver lotes / ajustar</button></div>
+  </article>`;
 }
 
 async function movementWizard(reload,preselectedId){
   const item=currentItems.find(x=>x.id===preselectedId);
-  if(!item)return toast("Busca el material y abre su tarjeta para registrar un movimiento.","error");
+  if(!item)return toast("Busca el material y abre su fila para registrar un movimiento.","error");
   const lots=await api.inventoryLots(item.id,"");
   if(!lots.length)return toast("Este material no tiene registros físicos activos.","error");
 

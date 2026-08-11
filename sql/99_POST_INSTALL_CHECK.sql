@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.22.0
+-- ERP Electroingeniería V10.22.3
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -12,6 +12,7 @@ select
   to_regprocedure('public.erp_x_v10_22_self_check()') is not null as autodiagnostico_v10_22,
   to_regprocedure('public.erp_x_flow_integrity()') is not null as integridad_flujos,
   to_regprocedure('public.erp_x_receipt_progress(uuid)') is not null as progreso_recepcion_pve,
+  to_regprocedure('public.erp_x_inventory_filtered(jsonb)') is not null as inventario_lista_filtrable_v10_22_3,
   to_regprocedure('erp_supply.initial_step(text,text,boolean)') is null as routing_legacy_eliminado,
   to_regprocedure('erp_supply.initial_step(text,text,boolean,boolean,boolean)') is not null as routing_vigente,
   not has_schema_privilege('anon','erp_supply','USAGE') as anon_sin_esquema,

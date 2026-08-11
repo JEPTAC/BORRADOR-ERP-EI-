@@ -60,6 +60,7 @@ export const api={
   materialSyncHistory:(limit=10)=>rpc("erp_x_material_sync_history",{p_limit:limit}),
   materialReservationHealth:()=>rpc("erp_x_material_reservation_health"),
   inventory:(search="",page=1,pageSize=50)=>rpc("erp_x_inventory",{p_search:search||null,p_page:page,p_page_size:pageSize}),
+  inventoryFiltered:(filters={})=>rpc("erp_x_inventory_filtered",{p_payload:filters||{}}),
   inventoryAdjust:payload=>mutationRpc("erp_x_inventory_adjust",{p_payload:payload}),
   inventoryLots:(itemId=null,search="")=>rpc("erp_x_inventory_lots",{p_item_id:itemId,p_search:search||null}),
   vsm:(from,to)=>rpc("erp_x_vsm",{p_date_from:from,p_date_to:to}),

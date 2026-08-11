@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-22-2-operatividad-movil-20260811";
+const CACHE="erp-electroingenieria-v10-22-3-inventario-lista-filtrable-20260811";
 const ASSETS=[
   "./",
   "./index.html",
@@ -20,6 +20,7 @@ const ASSETS=[
   "./assets/js/modules/shipping-flow.js",
   "./assets/js/modules/queue.js",
   "./assets/js/modules/orders.js",
+  "./assets/js/modules/inventory.js",
   "./assets/js/services/api.js",
   "./assets/js/services/materials.js",
   "./assets/js/services/drive.js",
