@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.23.0-gestion-actividades-capacidad",
-  build: "2026-08-11.12",
+  version: "10.23.1-catalogo-dinamico-actividades",
+  build: "2026-08-11.13",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

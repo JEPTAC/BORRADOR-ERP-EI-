@@ -76,6 +76,7 @@ export const api={
   syncAuth:()=>mutationRpc("erp_x_admin_sync_auth"),
   calendar:()=>rpc("erp_x_calendar"),
   workCatalog:()=>rpc("erp_x_work_catalog"),
+  workCreateCatalogItem:payload=>mutationRpc("erp_x_work_create_catalog_item",{p_payload:payload||{}}),
   workMyDay:(day=null)=>rpc("erp_x_work_my_day",{p_day:day||null}),
   workStart:(catalogId,assignmentId=null,payload={})=>mutationRpc("erp_x_work_start",{p_catalog_id:catalogId,p_assignment_id:assignmentId,p_payload:payload||{}}),
   workPause:(executionId,reasonCode="OTHER",note=null)=>mutationRpc("erp_x_work_pause",{p_execution_id:executionId,p_reason_code:reasonCode,p_note:note}),

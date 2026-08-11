@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.23.0
+-- ERP Electroingeniería V10.23.1
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -17,6 +17,7 @@ select
   to_regprocedure('public.erp_x_request_order_cancellation(uuid,text)') is not null as solicitar_cancelacion_pedido,
   to_regprocedure('public.erp_x_decide_order_cancellation(uuid,text,text)') is not null as decidir_cancelacion_pedido,
   to_regprocedure('public.erp_x_work_my_day(date)') is not null as mi_jornada_v10_23,
+  to_regprocedure('public.erp_x_work_create_catalog_item(jsonb)') is not null as catalogo_dinamico_v10_23_1,
   to_regprocedure('public.erp_x_work_save_assignment(jsonb)') is not null as planificador_v10_23,
   to_regprocedure('public.erp_x_work_ledger(date,date,uuid)') is not null as libro_mayor_tiempo_v10_23,
   to_regprocedure('public.erp_x_work_analytics(date,date,uuid)') is not null as analitica_capacidad_v10_23,
@@ -88,7 +89,9 @@ select
   to_regclass('erp_supply.work_assignments') is not null as planificacion_actividades,
   to_regclass('erp_supply.work_executions') is not null as ejecuciones_cronometradas,
   to_regclass('erp_supply.work_evidence') is not null as evidencias_actividades,
-  to_regclass('erp_supply.work_delivery_reviews') is not null as revision_entregables;
+  to_regclass('erp_supply.work_delivery_reviews') is not null as revision_entregables,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='work_activity_catalog' and column_name='catalog_origin') as origen_catalogo_v10_23_1,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='work_activity_catalog' and column_name='created_by') as creador_catalogo_v10_23_1;
 
 -- Ejecutar con Super Admin, Gerencia, Jefatura Logística o Auditoría.
 select * from public.erp_x_work_health();

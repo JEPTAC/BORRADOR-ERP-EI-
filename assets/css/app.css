@@ -1566,6 +1566,12 @@ th{color:#fff!important}
 .work-planner-nav{display:flex;align-items:center;gap:7px;min-width:0}
 .work-planner-nav strong{font-size:13px;color:#17365d;min-width:170px;text-align:center}
 .work-planner-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+.work-catalog-mode{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.work-catalog-mode .status-choice{margin:0;min-height:74px}
+.work-new-catalog-fields{padding:12px;border:1px solid #d9e6f3;border-radius:13px;background:#f8fbff;margin-bottom:12px}
+.work-catalog-persistence{display:grid;gap:3px;padding:9px 11px;border-radius:10px;background:#edf6ff;color:#245889}
+.work-catalog-persistence strong{font-size:10px}.work-catalog-persistence span{font-size:9px;line-height:1.4;color:#647b95}
+.work-time-presets{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px}.work-time-presets span{font-size:9px;color:#7c8ba0}
 
 .work-week-board{overflow:auto;border:1px solid #dce6f0;border-radius:14px;background:#fff;overscroll-behavior-inline:contain}
 .work-week-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));min-width:1080px}
@@ -1640,7 +1646,7 @@ th{color:#fff!important}
   .work-now{grid-template-columns:1fr;gap:13px;padding:15px}.work-now-clock{text-align:left}.work-now-actions{grid-column:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.work-now-actions .btn:last-child{grid-column:1/3}
   .agenda-row{grid-template-columns:64px minmax(0,1fr)}.agenda-actions{grid-column:1/3}.agenda-actions .btn{width:100%}
   .work-history-row{grid-template-columns:78px minmax(0,1fr)}.work-history-actions{grid-column:1/3;justify-content:stretch}.work-history-actions .btn{flex:1 1 130px}
-  .work-planner-toolbar{grid-template-columns:1fr}.work-planner-nav,.work-planner-actions{min-width:0}.work-planner-nav{justify-content:space-between}.work-planner-nav>div{min-width:0;flex:1}.work-planner-nav strong{min-width:0;display:block;overflow-wrap:anywhere}.work-planner-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);justify-content:stretch}.work-planner-actions .segment-control{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}.work-planner-actions .btn{width:100%}
+  .work-planner-toolbar{grid-template-columns:1fr}.work-planner-nav,.work-planner-actions{min-width:0}.work-planner-nav{justify-content:space-between}.work-planner-nav>div{min-width:0;flex:1}.work-planner-nav strong{min-width:0;display:block;overflow-wrap:anywhere}.work-planner-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);justify-content:stretch}.work-planner-actions .segment-control{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}.work-planner-actions .btn{width:100%}.work-catalog-mode{grid-template-columns:1fr}
   .work-month-board{overflow-x:auto}.work-month-weekdays,.work-month-grid{min-width:700px}
   .work-assignee-picker{grid-template-columns:1fr}
   .work-analytics-toolbar>.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.work-analytics-toolbar .analytics-apply{grid-column:1/3;width:100%}
