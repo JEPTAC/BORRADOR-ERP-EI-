@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-21-corte-guiado-20260811";
+const CACHE="erp-electroingenieria-v10-21-5-responsive-movil-reconstruido-20260811";
 const ASSETS=[
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const ASSETS=[
   "./assets/js/main.js",
   "./assets/js/config.js",
   "./assets/js/core/icons.js",
+  "./assets/js/core/layout.js",
   "./assets/js/modules/active-work.js",
   "./assets/js/modules/support-flow.js",
   "./assets/js/modules/sandbox.js",

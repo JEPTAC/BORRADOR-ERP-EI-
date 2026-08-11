@@ -5,7 +5,12 @@ import {icon} from "./icons.js";
 import {navigate} from "./router.js";
 import {signOut} from "../services/supabase.js";
 
+const MOBILE_NAV_QUERY="(max-width: 960px)";
+let previousFocus=null;
+
 export function renderLogin(error=""){
+  document.documentElement.classList.remove("nav-drawer-open");
+  document.body?.classList.remove("nav-drawer-open");
   document.querySelector("#app").innerHTML=`
     <main class="login-page">
       <section class="login-hero">
@@ -44,40 +49,117 @@ export function renderLogin(error=""){
 function allowed(moduleCode){return state.modules.some(m=>m.code===moduleCode&&m.canRead)}
 function navHtml(){return NAV_GROUPS.map(group=>{
   const items=group.items.filter(i=>allowed(i.id));if(!items.length)return"";
-  return `<div class="nav-group"><div class="nav-group-title">${fmt.escape(group.label)}</div>${items.map(i=>`<button class="nav-item ${state.currentModule===i.id?"active":""}" data-nav="${i.id}"><span class="nav-icon">${icon(i.icon)}</span><span class="nav-label">${fmt.escape(i.label)}</span>${icon("chevron","nav-arrow")}</button>`).join("")}</div>`
+  return `<div class="nav-group"><div class="nav-group-title">${fmt.escape(group.label)}</div>${items.map(i=>`<button class="nav-item ${state.currentModule===i.id?"active":""}" data-nav="${i.id}"><span class="nav-icon">${icon(i.icon)}</span><span class="nav-label">${fmt.escape(i.label)}</span>${icon("chevron","nav-arrow")}</button>`).join("")}</div>`;
 }).join("")}
 
 export function renderShell(){
   const p=state.profile||{};
   const quickOrder=allowed("sales")?`<button class="btn btn-accent top-new-order" id="quick-order">${icon("plus")}<span>Nuevo pedido</span></button>`:"";
   document.querySelector("#app").innerHTML=`<div class="shell">
-    <aside class="sidebar ${state.sidebarOpen?"open":""}" id="sidebar">
-      <header class="sidebar-head"><img class="sidebar-logo" src="./assets/img/logo-electroingenieria.png" alt="Electroingeniería"><div class="sidebar-product"><strong>ERP Operativo</strong><small>Gestión de suministros</small></div></header>
+    <aside class="sidebar" id="sidebar" aria-label="Menú principal" aria-hidden="true">
+      <header class="sidebar-head">
+        <div class="sidebar-brand-row">
+          <img class="sidebar-logo" src="./assets/img/logo-electroingenieria.png" alt="Electroingeniería">
+          <button class="sidebar-close" id="sidebar-close" type="button" aria-label="Cerrar menú"><span aria-hidden="true"></span></button>
+        </div>
+        <div class="sidebar-product"><strong>ERP Operativo</strong><small>Gestión de suministros</small></div>
+      </header>
       <nav class="nav-scroll" id="sidebar-nav" aria-label="Navegación principal">${navHtml()}</nav>
       <footer class="sidebar-foot"><div class="user-chip"><div class="avatar">${fmt.initials(p.name)}</div><div class="user-data"><strong>${fmt.escape(p.name||"Usuario")}</strong><small>${fmt.escape(fmt.roles(p.roles||[]))}</small></div><button class="icon-btn logout-btn" id="logout" title="Cerrar sesión" aria-label="Cerrar sesión">${icon("logout")}</button></div></footer>
     </aside>
-    <main class="main">
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" tabindex="-1" aria-label="Cerrar menú"></button>
+    <main class="main" id="main-content">
       <header class="topbar">
-        <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" aria-label="Abrir menú">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operación</h1><p id="top-subtitle">Visibilidad y control de la operación</p></div></div>
+        <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operación</h1><p id="top-subtitle">Visibilidad y control de la operación</p></div></div>
         <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
       </header>
       <div class="content" id="page-content"></div>
     </main>
   </div>`;
   bindShell();
+  syncSidebar(false,{restoreFocus:false});
+}
+
+function isMobileNavigation(){return window.matchMedia(MOBILE_NAV_QUERY).matches}
+
+function syncSidebar(open,{restoreFocus=true}={}){
+  const mobile=isMobileNavigation();
+  const shouldOpen=Boolean(open&&mobile);
+  const sidebar=document.querySelector("#sidebar");
+  const toggle=document.querySelector("#menu-toggle");
+  const main=document.querySelector("#main-content");
+  if(!sidebar)return;
+
+  setState({sidebarOpen:shouldOpen});
+  sidebar.classList.toggle("open",shouldOpen);
+  sidebar.setAttribute("aria-hidden",String(mobile&&!shouldOpen));
+  toggle?.setAttribute("aria-expanded",String(shouldOpen));
+  toggle?.setAttribute("aria-label",shouldOpen?"Cerrar menú":"Abrir menú");
+  document.documentElement.classList.toggle("nav-drawer-open",shouldOpen);
+  document.body?.classList.toggle("nav-drawer-open",shouldOpen);
+  if(main){
+    if("inert" in main)main.inert=shouldOpen;
+    else if(shouldOpen)main.setAttribute("aria-hidden","true");
+    else main.removeAttribute("aria-hidden");
+  }
+
+  if(shouldOpen){
+    previousFocus=document.activeElement;
+    requestAnimationFrame(()=>document.querySelector("#sidebar-close")?.focus());
+  }else if(restoreFocus&&previousFocus instanceof HTMLElement){
+    requestAnimationFrame(()=>previousFocus?.focus?.());
+    previousFocus=null;
+  }
+}
+
+function closeMobileSidebar(options){if(isMobileNavigation())syncSidebar(false,options)}
+
+function keepFocusInsideSidebar(event){
+  if(event.key!=="Tab"||!state.sidebarOpen||!isMobileNavigation())return;
+  const sidebar=document.querySelector("#sidebar");
+  if(!sidebar)return;
+  const focusable=[...sidebar.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el=>el.offsetParent!==null);
+  if(!focusable.length)return;
+  const first=focusable[0],last=focusable[focusable.length-1];
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
 }
 
 function bindShell(){
-  document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{setState({sidebarOpen:false});navigate(b.dataset.nav)});
+  shellAbortController?.abort();
+  shellAbortController=new AbortController();
+  const shellSignal=shellAbortController.signal;
+  document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{
+    closeMobileSidebar({restoreFocus:false});
+    navigate(b.dataset.nav);
+  });
   document.querySelector("#logout").onclick=()=>signOut();
-  document.querySelector("#menu-toggle")?.addEventListener("click",()=>{setState({sidebarOpen:!state.sidebarOpen});document.querySelector("#sidebar").classList.toggle("open")});
+  document.querySelector("#menu-toggle")?.addEventListener("click",()=>syncSidebar(!state.sidebarOpen));
+  document.querySelector("#sidebar-close")?.addEventListener("click",()=>syncSidebar(false));
+  document.querySelector("#sidebar-backdrop")?.addEventListener("click",()=>syncSidebar(false));
   document.querySelector("#refresh-page").onclick=()=>window.dispatchEvent(new CustomEvent("erp:refresh"));
-  document.querySelector("#quick-order")?.addEventListener("click",()=>navigate("sales",{create:"1"}));
-  const search=document.querySelector("#global-search");search.onkeydown=e=>{if(e.key==="Enter")navigate("orders",{search:search.value})};
+  document.querySelector("#quick-order")?.addEventListener("click",()=>{closeMobileSidebar({restoreFocus:false});navigate("sales",{create:"1"})});
+  const search=document.querySelector("#global-search");if(search)search.onkeydown=e=>{if(e.key==="Enter")navigate("orders",{search:search.value})};
+
+  document.addEventListener("keydown",event=>{
+    if(event.key==="Escape"&&state.sidebarOpen&&isMobileNavigation()){event.preventDefault();syncSidebar(false);return}
+    keepFocusInsideSidebar(event);
+  },{signal:shellSignal});
+
+  const media=window.matchMedia(MOBILE_NAV_QUERY);
+  const onViewportChange=()=>{
+    if(!media.matches)syncSidebar(false,{restoreFocus:false});
+    else syncSidebar(false,{restoreFocus:false});
+  };
+  if(media.addEventListener)media.addEventListener("change",onViewportChange,{signal:shellSignal});
+  else media.addListener?.(onViewportChange);
 }
+
+let shellAbortController=null;
 
 export function updateShell(moduleId,title,subtitle=""){
   state.currentModule=moduleId;
+  closeMobileSidebar({restoreFocus:false});
   document.querySelectorAll("[data-nav]").forEach(b=>b.classList.toggle("active",b.dataset.nav===moduleId));
   const h=document.querySelector("#top-title"),s=document.querySelector("#top-subtitle"),section=document.querySelector("#top-section");
   if(h)h.textContent=title;if(s)s.textContent=subtitle;
