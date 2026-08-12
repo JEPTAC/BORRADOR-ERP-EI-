@@ -1,4 +1,4 @@
-# ERP Electroingeniería · V10.25.0
+# ERP Electroingeniería · V10.25.1
 
 Base consolidada del ERP sobre V10.24, con **Robot QA total exclusivo de Super Admin** como gate de liberación.
 
@@ -10,7 +10,7 @@ Base consolidada del ERP sobre V10.24, con **Robot QA total exclusivo de Super A
 - Cancelación de pedidos por autorización.
 - Mi Jornada, planificación, catálogo dinámico, aprobación de actividades y ocupación integrada.
 - Responsive estructural para escritorio, tablet y móvil.
-- QA V10.25: 336 rutas comerciales, 10 controles empresariales, gates de integridad, recorrido automático de módulos, pruebas Sandbox por etapa, responsive y E2E Playwright.
+- QA V10.25.1: 336 rutas end-to-end, campaña profunda/extrema con novedades, reportes, aprobaciones, cancelación y no-entrega, diagnóstico fiel del error original, recorrido automático de módulos, responsive, E2E Playwright y capacidad k6 (smoke/normal/busy/peak/spike/soak/breakpoint).
 
 ## Instalación
 
@@ -20,7 +20,7 @@ Consulta `sql/LEEME_SQL.txt`.
 - **Base existente:** aplicar únicamente las migraciones incrementales que todavía no estén instaladas.
 - No ejecutar archivos de `sql/legacy/`.
 
-Para actualizar desde V10.24 a V10.25, aplicar `sql/migrations/053_total_system_qa_robot_v10_25.sql` y luego `sql/99_POST_INSTALL_CHECK.sql`.
+Para actualizar desde V10.25 a V10.25.1, aplicar únicamente `sql/migrations/054_qa_deep_capacity_integrity_v10_25_1.sql` y luego `sql/99_POST_INSTALL_CHECK.sql`.
 
 ## Robot QA total
 
@@ -33,3 +33,5 @@ npm run test:total
 ```
 
 o mediante el workflow manual `.github/workflows/qa-total.yml`.
+
+La capacidad externa se ejecuta con `npm run test:capacity` o `.github/workflows/qa-capacity.yml`.

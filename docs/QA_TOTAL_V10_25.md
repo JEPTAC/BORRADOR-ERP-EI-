@@ -1,106 +1,157 @@
-# V10.25 · Robot QA total del sistema
+# V10.25.1 · Robot QA total, diagnóstico profundo y capacidad
 
 ## Objetivo
 
-El Robot QA total es el gate de liberación exclusivo de Super Admin. No sustituye una sola clase de prueba: coordina pruebas de dominio, integridad, Sandbox, interfaz, responsive y un E2E externo con navegador real.
+El módulo **QA total del sistema** es el gate de liberación exclusivo de Super Admin. Combina dominio, integridad, Sandbox, interfaz, responsive, E2E externo y capacidad/concurrencia.
 
-## Qué significa «total»
+## Corrección V10.25.1
 
-Para las entradas comerciales finitas se ejecuta la matriz exhaustiva vigente de 336 combinaciones. Para caminos que pueden crecer de forma combinatoria (parciales, devoluciones, reprogramaciones, excepciones, Corte, evidencias, cancelaciones, etc.) se aplica cobertura explícita por familia de ramas y gates, en lugar de repetir el mismo camino miles de veces sin aumentar cobertura.
+La matriz antigua podía perder el error funcional original: si una acción fallaba dentro de la subtransacción del escenario, PostgreSQL revertía el pedido TEST, pero el manejador de errores conservaba el UUID en memoria e intentaba guardarlo en `qa_scenarios.order_id`. La FK terminaba mostrando `qa_scenarios_order_id_fkey` y ocultaba el error que realmente había ocurrido.
 
-Capas:
+V10.25.1 corrige la raíz:
 
-1. **Dominio**: matriz de 336 rutas + 10 controles empresariales.
-2. **Ramas críticas**: prioridad aprobada/rechazada, cambio de ruta en despacho, reapertura, excepciones de inventario/flujo/pago/datos y limpieza de cancelación.
-3. **Integridad**: `erp_x_v10_22_self_check`, `erp_x_flow_integrity`, health global, reservas, colas, Workforce y contratos estructurales V10.25.
-4. **Sandbox operativo**: pedidos `TEST-QA-*` aislados con `is_test=true`, `source=QA_BOT`, ligados a la ejecución `TOTAL_ROBOT`.
-5. **UI crawler interno**: navega todos los módulos visibles para Super Admin, abre controles no destructivos, detecta `.module-error`, excepciones JS, promesas rechazadas, RPC 4xx/5xx y overflow horizontal.
-6. **Responsive**: 360, 390, 424, 768, 960 y 1440 px en módulos críticos.
-7. **Playwright externo**: navegador real, autenticación de una cuenta QA Super Admin, navegación, Sandbox, screenshots/video en fallo y trazas de diagnóstico.
+- `qa_existing_order_id()` solo conserva `order_id` cuando el pedido sigue existiendo.
+- Cada escenario reinicia sus variables antes de ejecutarse.
+- Se guardan `failure_step_code`, `failure_action`, `error_sqlstate` y `diagnostics`.
+- Si el pedido fue revertido, su UUID se conserva únicamente en `diagnostics.rolledBackOrDeletedOrderId`.
+- Los casos profundos se ejecutan uno por RPC/transacción: un fallo nunca revierte ni oculta los demás casos.
 
-## Aislamiento de producción
+## Cobertura funcional
 
-Toda mutación creada por el Robot usa pedidos `TEST-QA-*`, `source=QA_BOT` e `is_test=true`. El Robot registra `qa_run_id` y al finalizar ejecuta limpieza únicamente sobre pedidos TEST ligados a esa ejecución. Un fallo de limpieza se registra como defecto QA en vez de ocultarse.
+### Matriz de enrutamiento
 
-El Robot no debe utilizar pedidos productivos como fixture de escritura.
+Las 336 entradas comerciales siguen recorriéndose de extremo a extremo hasta cierre, cruzando variante financiera, condición de pago, ruta, Corte y Compra.
 
-## Portal Super Admin
+### Campaña profunda TOTAL
 
-Módulo: **QA total del sistema**.
+Cada tipo `PVC/PVN/PVE/PVP` se coloca en cada etapa activa y prueba:
 
-Acciones:
+- Nota.
+- Novedad: apertura, bloqueo/espera, resolución y reanudación.
+- Reporte: apertura bloqueante, resolución y reanudación.
+- Espera → reanudación.
+- Aprobaciones aprobadas/rechazadas.
+- Cancelación aprobada/rechazada.
+- Reapertura.
 
-- **Ejecutar prueba total**: orquesta todas las capas internas.
-- **336 combinaciones**: solo matriz comercial.
-- **10 controles**: controles empresariales.
-- **Backend integral**: matriz + controles + gates.
-- **Verificar colas**: diagnósticos dirigidos.
+### Campaña EXTREME
 
-Cada ejecución `TOTAL_ROBOT` conserva el detalle en `erp_supply.qa_robot_checks` con capa, suite, módulo, estado, severidad, entrada, esperado, real, evidencia, error y duración.
+Cruza las 336 entradas con **cada etapa real de su ruta** y prueba, por contexto aplicable:
 
-## E2E Playwright
+- NOTE.
+- NOVELTY.
+- REPORT.
+- WAIT/RESUME.
+- PRIORITY aprobado y rechazado.
+- CANCELLATION aprobada y rechazada.
+- STOCK_EXCEPTION aprobado/rechazado.
+- FLOW_EXCEPTION aprobado/rechazado.
+- PAYMENT_EXCEPTION aprobado/rechazado.
+- DATA_CORRECTION aprobado/rechazado.
+- ROUTE_CHANGE aprobado/rechazado.
+- REOPEN aprobado/rechazado.
+- NO_DELIVERY con REPROGRAM, RETURN y RESOLVED en rutas de despacho.
 
-Archivos:
+No intenta crear permutaciones infinitas de eventos repetidos. La exhaustividad se define sobre las entradas, estados y transiciones finitas del modelo de negocio.
 
-- `tests/qa-total/helpers.js`
-- `tests/qa-total/total-system.spec.js`
-- `playwright.config.js`
-- `.github/workflows/qa-total.yml`
+## Botón principal
 
-El workflow se ejecuta manualmente desde GitHub Actions y nunca contiene credenciales en el repositorio.
+**Ejecutar prueba total** ejecuta ahora:
 
-### Configuración única requerida en GitHub
+1. 336 rutas end-to-end.
+2. 10 controles empresariales + gates de integridad.
+3. Ramas críticas.
+4. Campaña EXTREME.
+5. Health checks.
+6. Navegación automática de todos los módulos Super Admin.
+7. Controles UI seguros y errores JS/RPC.
+8. Responsive 360, 390, 424, 768, 960 y 1440 px.
+9. Pedidos Sandbox en cada etapa operativa.
+10. Corte Sandbox moderno.
+11. Limpieza de todos los `TEST-QA-*` asociados a la corrida.
 
-Crear una cuenta **dedicada de QA** con rol `super_admin` y registrar estos Repository Secrets:
+## Capacidad y concurrencia
 
-- `ERP_QA_BASE_URL`: URL desplegada del ERP.
-- `ERP_QA_EMAIL`: correo de la cuenta QA Super Admin.
-- `ERP_QA_PASSWORD`: contraseña de la cuenta QA Super Admin.
+El botón **Pulso concurrente** del navegador hace una comprobación rápida con 5 → 10 → 20 → 40 solicitudes paralelas. Sirve para detectar degradaciones evidentes, pero no representa el límite de capacidad.
 
-Después: **Actions → ERP QA Total → Run workflow**.
+La medición de capacidad se hace con `tests/load/erp-capacity.js` mediante k6 y guarda el resumen en `erp_supply.qa_capacity_runs`.
 
-La cuenta QA debe ser exclusiva para automatización. No utilizar la cuenta personal cotidiana de un administrador.
+Perfiles:
 
-## Ejecución local
+- `SMOKE`: verificación mínima.
+- `NORMAL`: carga cotidiana.
+- `BUSY`: operación intensa.
+- `PEAK`: pico sostenido.
+- `SPIKE`: salto brusco de 5 a 75 VUs.
+- `SOAK`: 20 VUs durante 10 minutos para observar estabilidad.
+- `BREAKPOINT`: incrementa carga por escalones hasta el máximo configurado o hasta romper los umbrales.
 
-```bash
-ERP_TEST_EMAIL="qa@example.com" \
-ERP_TEST_PASSWORD="..." \
-ERP_BASE_URL="https://erp.example.com" \
-RUN_TOTAL_ROBOT="true" \
-npm run test:total
+Métricas registradas:
+
+- solicitudes totales;
+- RPS;
+- error rate;
+- p50;
+- p90;
+- p95;
+- p99;
+- máximo;
+- checks rate;
+- VUs máximos;
+- cantidad de lecturas y escrituras TEST.
+
+Umbrales iniciales de certificación:
+
+- error HTTP < 1 %;
+- errores RPC < 1 %;
+- checks > 99 %;
+- p95 < 1800 ms;
+- p99 < 3500 ms.
+
+En `BREAKPOINT`, los umbrales críticos pueden detener el test al degradarse para no seguir aumentando carga innecesariamente. El máximo por defecto es 200 VUs y puede configurarse entre 20 y 500 con `ERP_BREAKPOINT_MAX_VUS`.
+
+## Simulación de múltiples usuarios
+
+Con solo `ERP_QA_EMAIL` y `ERP_QA_PASSWORD`, todos los VUs generan concurrencia real contra Supabase pero reutilizan la sesión de la cuenta QA.
+
+Opcionalmente puede crearse el secret `ERP_QA_USER_POOL` con varias cuentas QA independientes:
+
+```json
+[
+  {"email":"qa1@ei.com.co","password":"...","label":"QA-1"},
+  {"email":"qa2@ei.com.co","password":"...","label":"QA-2"}
+]
 ```
 
-Para depuración interactiva:
+La primera cuenta debe ser `super_admin` porque crea y limpia la corrida. Para pruebas con escrituras (`write_ratio > 0`), las cuentas del pool deben tener permisos para los RPC QA utilizados. Para una medición pura de lectura con perfiles de distintos roles puede utilizarse `write_ratio=0`.
 
-```bash
-npm run test:total:headed
-```
+## GitHub Actions
 
-## Supabase
+Workflows:
 
-Sobre una base existente V10.24 ejecutar únicamente:
+- `.github/workflows/qa-total.yml`: E2E Playwright.
+- `.github/workflows/qa-capacity.yml`: k6.
+
+Secrets mínimos ya utilizados:
+
+- `ERP_QA_EMAIL`.
+- `ERP_QA_PASSWORD`.
+- `ERP_QA_BASE_URL` para Playwright.
+
+Secret opcional:
+
+- `ERP_QA_USER_POOL` para sesiones independientes durante capacidad.
+
+En **Actions → ERP QA Capacity → Run workflow** selecciona el perfil. Para `BREAKPOINT` también define el máximo de VUs.
+
+## Supabase existente
+
+Desde V10.25 ejecutar únicamente:
 
 ```text
-053_total_system_qa_robot_v10_25.sql
+054_qa_deep_capacity_integrity_v10_25_1.sql
 ```
 
-Luego `99_POST_INSTALL_CHECK.sql`.
+Después ejecutar `99_POST_INSTALL_CHECK.sql`.
 
-No ejecutar `00_INSTALL_ALL.sql` sobre una instalación existente.
-
-## Gate de liberación recomendado
-
-No liberar una versión si ocurre cualquiera de estos casos:
-
-- matriz comercial menor a 336/336;
-- un control empresarial falla;
-- un gate de integridad falla;
-- un chequeo CRITICAL/HIGH del Robot queda FAILED;
-- un pedido `QA_BOT` aparece como no TEST;
-- falla la limpieza de fixtures;
-- Playwright registra `pageerror`, rechazo de promesa, `.module-error` o HTTP 4xx/5xx inesperado;
-- existe overflow horizontal en los viewports críticos;
-- el E2E no puede completar la navegación Sandbox definida.
-
-Una advertencia (`WARNING`) requiere revisión, pero no equivale por sí sola a una aprobación automática de release.
+No ejecutar `00_INSTALL_ALL.sql` sobre una base existente.

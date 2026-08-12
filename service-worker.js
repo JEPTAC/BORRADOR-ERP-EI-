@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-0-robot-qa-total-20260811";
+const CACHE="erp-electroingenieria-v10-25-1-qa-deep-capacity-20260812";
 const ASSETS=[
   "./",
   "./index.html",

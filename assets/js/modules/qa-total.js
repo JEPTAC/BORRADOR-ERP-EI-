@@ -161,8 +161,68 @@ async function runBackend(ctx){
   await capture(ctx,{checkKey:"HEALTH-RUNTIME",layer:"CONTRACT",suite:"RUNTIME_DIAGNOSTICS",severity:"HIGH",success:r=>Boolean(r)},()=>api.runtimeDiagnostics());
 }
 
+
+async function executeDeepBatch(ids=[],concurrency=4){
+  const queue=[...ids];const results=[];
+  const workers=new Array(Math.min(concurrency,queue.length||1)).fill(0).map(async()=>{
+    while(queue.length){
+      const id=queue.shift();let lastError=null;let result=null;
+      for(let attempt=0;attempt<2;attempt++){
+        try{result=await api.qaRobotExecuteDeepCase(id);lastError=null;break}catch(error){lastError=error;await sleep(180*(attempt+1))}
+      }
+      results.push(result||{caseId:id,status:"FAILED",transportFailure:true,errorMessage:summarizeError(lastError)});
+    }
+  });
+  await Promise.all(workers);return results;
+}
+
+async function runDeepCampaign(ctx,mode="TOTAL"){
+  const normalized=String(mode||"TOTAL").toUpperCase();
+  setRobotUi(ctx.root,{phase:normalized==="EXTREME"?"Matriz exhaustiva cruzada":"Ciclos transversales profundos",detail:normalized==="EXTREME"?"Cruzando las 336 entradas con cada etapa, notas, novedades, reportes, esperas, aprobaciones, cancelaciones y no-entregas…":"Probando notas, novedades, reportes, esperas, aprobaciones y cancelación en todas las etapas…",progress:normalized==="EXTREME"?8:16});
+  const built=await api.qaRobotBuildDeepCampaign(ctx.runId,normalized);
+  let progress=await api.qaRobotDeepProgress(ctx.runId,12);
+  const total=Math.max(1,progress.total||built.totalCases||1);let transportFailures=[];
+  appendLog(ctx.root,`${normalized==="EXTREME"?"Campaña exhaustiva":"Campaña profunda"}: ${fmt.number(total)} casos aislados.`);
+  while((progress.pending||0)>0){
+    const ids=progress.pendingIds||[];
+    if(!ids.length)break;
+    const batch=await executeDeepBatch(ids,normalized==="EXTREME"?6:4);
+    transportFailures.push(...batch.filter(x=>x?.transportFailure));
+    progress=await api.qaRobotDeepProgress(ctx.runId,12);
+    const done=(progress.passed||0)+(progress.failed||0);
+    const pct=normalized==="EXTREME"?12+Math.min(43,(done/total)*43):17+Math.min(18,(done/total)*18);
+    setRobotUi(ctx.root,{detail:`${fmt.number(done)}/${fmt.number(total)} casos · ${fmt.number(progress.failed||0)} fallidos`,progress:pct});
+    if(transportFailures.length){break}
+    await sleep(30);
+  }
+  progress=await api.qaRobotDeepProgress(ctx.runId,30);
+  const ok=progress.done===true&&(progress.failed||0)===0&&transportFailures.length===0;
+  const failures=[...(progress.failures||[]),...transportFailures].slice(0,20);
+  await record(ctx,{checkKey:normalized==="EXTREME"?"DOMAIN-EXTREME-CAMPAIGN":"DOMAIN-DEEP-CAMPAIGN",layer:"DOMAIN",suite:normalized==="EXTREME"?"MATRIZ_EXHAUSTIVA_CRUZADA":"CICLOS_TRANSVERSALES",severity:"CRITICAL",status:ok?"PASSED":"FAILED",actual:{...progress,mode:normalized,transportFailures:transportFailures.length},errorMessage:ok?null:`${progress.failed||0} caso(s) funcionales fallaron${transportFailures.length?` · ${transportFailures.length} fallo(s) de transporte`:""}. ${failures.slice(0,3).map(x=>x.caseKey||x.caseId||x.error).filter(Boolean).join(" · ")}`});
+  return progress;
+}
+
+export async function runDeepQaCampaign(root,mode="EXTREME"){
+  if(!hasRole("super_admin"))throw new Error("La campaña QA profunda es exclusiva de Superadministración.");
+  const normalized=String(mode||"EXTREME").toUpperCase();
+  const run=await api.qaRobotCreateRun({appVersion:CONFIG.version,build:CONFIG.build,campaign:normalized,startedAt:new Date().toISOString()});
+  const ctx={runId:run.runId,root,plannedChecks:2,lastCounts:null};root.dataset.qaRobotRun=run.runId;
+  let finalResult=null;
+  try{
+    await record(ctx,{checkKey:"PLAN-DEEP-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:{mode:normalized,runId:run.runId}});
+    await runDeepCampaign(ctx,normalized);
+  }catch(error){
+    await record(ctx,{checkKey:"DEEP-FATAL",layer:"DOMAIN",suite:"ORQUESTADOR_PROFUNDO",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});
+  }finally{
+    finalResult=await api.qaRobotFinishRun(run.runId,true).catch(error=>({status:"FAILED",failed:1,error:summarizeError(error)}));
+    setRobotUi(root,{phase:finalResult.status==="PASSED"?"Campaña aprobada":"Campaña con hallazgos",detail:finalResult.status==="PASSED"?"Todos los casos profundos finalizaron correctamente.":`${finalResult.failed||0} comprobación(es) agregadas fallaron. Revisa los casos profundos.`,progress:100,counts:`${finalResult.passed||0} correctas · ${finalResult.failed||0} fallidas · ${finalResult.warnings||0} advertencias`});
+    root.dispatchEvent(new CustomEvent("erp:qa-total-finished",{detail:{runId:run.runId,result:finalResult}}));
+  }
+  return {runId:run.runId,result:finalResult};
+}
+
 async function runModuleCrawler(ctx,frame){
-  setRobotUi(ctx.root,{phase:"Recorrido automático de la aplicación",detail:"Entrando módulo por módulo y accionando controles seguros…",progress:22});
+  setRobotUi(ctx.root,{phase:"Recorrido automático de la aplicación",detail:"Entrando módulo por módulo y accionando controles seguros…",progress:58});
   const modules=(state.modules||[]).filter(m=>m.canRead).map(m=>m.code).filter(Boolean);
   for(const module of modules){
     const before=frameErrors(frame.contentWindow).length;
@@ -178,7 +238,7 @@ async function runModuleCrawler(ctx,frame){
 }
 
 async function runResponsive(ctx,frame){
-  setRobotUi(ctx.root,{phase:"Responsive real",detail:"Probando anchos de teléfono, tablet y escritorio dentro del ERP…",progress:48});
+  setRobotUi(ctx.root,{phase:"Responsive real",detail:"Probando anchos de teléfono, tablet y escritorio dentro del ERP…",progress:70});
   const shell=frame.closest(".qa-robot-frame-shell");
   for(const width of RESPONSIVE_WIDTHS){
     frame.style.width=`${width}px`;shell?.classList.toggle("mobile-probe",width<768);await sleep(120);
@@ -201,7 +261,7 @@ function rowForOrder(doc,orderNumber){
   return nodes[0]?.parentElement||null;
 }
 async function runSandboxProbes(ctx,frame){
-  setRobotUi(ctx.root,{phase:"Operación Sandbox",detail:"Creando pedidos TEST y abriendo cada etapa con la interfaz real…",progress:72});
+  setRobotUi(ctx.root,{phase:"Operación Sandbox",detail:"Creando pedidos TEST y abriendo cada etapa con la interfaz real…",progress:88});
   for(const [step,module,type] of STEP_PROBES){
     const started=performance.now();let seeded=null;
     try{
@@ -243,9 +303,10 @@ export async function runTotalQaRobot(root){
   appendLog(root,`Robot QA ${run.runId.slice(0,8)} iniciado. Ningún pedido productivo será modificado.`);
   let frame=null;let finalResult=null;
   try{
-    const plan=await api.qaRobotPlan();ctx.plannedChecks=4+(plan?.domain?.enterpriseControls||10)+(plan?.domain?.branchChecks||10)+8+((state.modules||[]).filter(m=>m.canRead).length)+RESPONSIVE_MODULES.length*RESPONSIVE_WIDTHS.length+STEP_PROBES.length+1;
+    const plan=await api.qaRobotPlan();ctx.plannedChecks=5+(plan?.domain?.enterpriseControls||10)+(plan?.domain?.branchChecks||10)+8+((state.modules||[]).filter(m=>m.canRead).length)+RESPONSIVE_MODULES.length*RESPONSIVE_WIDTHS.length+STEP_PROBES.length+1;
     await record(ctx,{checkKey:"PLAN-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:plan});
     await runBackend(ctx);
+    await runDeepCampaign(ctx,"EXTREME");
     frame=await prepareFrame(ctx);await runModuleCrawler(ctx,frame);await runResponsive(ctx,frame);await runSandboxProbes(ctx,frame);
   }catch(error){
     await record(ctx,{checkKey:"ROBOT-FATAL",layer:"UI",suite:"ORQUESTADOR",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});

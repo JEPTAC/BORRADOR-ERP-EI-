@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.24.0
+-- ERP Electroingeniería V10.25.1
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -127,3 +127,21 @@ select
 select public.erp_x_qa_robot_plan();
 select public.erp_x_qa_robot_system_contract();
 
+
+-- V10.25.1 · Diagnóstico fiel, campaña profunda y capacidad/concurrencia.
+select
+  to_regclass('erp_supply.qa_deep_cases') is not null as casos_qa_profundos,
+  to_regclass('erp_supply.qa_capacity_runs') is not null as historial_capacidad,
+  to_regprocedure('public.erp_x_qa_robot_build_deep_campaign(uuid,text)') is not null as construir_campana_profunda,
+  to_regprocedure('public.erp_x_qa_robot_execute_deep_case(uuid)') is not null as ejecutar_caso_aislado,
+  to_regprocedure('public.erp_x_qa_robot_deep_progress(uuid,integer)') is not null as progreso_campana_profunda,
+  to_regprocedure('public.erp_x_qa_capacity_record(jsonb)') is not null as registrar_capacidad,
+  to_regprocedure('public.erp_x_qa_capacity_runs(integer)') is not null as consultar_capacidad,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_scenarios' and column_name='error_sqlstate') as qa_con_sqlstate_original,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_scenarios' and column_name='failure_step_code') as qa_con_etapa_fallida,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_scenarios' and column_name='failure_action') as qa_con_accion_fallida,
+  position('qa_existing_order_id' in pg_get_functiondef('public.erp_x_run_qa_matrix(boolean)'::regprocedure))>0 as matriz_336_no_guarda_fk_huerfana,
+  position('rolledBackOrDeletedOrderId' in pg_get_functiondef('public.erp_x_qa_robot_record_check(uuid,jsonb)'::regprocedure))>0 as ledger_robot_preserva_uuid_revertido,
+  position('NO_DELIVERY' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as qa_profundo_prueba_no_entrega,
+  position('CANCELLATION' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as qa_profundo_prueba_cancelacion,
+  position('deepFailures' in pg_get_functiondef('public.erp_x_qa_robot_detail(uuid)'::regprocedure))>0 as detalle_qa_expone_fallos_profundos;
