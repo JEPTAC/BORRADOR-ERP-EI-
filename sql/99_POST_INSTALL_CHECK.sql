@@ -109,3 +109,21 @@ select
   exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='work_assignments' and column_name='request_reason') as motivo_solicitud_activo,
   pg_get_functiondef('erp_supply.work_classified_business_seconds(uuid,timestamptz,timestamptz)'::regprocedure) like '%cut_executions%' as ocupacion_incluye_corte,
   pg_get_functiondef('public.erp_x_work_start(uuid,uuid,jsonb)'::regprocedure) like '%approval_status%' as inicio_respeta_aprobacion;
+
+-- V10.25 · Robot QA total del sistema (ejecutar como Super Admin).
+select
+  to_regclass('erp_supply.qa_robot_checks') is not null as ledger_qa_total,
+  to_regprocedure('public.erp_x_qa_robot_plan()') is not null as plan_robot_qa,
+  to_regprocedure('public.erp_x_qa_robot_create_run(jsonb)') is not null as crear_ejecucion_qa_total,
+  to_regprocedure('public.erp_x_qa_robot_record_check(uuid,jsonb)') is not null as registrar_comprobacion_qa,
+  to_regprocedure('public.erp_x_qa_robot_finish_run(uuid,boolean)') is not null as cerrar_ejecucion_qa,
+  to_regprocedure('public.erp_x_qa_robot_seed_order(uuid,jsonb)') is not null as semilla_pedido_test_qa,
+  to_regprocedure('public.erp_x_qa_robot_branch_suite(uuid)') is not null as suite_ramas_criticas,
+  not exists(
+    select 1 from erp_supply.role_module_permissions p
+    where p.module_code='qa' and p.role_code<>'super_admin' and p.can_read
+  ) as qa_exclusivo_super_admin;
+
+select public.erp_x_qa_robot_plan();
+select public.erp_x_qa_robot_system_contract();
+

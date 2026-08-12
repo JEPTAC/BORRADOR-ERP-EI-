@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-24-0-gobierno-actividades-ocupacion-20260811";
+const CACHE="erp-electroingenieria-v10-25-0-robot-qa-total-20260811";
 const ASSETS=[
   "./",
   "./index.html",
@@ -16,6 +16,8 @@ const ASSETS=[
   "./assets/js/modules/order-cancellation.js",
   "./assets/js/modules/support-flow.js",
   "./assets/js/modules/sandbox.js",
+  "./assets/js/modules/qa-total.js",
+  "./assets/js/modules/qa.js",
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",
   "./assets/js/modules/picking-flow.js",

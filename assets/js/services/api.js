@@ -18,6 +18,7 @@ async function rpc(name,params={}){
   if(error){
     const technical=[error.message,error.details,error.hint].filter(Boolean).join(" · ");
     console.error(`[ERP RPC] ${name}`,{params,error});
+    if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent("erp:rpc-error",{detail:{rpc:name,message:technical||error.message,status:error.status||null,code:error.code||null}}));
     const e=new Error(friendly(technical||error.message));
     Object.assign(e,error,{rpc:name,params,technicalMessage:technical});
     e.message=friendly(technical||error.message);
@@ -100,6 +101,15 @@ export const api={
   runQaControls:(cleanup=true)=>rpc("erp_x_run_qa_control_suite",{p_cleanup:cleanup}),
   runQaV1022:(cleanup=true)=>rpc("erp_x_run_qa_v10_22",{p_cleanup:cleanup}),
   qaDetail:id=>rpc("erp_x_qa_run_detail",{p_run_id:id}),
+  qaRobotPlan:()=>rpc("erp_x_qa_robot_plan"),
+  qaRobotCreateRun:(options={})=>mutationRpc("erp_x_qa_robot_create_run",{p_options:options||{}}),
+  qaRobotRecordCheck:(runId,check)=>mutationRpc("erp_x_qa_robot_record_check",{p_run_id:runId,p_check:check||{}}),
+  qaRobotFinishRun:(runId,cleanup=true)=>mutationRpc("erp_x_qa_robot_finish_run",{p_run_id:runId,p_cleanup:cleanup}),
+  qaRobotDetail:runId=>rpc("erp_x_qa_robot_detail",{p_run_id:runId}),
+  qaRobotSystemContract:()=>rpc("erp_x_qa_robot_system_contract"),
+  qaRobotBranchSuite:runId=>mutationRpc("erp_x_qa_robot_branch_suite",{p_run_id:runId}),
+  qaRobotSeedOrder:(runId,payload={})=>mutationRpc("erp_x_qa_robot_seed_order",{p_run_id:runId,p_payload:payload||{}}),
+  qaRobotCleanup:runId=>mutationRpc("erp_x_qa_robot_cleanup",{p_run_id:runId}),
   queueIntegrity:(apply=false)=>rpc("erp_x_queue_integrity",{p_apply:apply}),
   runtimeDiagnostics:()=>rpc("erp_x_runtime_diagnostics"),
   creditList:(status=null,search="",page=1,pageSize=50)=>rpc("erp_x_credit_list",{p_status:status,p_search:search||null,p_page:page,p_page_size:pageSize}),

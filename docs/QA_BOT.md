@@ -1,57 +1,51 @@
-# Bot QA E2E
+# QA del ERP · V10.25
 
-El bot usa el mismo motor transaccional interno que utiliza el frontend. No ejecuta una simulación paralela ni modifica el flujo para “hacer pasar” las pruebas.
+La referencia vigente es **V10.25 · Robot QA total del sistema**.
 
-## Matriz comercial: 192 escenarios
+El QA ya no se limita a la matriz histórica de rutas. Combina:
+
+- 336 combinaciones finitas de enrutamiento comercial;
+- 10 controles empresariales;
+- 10 ramas críticas adicionales (prioridad aprobada/rechazada, cambio de ruta, reapertura, excepciones y cancelación/limpieza);
+- autodiagnóstico estructural e integridad cruzada;
+- pedidos `TEST-QA-*` aislados en Sandbox;
+- recorrido automático de módulos y controles seguros;
+- barrido responsive;
+- E2E con Playwright y navegador real;
+- ledger detallado por comprobación dentro de `qa_runs` / `qa_robot_checks`.
+
+El módulo **QA total del sistema** es exclusivo de `super_admin`.
+
+Documentación completa: `docs/QA_TOTAL_V10_25.md`.
+
+## Matriz canónica
 
 ```text
-4 tipos de pedido
+7 estados financieros de entrada
 × 3 condiciones de pago
 × 4 modalidades de entrega
 × 2 opciones de corte
 × 2 opciones de compra
-= 192 escenarios
+= 336 rutas
 ```
 
-Para cada escenario:
+La matriz usa `initial_step(text,text,boolean,boolean,boolean)` y no admite volver a la firma histórica de tres parámetros.
 
-1. Crea un pedido marcado como prueba.
-2. Calcula la ruta esperada.
-3. Ejecuta las tareas y controles requeridos.
-4. Recorre el pedido hasta su estado final.
-5. Compara la ruta real con la esperada.
-6. Registra resultado, tiempos y error.
-7. Elimina los datos de prueba cuando `cleanup = true`.
+## Ejecución backend
 
-## Suite empresarial: 10 controles
-
-1. Idempotencia de acciones repetidas.
-2. Conflicto de versión optimista.
-3. Una sola sesión simultánea por operario.
-4. Espera, reanudación y cierre de sesiones de tiempo.
-5. Checklist y puerta financiera obligatoria.
-6. No entrega y reprogramación.
-7. Solicitud, aprobación y ejecución de prioridad.
-8. Aislamiento de la importación histórica.
-9. Recepción, lote y movimiento de inventario.
-10. Corte, consumo de material y desperdicio.
-
-## Evidencia
-
-Cada ejecución crea un registro en `qa_runs` y sus resultados en `qa_scenarios`. El historial se consulta desde el módulo **Bot QA E2E**.
-
-## Edge Function opcional
-
-`supabase/functions/erp-e2e-bot/index.ts` permite ejecutar:
-
-```json
-{"suite":"all","cleanup":true}
+```sql
+select public.erp_x_run_qa_v10_22(true);
+select public.erp_x_qa_robot_system_contract();
 ```
 
-Valores válidos de `suite`:
+## Ejecución total desde UI
 
-- `matrix`
-- `controls`
-- `all`
+Super Admin → **QA total del sistema** → **Ejecutar prueba total**.
 
-La función puede usar el JWT del Super Admin que realiza la solicitud o los secretos `ERP_QA_EMAIL` y `ERP_QA_PASSWORD`.
+## E2E externo
+
+```bash
+npm run test:total
+```
+
+Para ejecución desatendida en GitHub se requieren `ERP_QA_BASE_URL`, `ERP_QA_EMAIL` y `ERP_QA_PASSWORD` como Repository Secrets.

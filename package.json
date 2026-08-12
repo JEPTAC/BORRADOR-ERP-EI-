@@ -1,6 +1,6 @@
 {
   "name": "erp-electroingenieria-v10",
-  "version": "10.24.0",
+  "version": "10.25.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,9 @@
     "test": "playwright test",
     "test:smoke": "playwright test tests/smoke.spec.js",
     "test:ui": "playwright test --ui",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "test:total": "playwright test tests/qa-total",
+    "test:total:headed": "playwright test tests/qa-total --headed"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.0",

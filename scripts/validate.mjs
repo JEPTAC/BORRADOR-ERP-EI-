@@ -88,6 +88,16 @@ check(executable.includes("Solicitar cancelación")&&executable.includes("reques
 check(fs.existsSync(path.join(root,"sql/migrations/048_workforce_activity_core_v10_23.sql"))&&fs.existsSync(path.join(root,"sql/migrations/049_workforce_execution_planning_api_v10_23.sql"))&&fs.existsSync(path.join(root,"sql/migrations/050_workforce_ledger_analytics_v10_23.sql")),"Faltan migraciones canónicas V10.23 de actividades, planificación o analítica.");
 check(fs.existsSync(path.join(root,"sql/migrations/051_dynamic_work_catalog_v10_23_1.sql")),"Falta la migración 051 de catálogo dinámico V10.23.1.");
 check(fs.existsSync(path.join(root,"sql/migrations/052_workforce_governance_occupation_v10_24.sql")),"Falta la migración 052 de gobierno de actividades y ocupación V10.24.");
+check(fs.existsSync(path.join(root,"sql/migrations/053_total_system_qa_robot_v10_25.sql")),"Falta la migración 053 del Robot QA total V10.25.");
+check(sql.includes("qa_robot_checks")&&sql.includes("erp_x_qa_robot_create_run")&&sql.includes("erp_x_qa_robot_record_check")&&sql.includes("erp_x_qa_robot_finish_run")&&sql.includes("erp_x_qa_robot_branch_suite"),"V10.25 no conserva el ledger o ciclo de vida del Robot QA total.");
+check(sql.includes("erp_x_qa_robot_seed_order")&&sql.includes("TEST-QA-")&&sql.includes("source='QA_BOT'"),"El Robot QA V10.25 no conserva semillas TEST aisladas de producción.");
+check(sql.includes("QA_SUPERADMIN_ONLY")&&sql.includes("role_code<>'super_admin'")&&sql.includes("module_code='qa'"),"El módulo QA V10.25 no está protegido como exclusivo de Super Admin.");
+check(executable.includes("runTotalQaRobot")&&executable.includes("Robot QA total del sistema")&&executable.includes("qaRobotSeedOrder")&&executable.includes("qaRobotBranchSuite"),"El frontend V10.25 no integra el orquestador QA total.");
+check(fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"Falta el orquestador frontend qa-total.js.");
+check(fs.existsSync(path.join(root,"tests/qa-total/total-system.spec.js"))&&fs.existsSync(path.join(root,"tests/qa-total/helpers.js")),"Falta la suite Playwright total V10.25.");
+check(fs.existsSync(path.join(root,".github/workflows/qa-total.yml")),"Falta el workflow manual de GitHub Actions para QA total.");
+check(read("package.json").includes('"test:total"')&&read("playwright.config.js").includes("workers:process.env.CI?1"),"La automatización Playwright V10.25 no está configurada para ejecución total estable.");
+check(read("service-worker.js").includes("qa-total.js")&&read("service-worker.js").includes("modules/qa.js"),"El Service Worker no precarga el Robot QA V10.25.");
 check(sql.includes("lider_logistica")&&sql.includes("erp_x_work_propose_assignment")&&sql.includes("erp_x_work_pending_approvals")&&sql.includes("erp_x_work_decide_assignment"),"V10.24 no conserva liderazgo logístico o flujo formal de aprobación de actividades.");
 check(sql.includes("erp_x_work_occupation")&&sql.includes("cut_executions")&&sql.includes("fixedProcessSeconds")&&sql.includes("miscActivitySeconds"),"V10.24 no integra ocupación de procesos ERP + actividades varias.");
 check(executable.includes("Agregar actividad")&&executable.includes("Motivo obligatorio")&&executable.includes("renderApprovals")&&executable.includes("Aprobar actividad"),"La experiencia V10.24 no conserva selección segura, motivo o bandeja de aprobación.");

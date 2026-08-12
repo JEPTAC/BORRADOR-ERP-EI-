@@ -1,22 +1,31 @@
-ERP Electroingeniería V10.22.0
+ERP Electroingeniería V10.25.0
 
 INSTALACIÓN NUEVA
 =================
 Ejecutar exclusivamente:
   sql/00_INSTALL_ALL.sql
 
-Después ejecutar la verificación de solo lectura:
+Después ejecutar la verificación:
   sql/99_POST_INSTALL_CHECK.sql
 
-BASE EXISTENTE
-==============
+BASE EXISTENTE V10.24
+=====================
 No volver a ejecutar el instalador completo.
-Aplicar únicamente las migraciones nuevas que aún no estén instaladas.
-Para esta revisión, la migración nueva es:
-  sql/migrations/041_ux_flow_integrity_qa_v10_22.sql
-  sql/migrations/042_canonical_diagnostics_v10_22.sql
-  sql/migrations/043_flow_integrity_hardening_v10_22.sql
-  sql/migrations/044_release_health_qa_alignment_v10_22.sql
+Aplicar únicamente:
+  sql/migrations/053_total_system_qa_robot_v10_25.sql
+
+Después:
+  sql/99_POST_INSTALL_CHECK.sql
 
 Los archivos de sql/legacy son únicamente históricos y NO deben ejecutarse.
-El instalador canónico ya incorpora las migraciones 034, 035, 036, 038, 039, 040, 041, 042, 043 y 044.
+
+ROBOT QA EXTERNO
+================
+La migración SQL habilita el Robot QA interno. Para el E2E con navegador real consulta:
+  docs/QA_TOTAL_V10_25.md
+
+GitHub Actions requiere una configuración única de:
+  ERP_QA_BASE_URL
+  ERP_QA_EMAIL
+  ERP_QA_PASSWORD
+como Repository Secrets.
