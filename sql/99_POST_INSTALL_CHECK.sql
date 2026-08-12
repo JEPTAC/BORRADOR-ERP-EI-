@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.25.2
+-- ERP Electroingeniería V10.25.3
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -163,4 +163,21 @@ select
   position('ROUTE_CANONICAL' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as ejecutor_prueba_336_aisladas,
   position('JOURNEY_FULL' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as ejecutor_prueba_recorridos_completos,
   position('release_certificate' in lower(pg_get_functiondef('public.erp_x_qa_robot_finish_run(uuid,boolean)'::regprocedure)))>0 as cierre_subordinado_a_certificado,
-  position('10.25.2' in pg_get_functiondef('public.erp_x_qa_robot_plan()'::regprocedure))>0 as plan_release_v10_25_2;
+  position('10.25.3' in pg_get_functiondef('public.erp_x_qa_robot_plan()'::regprocedure))>0 as plan_release_v10_25_3;
+
+-- V10.25.3 · QA release estable por etapas y prerrequisitos reales.
+select
+  to_regclass('erp_supply.qa_release_journey_state') is not null as estado_recorridos_persistente,
+  to_regprocedure('public.erp_x_qa_robot_execute_release_slice(uuid)') is not null as recorrido_por_etapa,
+  to_regprocedure('public.erp_x_qa_release_flow_integrity()') is not null as integridad_release_sin_contaminacion_test,
+  to_regprocedure('public.erp_x_qa_release_health(uuid)') is not null as health_release_corrida_actual,
+  to_regprocedure('public.erp_x_qa_robot_deep_progress(uuid,integer)') is not null as progreso_priorizado,
+  to_regprocedure('public.erp_x_qa_robot_create_run(jsonb)') is not null as crear_corrida_v10_25_3,
+  (select c.confdeltype='c' from pg_constraint c where c.conname='receipt_lines_order_item_id_fkey' limit 1) as receipt_lines_cascade_al_borrar_item,
+  position('ERP_X_SHIPPING_SAVE_LOCATION' in upper(pg_get_functiondef('erp_supply.qa_execute_step_domain(uuid,text,uuid,uuid)'::regprocedure)))>0 as recorrido_prueba_destino_despacho,
+  position('CUTTING_PICKUP_AND_PICKING_FULL' in pg_get_functiondef('erp_supply.qa_execute_step_domain(uuid,text,uuid,uuid)'::regprocedure))>0 as recorrido_prueba_corte_recogida_y_alistamiento,
+  position('10.25.3' in pg_get_functiondef('public.erp_x_qa_robot_plan()'::regprocedure))>0 as plan_qa_v10_25_3;
+
+-- Ejecutar como Super Admin: debe devolver una estructura con success/counts.
+select public.erp_x_qa_release_flow_integrity();
+

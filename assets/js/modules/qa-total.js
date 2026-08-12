@@ -146,7 +146,7 @@ async function runBackend(ctx){
   if(!controls)appendLog(ctx.root,"La suite de controles no devolvió resultado; la certificación no podrá aprobar.","failed");
 
   await capture(ctx,{checkKey:"INTEGRITY-STRUCTURAL",layer:"INTEGRITY",suite:"AUTODIAGNOSTICO",severity:"CRITICAL",success:r=>r?.success===true},()=>api.selfCheckV1022());
-  await capture(ctx,{checkKey:"INTEGRITY-FLOW",layer:"INTEGRITY",suite:"INTEGRIDAD_FLUJOS",severity:"CRITICAL",success:r=>r?.success===true},()=>api.flowIntegrity());
+  await capture(ctx,{checkKey:"INTEGRITY-FLOW",layer:"INTEGRITY",suite:"INTEGRIDAD_FLUJOS",severity:"CRITICAL",success:r=>r?.success===true,failureMessage:r=>healthFailureDetail(r,"La integridad de flujos detectó inconsistencias productivas.")},()=>api.qaReleaseFlowIntegrity());
 
   const contract=await capture(ctx,{checkKey:"CONTRACT-SYSTEM",layer:"CONTRACT",suite:"CONTRATO_SISTEMA",severity:"CRITICAL",success:r=>r?.success===true},()=>api.qaRobotSystemContract());
   for(const check of contract?.checks||[]){await record(ctx,{checkKey:`CONTRACT-${check.key}`,layer:"CONTRACT",suite:"CONTRATO_SISTEMA",severity:"HIGH",status:check.success?"PASSED":"FAILED",actual:check,errorMessage:check.success?null:check.detail})}
@@ -154,71 +154,98 @@ async function runBackend(ctx){
   const branches=await capture(ctx,{checkKey:"DOMAIN-BRANCH-SUITE",layer:"DOMAIN",suite:"RAMAS_CRITICAS",severity:"CRITICAL",success:r=>r?.success===true},()=>api.qaRobotBranchSuite(ctx.runId));
   for(const check of branches?.checks||[]){await record(ctx,{checkKey:`BRANCH-${check.key}`,layer:"DOMAIN",suite:"RAMAS_CRITICAS",severity:/CANCELLATION|ROUTE|REOPEN/.test(check.key)?"CRITICAL":"HIGH",status:check.success?"PASSED":"FAILED",orderId:check.orderId||null,actual:check,errorMessage:check.success?null:check.detail})}
 
-  await capture(ctx,{checkKey:"HEALTH-GLOBAL",layer:"INTEGRITY",suite:"HEALTH_CHECK",severity:"CRITICAL",success:statusFromRows},()=>api.health());
   await capture(ctx,{checkKey:"HEALTH-WORKFORCE",layer:"INTEGRITY",suite:"WORKFORCE_HEALTH",severity:"HIGH",success:statusFromRows},()=>api.workHealth());
   await capture(ctx,{checkKey:"HEALTH-QUEUES",layer:"INTEGRITY",suite:"QUEUE_HEALTH",severity:"CRITICAL",success:r=>r?.ok===true},()=>api.queueIntegrity(false));
   await capture(ctx,{checkKey:"HEALTH-RESERVATIONS",layer:"INTEGRITY",suite:"RESERVATION_HEALTH",severity:"MEDIUM",success:r=>r&&typeof r==="object"},()=>api.materialReservationHealth());
   await capture(ctx,{checkKey:"HEALTH-RUNTIME",layer:"CONTRACT",suite:"RUNTIME_DIAGNOSTICS",severity:"HIGH",success:r=>Boolean(r)},()=>api.runtimeDiagnostics());
 }
 
+function healthFailureDetail(result,fallback="El resultado no cumplió el criterio esperado."){
+  const checks=Array.isArray(result?.checks)?result.checks:[];
+  const failed=checks.filter(c=>c?.ok===false).slice(0,8).map(c=>`${c.checkName||c.key||"Check"}: ${c.detail||"falló"}`);
+  if(failed.length)return failed.join(" · ");
+  const counts=result?.counts&&typeof result.counts==="object"?Object.entries(result.counts).filter(([,v])=>Number(v)>0).slice(0,8).map(([k,v])=>`${k}: ${v}`):[];
+  return counts.length?counts.join(" · "):fallback;
+}
 
-async function executeOneReleaseCase(id,{maxAttempts=5}={}){
+async function runPostCampaignHealth(ctx){
+  setRobotUi(ctx.root,{phase:"Health de liberación",detail:"Validando salud global contra ESTA corrida, sin contaminarla con QA histórica…"});
+  return capture(ctx,{checkKey:"HEALTH-GLOBAL",layer:"INTEGRITY",suite:"HEALTH_CHECK",severity:"CRITICAL",success:r=>r?.success===true,
+    failureMessage:r=>healthFailureDetail(r,"El health de liberación detectó uno o más checks fallidos.")},()=>api.qaReleaseHealth(ctx.runId));
+}
+
+async function safeDeepProgress(runId,limit=24,maxAttempts=3){
   let lastError=null;
   for(let attempt=1;attempt<=maxAttempts;attempt++){
-    try{return await api.qaRobotExecuteDeepCase(id)}
+    try{return await api.qaRobotDeepProgress(runId,limit)}catch(error){lastError=error;if(attempt<maxAttempts)await sleep(250*attempt)}
+  }
+  throw lastError||new Error("No fue posible consultar el progreso QA.");
+}
+
+async function executeOneReleaseCase(item,{maxAttempts=3}={}){
+  const id=typeof item==="string"?item:item?.id;
+  if(!id)throw new Error("Caso QA sin identificador.");
+  let lastError=null;
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
+    try{return await api.qaRobotExecuteReleaseSlice(id)}
     catch(error){
       lastError=error;
       const message=summarizeError(error);
       await api.qaRobotTransportFailure(id,`Intento ${attempt}/${maxAttempts} · ${message}`,attempt===maxAttempts).catch(()=>{});
-      if(attempt<maxAttempts)await sleep(Math.min(1600,180*Math.pow(2,attempt-1)));
+      if(attempt<maxAttempts)await sleep(Math.min(1800,300*Math.pow(2,attempt-1)));
     }
   }
   return {caseId:id,status:"FAILED",transportFailure:true,errorMessage:summarizeError(lastError)};
 }
 
-async function executeDeepBatch(ids=[],concurrency=6){
-  const queue=[...ids];const results=[];
-  const workers=new Array(Math.min(concurrency,queue.length||1)).fill(0).map(async()=>{
-    while(queue.length){const id=queue.shift();results.push(await executeOneReleaseCase(id,{maxAttempts:5}))}
+async function executeDeepBatch(items=[],concurrency=3){
+  const queue=[...items];const results=[];
+  const workers=new Array(Math.min(Math.max(1,concurrency),queue.length||1)).fill(0).map(async()=>{
+    while(queue.length){const item=queue.shift();results.push(await executeOneReleaseCase(item,{maxAttempts:3}))}
   });
   await Promise.all(workers);return results;
 }
 
 async function runReleaseCampaign(ctx,{build=true}={}){
-  setRobotUi(ctx.root,{phase:"Certificación funcional completa",detail:"Inventariando 336 rutas + 336 recorridos secuenciales + todas las ramas finitas aplicables…",progress:9});
+  setRobotUi(ctx.root,{phase:"Certificación funcional completa",detail:"Orden obligatorio: 336 rutas → 336 recorridos reales por etapas → campaña EXTREME.",progress:9});
   let built=null;
-  let progress=await api.qaRobotDeepProgress(ctx.runId,36).catch(()=>null);
+  let progress=await safeDeepProgress(ctx.runId,24).catch(()=>null);
   if(build||progress?.routes?.planned!==336||progress?.journeys?.planned!==336){
     built=await api.qaRobotBuildReleaseCampaign(ctx.runId);
-    progress=await api.qaRobotDeepProgress(ctx.runId,36);
+    progress=await safeDeepProgress(ctx.runId,24);
   }
   await api.qaRobotResetStaleCases(ctx.runId,60).catch(()=>{});
-  progress=await api.qaRobotDeepProgress(ctx.runId,36);
+  progress=await safeDeepProgress(ctx.runId,24);
   const total=Math.max(1,progress.total||built?.totalCases||1);
-  appendLog(ctx.root,`Plan de liberación: ${fmt.number(total)} casos persistentes. Rutas canónicas: ${fmt.number(progress.routes?.planned||0)} · recorridos completos: ${fmt.number(progress.journeys?.planned||0)}.`);
-  let stagnant=0;let lastDone=-1;
+  appendLog(ctx.root,`Plan de liberación: ${fmt.number(total)} casos. Se ejecutan primero 336 rutas y luego 336 recorridos completos, con baja concurrencia para no auto-saturar Supabase.`);
+  let stagnant=0,lastSlices=Number(progress.stageSlices||0);
   while((progress.pending||0)>0||(progress.running||0)>0){
-    if((progress.pending||0)>0){
-      const ids=progress.pendingIds||[];
-      if(ids.length)await executeDeepBatch(ids,6);
+    const items=progress.pendingItems||[];
+    if(items.length){
+      const family=items[0]?.family||"";
+      const sameFamily=items.filter(x=>x?.family===family).slice(0,family==="ROUTE_CANONICAL"||family==="JOURNEY_FULL"?12:18);
+      const concurrency=family==="ROUTE_CANONICAL"||family==="JOURNEY_FULL"?2:3;
+      await executeDeepBatch(sameFamily.length?sameFamily:items.slice(0,12),concurrency);
     }
-    progress=await api.qaRobotDeepProgress(ctx.runId,36);
-    const done=(progress.executed??((progress.passed||0)+(progress.failed||0)));
+    progress=await safeDeepProgress(ctx.runId,24);
+    const done=progress.executed??((progress.passed||0)+(progress.failed||0));
+    const slices=Number(progress.stageSlices||0);
     const pct=10+Math.min(45,(done/total)*45);
-    setRobotUi(ctx.root,{detail:`${fmt.number(done)}/${fmt.number(total)} ejecutados · ${fmt.number(progress.passed||0)} aprobados · ${fmt.number(progress.failed||0)} fallidos · ${fmt.number(progress.pending||0)} pendientes · timeouts ${fmt.number(progress.timeoutFailures||0)} · transporte ${fmt.number(progress.transportFailures||0)}`,progress:pct});
-    if(done===lastDone)stagnant++;else stagnant=0;
-    lastDone=done;
-    if(stagnant>=4&&(progress.running||0)>0){await api.qaRobotResetStaleCases(ctx.runId,45).catch(()=>{});stagnant=0}
-    if(!progress.pendingIds?.length&&(progress.pending||0)>0)await sleep(180);
-    else await sleep(30);
+    setRobotUi(ctx.root,{detail:`${fmt.number(done)}/${fmt.number(total)} casos terminados · ${fmt.number(slices)} operaciones/lotes ejecutados · rutas ${fmt.number(progress.routes?.passed||0)}/336 · recorridos ${fmt.number(progress.journeys?.passed||0)}/336 · fallidos ${fmt.number(progress.failed||0)} · pendientes ${fmt.number(progress.pending||0)} · timeout ${fmt.number(progress.timeoutCases??progress.timeoutFailures??0)} · transporte ${fmt.number(progress.transportCases??progress.transportFailures??0)}`,progress:pct});
+    if(slices===lastSlices)stagnant++;else stagnant=0;
+    lastSlices=slices;
+    if(stagnant>=6&&(progress.running||0)>0){await api.qaRobotResetStaleCases(ctx.runId,45).catch(()=>{});stagnant=0}
+    if(!items.length&&(progress.pending||0)>0)await sleep(250);else await sleep(50);
   }
-  progress=await api.qaRobotDeepProgress(ctx.runId,50);
-  const routeOk=progress.routes?.planned===336&&progress.routes?.passed===336&&progress.routes?.failed===0;
-  const journeyOk=progress.journeys?.planned===336&&progress.journeys?.passed===336&&progress.journeys?.failed===0;
-  const fullOk=progress.done===true&&(progress.failed||0)===0&&(progress.transportFailures||0)===0&&(progress.timeoutFailures||0)===0;
-  await record(ctx,{checkKey:"DOMAIN-ROUTING-336",layer:"DOMAIN",suite:"RUTAS_CANONICAS",severity:"CRITICAL",status:routeOk?"PASSED":"FAILED",actual:progress.routes||{},errorMessage:routeOk?null:`Rutas: ${progress.routes?.passed||0}/336 aprobadas · ${progress.routes?.failed||0} fallidas.`});
-  await record(ctx,{checkKey:"DOMAIN-JOURNEYS-336",layer:"DOMAIN",suite:"RECORRIDOS_COMPLETOS",severity:"CRITICAL",status:journeyOk?"PASSED":"FAILED",actual:progress.journeys||{},errorMessage:journeyOk?null:`Recorridos secuenciales: ${progress.journeys?.passed||0}/336 aprobados.`});
-  await record(ctx,{checkKey:"DOMAIN-EXTREME-CAMPAIGN",layer:"DOMAIN",suite:"CAMPAÑA_EXTREME",severity:"CRITICAL",status:fullOk?"PASSED":"FAILED",actual:progress,errorMessage:fullOk?null:`Planificados ${progress.total||0} · ejecutados ${progress.executed||0} · fallidos ${progress.failed||0} · pendientes ${progress.pending||0} · timeout ${progress.timeoutFailures||0} · transporte ${progress.transportFailures||0}.`});
+  progress=await safeDeepProgress(ctx.runId,50);
+  const routeOk=progress.routes?.planned===336&&progress.routes?.passed===336&&progress.routes?.failed===0&&progress.routes?.pending===0;
+  const journeyOk=progress.journeys?.planned===336&&progress.journeys?.passed===336&&progress.journeys?.failed===0&&progress.journeys?.pending===0;
+  const transportCases=progress.transportCases??progress.transportFailures??0;
+  const timeoutCases=progress.timeoutCases??progress.timeoutFailures??0;
+  const fullOk=progress.done===true&&(progress.failed||0)===0&&transportCases===0&&timeoutCases===0;
+  await record(ctx,{checkKey:"DOMAIN-ROUTING-336",layer:"DOMAIN",suite:"RUTAS_CANONICAS",severity:"CRITICAL",status:routeOk?"PASSED":"FAILED",actual:progress.routes||{},errorMessage:routeOk?null:`Rutas: ${progress.routes?.passed||0}/336 aprobadas · ${progress.routes?.failed||0} fallidas · ${progress.routes?.pending||0} pendientes.`});
+  await record(ctx,{checkKey:"DOMAIN-JOURNEYS-336",layer:"DOMAIN",suite:"RECORRIDOS_COMPLETOS",severity:"CRITICAL",status:journeyOk?"PASSED":"FAILED",actual:progress.journeys||{},errorMessage:journeyOk?null:`Recorridos: ${progress.journeys?.passed||0}/336 aprobados · ${progress.journeys?.failed||0} fallidos · ${progress.journeys?.pending||0} pendientes.`});
+  await record(ctx,{checkKey:"DOMAIN-EXTREME-CAMPAIGN",layer:"DOMAIN",suite:"CAMPAÑA_EXTREME",severity:"CRITICAL",status:fullOk?"PASSED":"FAILED",actual:progress,errorMessage:fullOk?null:`Planificados ${progress.total||0} · ejecutados ${progress.executed||0} · fallidos ${progress.failed||0} · pendientes ${progress.pending||0} · timeout casos ${timeoutCases} · transporte casos ${transportCases}.`});
   return progress;
 }
 
@@ -233,8 +260,8 @@ export async function runDeepQaCampaign(root,mode="EXTREME"){
     await record(ctx,{checkKey:"PLAN-DEEP-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:{mode:normalized,runId:run.runId}});
     if(normalized==="EXTREME")await runReleaseCampaign(ctx);else{
       const built=await api.qaRobotBuildDeepCampaign(ctx.runId,normalized);
-      let progress=await api.qaRobotDeepProgress(ctx.runId,24);
-      while((progress.pending||0)>0){await executeDeepBatch(progress.pendingIds||[],4);progress=await api.qaRobotDeepProgress(ctx.runId,24)}
+      let progress=await safeDeepProgress(ctx.runId,24);
+      while((progress.pending||0)>0){await executeDeepBatch(progress.pendingItems||progress.pendingIds||[],3);progress=await safeDeepProgress(ctx.runId,24)}
       await record(ctx,{checkKey:"DOMAIN-DEEP-CAMPAIGN",layer:"DOMAIN",suite:"CICLOS_TRANSVERSALES",severity:"CRITICAL",status:progress.failed===0&&progress.pending===0?"PASSED":"FAILED",actual:{...progress,built},errorMessage:progress.failed===0&&progress.pending===0?null:`${progress.failed||0} fallidos · ${progress.pending||0} pendientes.`});
     }
   }catch(error){
@@ -374,6 +401,7 @@ export async function runTotalQaRobot(root){
     await record(ctx,{checkKey:"PLAN-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:plan});
     await runBackend(ctx);
     await runReleaseCampaign(ctx);
+    await runPostCampaignHealth(ctx);
     frame=await prepareFrame(ctx);await runModuleCrawler(ctx,frame);await runResponsive(ctx,frame);await runSandboxProbes(ctx,frame);
   }catch(error){
     await record(ctx,{checkKey:"ROBOT-FATAL",layer:"UI",suite:"ORQUESTADOR",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});
@@ -402,14 +430,15 @@ export async function runRouteQaCampaign(root){
   let finalResult=null;
   try{
     const built=await api.qaRobotBuildRouteCampaign(run.runId);
-    let progress=await api.qaRobotDeepProgress(run.runId,36);
+    let progress=await safeDeepProgress(run.runId,24);
     const total=built.canonicalRoutes||336;
     while((progress.pending||0)>0||(progress.running||0)>0){
-      if(progress.pendingIds?.length)await executeDeepBatch(progress.pendingIds,6);
-      progress=await api.qaRobotDeepProgress(run.runId,36);
+      const items=(progress.pendingItems||[]).filter(x=>!x?.family||x.family==="ROUTE_CANONICAL").slice(0,12);
+      if(items.length)await executeDeepBatch(items,2);
+      progress=await safeDeepProgress(run.runId,24);
       const done=progress.executed||0;
       setRobotUi(root,{phase:"336 rutas canónicas",detail:`${fmt.number(done)}/${fmt.number(total)} ejecutadas · ${fmt.number(progress.passed||0)} aprobadas · ${fmt.number(progress.failed||0)} fallidas · timeouts ${fmt.number(progress.timeoutFailures||0)} · transporte ${fmt.number(progress.transportFailures||0)}`,progress:Math.min(98,5+(done/Math.max(1,total))*90)});
-      if(!progress.pendingIds?.length&&(progress.pending||0)>0)await sleep(120);
+      if(!(progress.pendingItems||[]).length&&(progress.pending||0)>0)await sleep(180);
     }
     finalResult=await api.qaRobotFinishDirectedRun(run.runId,"ROUTES_336");
     setRobotUi(root,{phase:finalResult.status==="PASSED"?"336/336 RUTAS APROBADAS":"RUTAS NO APROBADAS",detail:`Ejecutadas ${fmt.number(finalResult.executed||0)}/${fmt.number(finalResult.planned||0)} · fallidas ${fmt.number(finalResult.failed||0)} · pendientes ${fmt.number(finalResult.pending||0)} · timeout ${fmt.number(finalResult.timeoutFailures||0)} · transporte ${fmt.number(finalResult.transportFailures||0)}`,progress:100});
@@ -430,6 +459,7 @@ export async function resumeTotalQaRobot(root,runId){
     await api.qaRobotResetStaleCases(runId,30).catch(()=>{});
     await runBackend(ctx);
     await runReleaseCampaign(ctx,{build:false});
+    await runPostCampaignHealth(ctx);
     const frame=await prepareFrame(ctx);await runModuleCrawler(ctx,frame);await runResponsive(ctx,frame);await runSandboxProbes(ctx,frame);
   }catch(error){
     await record(ctx,{checkKey:"ROBOT-FATAL",layer:"UI",suite:"ORQUESTADOR",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});

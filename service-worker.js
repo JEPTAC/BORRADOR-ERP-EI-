@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-2-release-certification-20260812";
+const CACHE="erp-electroingenieria-v10-25-3-qa-release-stable-20260812";
 const ASSETS=[
   "./",
   "./index.html",

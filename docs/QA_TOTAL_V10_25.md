@@ -146,15 +146,15 @@ En **Actions → ERP QA Capacity → Run workflow** selecciona el perfil. Para `
 
 ## Supabase existente
 
-Desde V10.25 ejecutar únicamente:
+Si la base ya está en V10.25.2 y tiene aplicadas las migraciones 053, 054 y 055, ejecutar únicamente:
 
 ```text
-054_qa_deep_capacity_integrity_v10_25_1.sql
+056_qa_release_stability_real_journeys_v10_25_3.sql
 ```
 
-Después ejecutar `99_POST_INSTALL_CHECK.sql`.
+Después puede ejecutarse `99_POST_INSTALL_CHECK.sql` como verificación de solo lectura.
 
-No ejecutar `00_INSTALL_ALL.sql` sobre una base existente.
+No ejecutar `00_INSTALL_ALL.sql` sobre una base existente. No reanudar una corrida V10.25.2 que ya acumuló timeouts/transporte: iniciar una corrida nueva V10.25.3.
 
 ## V10.25.2 · Certificación de liberación
 
@@ -172,3 +172,12 @@ Criterios mínimos de certificación:
 - 0 pedidos `TEST-QA` remanentes después de la limpieza.
 
 Los errores de transporte se reintentan por caso y nunca detienen los casos restantes. Las ejecuciones incompletas pueden reanudarse desde el portal QA. La antigua matriz monolítica susceptible a `statement_timeout` no forma parte del gate de liberación V10.25.2.
+
+## V10.25.3 · Estabilidad de certificación
+
+Las rutas canónicas y los recorridos completos ya no se ejecutan en una sola sentencia larga. Cada invocación procesa una etapa operativa real y persiste el avance. El orden es 336 rutas, 336 recorridos completos y después la campaña EXTREME. La concurrencia deliberadamente se limita a 2 workers para rutas/recorridos y 3 para casos profundos.
+
+Los recorridos crean los prerrequisitos que un usuario real debe registrar: validación financiera, orden de compra, recepción física, asignación de auxiliares, Corte paralelo con pausa/reanudación/evidencia/recogida, Alistamiento, factura o Anexo PVP, guía + destino, evidencia de entrega y cierre. Los archivos QA son registros sintéticos exclusivos de pedidos TEST y no escriben bytes en Drive.
+
+Una corrida de V10.25.2 con timeouts/transporte no debe reanudarse: iniciar una corrida nueva V10.25.3.
+

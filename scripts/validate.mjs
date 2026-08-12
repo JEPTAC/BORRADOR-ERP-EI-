@@ -91,6 +91,11 @@ check(fs.existsSync(path.join(root,"sql/migrations/052_workforce_governance_occu
 check(fs.existsSync(path.join(root,"sql/migrations/053_total_system_qa_robot_v10_25.sql")),"Falta la migración 053 del Robot QA total V10.25.");
 check(fs.existsSync(path.join(root,"sql/migrations/054_qa_deep_capacity_integrity_v10_25_1.sql")),"Falta la migración 054 de QA profundo y capacidad V10.25.1.");
 check(fs.existsSync(path.join(root,"sql/migrations/055_release_certification_orchestrator_v10_25_2.sql")),"Falta la migración 055 de certificación reanudable V10.25.2.");
+check(fs.existsSync(path.join(root,"sql/migrations/056_qa_release_stability_real_journeys_v10_25_3.sql")),"Falta la migración 056 de estabilidad QA release V10.25.3.");
+check(sql.includes("erp_x_qa_robot_execute_release_slice")&&sql.includes("qa_release_journey_state")&&sql.includes("CUTTING_PICKUP_AND_PICKING_FULL")&&sql.includes("erp_x_qa_release_health"),"V10.25.3 no conserva recorridos por etapas, Corte/recogida real o health de release.");
+check(executable.includes("qaRobotExecuteReleaseSlice")&&executable.includes("safeDeepProgress")&&executable.includes("runPostCampaignHealth"),"El frontend V10.25.3 no usa el orquestador por etapas o health posterior a campaña.");
+check(!read("assets/js/modules/qa-total.js").includes("executeDeepBatch(progress.pendingIds,6)"),"El QA V10.25.3 no debe volver a lanzar seis recorridos pesados simultáneos.");
+check(read("assets/js/modules/qa-total.js").includes('concurrency=family==="ROUTE_CANONICAL"||family==="JOURNEY_FULL"?2:3'),"V10.25.3 debe limitar concurrencia de rutas/recorridos a 2 y casos profundos a 3.");
 check(sql.includes("erp_x_qa_robot_build_release_campaign")&&sql.includes("erp_x_qa_robot_build_route_campaign")&&sql.includes("erp_x_qa_robot_release_certificate")&&sql.includes("ROUTE_CANONICAL")&&sql.includes("JOURNEY_FULL"),"V10.25.2 no contiene inventario de rutas/recorridos o certificado de liberación.");
 check(sql.includes("transport_failures")&&sql.includes("erp_x_qa_robot_reset_stale_cases")&&sql.includes("erp_x_qa_robot_latest_resumable"),"V10.25.2 no conserva reintentos, transporte o reanudación persistente.");
 check(executable.includes("runReleaseCampaign")&&executable.includes("resumeTotalQaRobot")&&executable.includes("runRouteQaCampaign"),"El frontend V10.25.2 no expone certificación, reanudación y rutas aisladas.");
