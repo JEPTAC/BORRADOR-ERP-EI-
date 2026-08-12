@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.25.1
+-- ERP Electroingeniería V10.25.2
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -145,3 +145,22 @@ select
   position('NO_DELIVERY' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as qa_profundo_prueba_no_entrega,
   position('CANCELLATION' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as qa_profundo_prueba_cancelacion,
   position('deepFailures' in pg_get_functiondef('public.erp_x_qa_robot_detail(uuid)'::regprocedure))>0 as detalle_qa_expone_fallos_profundos;
+
+
+-- V10.25.2 · Certificación reanudable de liberación.
+select
+  to_regprocedure('public.erp_x_qa_robot_build_release_campaign(uuid)') is not null as construir_certificacion_release,
+  to_regprocedure('public.erp_x_qa_robot_build_route_campaign(uuid)') is not null as construir_336_rutas_aisladas,
+  to_regprocedure('public.erp_x_qa_robot_transport_failure(uuid,text,boolean)') is not null as registrar_transporte_sin_cortar_campana,
+  to_regprocedure('public.erp_x_qa_robot_reset_stale_cases(uuid,integer)') is not null as recuperar_casos_interrumpidos,
+  to_regprocedure('public.erp_x_qa_robot_release_certificate(uuid)') is not null as certificado_release,
+  to_regprocedure('public.erp_x_qa_robot_latest_resumable()') is not null as reanudar_certificacion,
+  to_regprocedure('public.erp_x_qa_robot_finish_directed_run(uuid,text)') is not null as cierre_prueba_dirigida,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_deep_cases' and column_name='attempt_count') as casos_con_reintentos,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_deep_cases' and column_name='transport_failures') as transporte_persistido,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_deep_cases' and column_name='timeout_failures') as timeout_persistido,
+  exists(select 1 from information_schema.columns where table_schema='erp_supply' and table_name='qa_deep_cases' and column_name='cleanup_verified') as limpieza_verificable,
+  position('ROUTE_CANONICAL' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as ejecutor_prueba_336_aisladas,
+  position('JOURNEY_FULL' in pg_get_functiondef('public.erp_x_qa_robot_execute_deep_case(uuid)'::regprocedure))>0 as ejecutor_prueba_recorridos_completos,
+  position('release_certificate' in lower(pg_get_functiondef('public.erp_x_qa_robot_finish_run(uuid,boolean)'::regprocedure)))>0 as cierre_subordinado_a_certificado,
+  position('10.25.2' in pg_get_functiondef('public.erp_x_qa_robot_plan()'::regprocedure))>0 as plan_release_v10_25_2;

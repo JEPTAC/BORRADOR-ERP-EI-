@@ -19,7 +19,7 @@ test("Super Admin ve y ejecuta el Robot QA total",async({page},testInfo)=>{
     await page.getByRole("button",{name:"Continuar"}).click();
     await page.getByRole("button",{name:"Continuar"}).click();
     await page.getByRole("button",{name:"Iniciar recorrido total"}).click();
-    await expect(page.locator("#qa-total-phase")).toHaveText("Sistema aprobado",{timeout:45*60*1000});
+    await expect(page.locator("#qa-total-phase")).toHaveText("ERP CERTIFICADO PARA LIBERACIÓN",{timeout:45*60*1000});
     await expect(page.locator("#qa-total-counts")).toContainText("0 fallidas");
   }
   expect(errors).toEqual([]);

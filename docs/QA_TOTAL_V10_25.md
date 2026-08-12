@@ -155,3 +155,20 @@ Desde V10.25 ejecutar únicamente:
 Después ejecutar `99_POST_INSTALL_CHECK.sql`.
 
 No ejecutar `00_INSTALL_ALL.sql` sobre una base existente.
+
+## V10.25.2 · Certificación de liberación
+
+La prueba total ya no acepta una ejecución parcial como resultado satisfactorio. El orquestador construye casos persistentes y reanudables y solo emite `CERTIFIED` cuando todos los gates están completos.
+
+Criterios mínimos de certificación:
+
+- 336/336 rutas canónicas ejecutadas y aprobadas como casos independientes.
+- 336/336 recorridos secuenciales completos ejecutados y aprobados.
+- Campaña EXTREME: ejecutados = planificados, fallidos = 0, pendientes = 0 y transporte = 0.
+- Todos los módulos visibles para Super Admin abren sin errores de runtime/RPC.
+- 54 comprobaciones responsive (6 anchos × 9 módulos) aprobadas.
+- 14 pruebas Sandbox UI abren la tarjeta y ejecutan su acción primaria; `found=true` sin `opened=true` ya no aprueba.
+- Integridad global, Workforce, colas, reservas y diagnósticos estructurales/flujo aprobados.
+- 0 pedidos `TEST-QA` remanentes después de la limpieza.
+
+Los errores de transporte se reintentan por caso y nunca detienen los casos restantes. Las ejecuciones incompletas pueden reanudarse desde el portal QA. La antigua matriz monolítica susceptible a `statement_timeout` no forma parte del gate de liberación V10.25.2.

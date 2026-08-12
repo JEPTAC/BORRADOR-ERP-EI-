@@ -140,13 +140,13 @@ async function clickSafeControls(frame,module){
 }
 
 async function runBackend(ctx){
-  setRobotUi(ctx.root,{phase:"Motor funcional",detail:"Recorriendo rutas comerciales, controles y gates de integridad…",progress:5});
-  const result=await capture(ctx,{checkKey:"DOMAIN-ROUTING-336",layer:"DOMAIN",suite:"RUTAS_336",severity:"CRITICAL",success:r=>r?.matrix?.status==="PASSED",actual:r=>r?.matrix||{}},()=>api.runQaV1022(true));
-  if(result){
-    await record(ctx,{checkKey:"DOMAIN-CONTROLS-10",layer:"DOMAIN",suite:"CONTROLES_EMPRESARIALES",severity:"CRITICAL",status:result.controls?.status==="PASSED"?"PASSED":"FAILED",actual:result.controls||{},errorMessage:result.controls?.status==="PASSED"?null:"La suite empresarial reportó fallos."});
-    await record(ctx,{checkKey:"INTEGRITY-STRUCTURAL",layer:"INTEGRITY",suite:"AUTODIAGNOSTICO",severity:"CRITICAL",status:result.selfCheck?.success?"PASSED":"FAILED",actual:result.selfCheck||{},errorMessage:result.selfCheck?.success?null:"El autodiagnóstico estructural no está completamente aprobado."});
-    await record(ctx,{checkKey:"INTEGRITY-CROSS-FLOW",layer:"INTEGRITY",suite:"INTEGRIDAD_FLUJOS",severity:"CRITICAL",status:result.flowIntegrity?.success?"PASSED":"FAILED",actual:result.flowIntegrity||{},errorMessage:result.flowIntegrity?.success?null:"La integridad cruzada de flujos encontró inconsistencias."});
-  }
+  setRobotUi(ctx.root,{phase:"Contratos e integridad",detail:"Validando controles empresariales, contratos, ramas críticas e integridad antes de ejecutar miles de casos…",progress:4});
+
+  const controls=await capture(ctx,{checkKey:"DOMAIN-CONTROLS-10",layer:"DOMAIN",suite:"CONTROLES_EMPRESARIALES",severity:"CRITICAL",success:r=>r?.status==="PASSED"||r?.failed===0,actual:r=>r||{}},()=>api.runQaControls(true));
+  if(!controls)appendLog(ctx.root,"La suite de controles no devolvió resultado; la certificación no podrá aprobar.","failed");
+
+  await capture(ctx,{checkKey:"INTEGRITY-STRUCTURAL",layer:"INTEGRITY",suite:"AUTODIAGNOSTICO",severity:"CRITICAL",success:r=>r?.success===true},()=>api.selfCheckV1022());
+  await capture(ctx,{checkKey:"INTEGRITY-FLOW",layer:"INTEGRITY",suite:"INTEGRIDAD_FLUJOS",severity:"CRITICAL",success:r=>r?.success===true},()=>api.flowIntegrity());
 
   const contract=await capture(ctx,{checkKey:"CONTRACT-SYSTEM",layer:"CONTRACT",suite:"CONTRATO_SISTEMA",severity:"CRITICAL",success:r=>r?.success===true},()=>api.qaRobotSystemContract());
   for(const check of contract?.checks||[]){await record(ctx,{checkKey:`CONTRACT-${check.key}`,layer:"CONTRACT",suite:"CONTRATO_SISTEMA",severity:"HIGH",status:check.success?"PASSED":"FAILED",actual:check,errorMessage:check.success?null:check.detail})}
@@ -162,45 +162,66 @@ async function runBackend(ctx){
 }
 
 
-async function executeDeepBatch(ids=[],concurrency=4){
+async function executeOneReleaseCase(id,{maxAttempts=5}={}){
+  let lastError=null;
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
+    try{return await api.qaRobotExecuteDeepCase(id)}
+    catch(error){
+      lastError=error;
+      const message=summarizeError(error);
+      await api.qaRobotTransportFailure(id,`Intento ${attempt}/${maxAttempts} · ${message}`,attempt===maxAttempts).catch(()=>{});
+      if(attempt<maxAttempts)await sleep(Math.min(1600,180*Math.pow(2,attempt-1)));
+    }
+  }
+  return {caseId:id,status:"FAILED",transportFailure:true,errorMessage:summarizeError(lastError)};
+}
+
+async function executeDeepBatch(ids=[],concurrency=6){
   const queue=[...ids];const results=[];
   const workers=new Array(Math.min(concurrency,queue.length||1)).fill(0).map(async()=>{
-    while(queue.length){
-      const id=queue.shift();let lastError=null;let result=null;
-      for(let attempt=0;attempt<2;attempt++){
-        try{result=await api.qaRobotExecuteDeepCase(id);lastError=null;break}catch(error){lastError=error;await sleep(180*(attempt+1))}
-      }
-      results.push(result||{caseId:id,status:"FAILED",transportFailure:true,errorMessage:summarizeError(lastError)});
-    }
+    while(queue.length){const id=queue.shift();results.push(await executeOneReleaseCase(id,{maxAttempts:5}))}
   });
   await Promise.all(workers);return results;
 }
 
-async function runDeepCampaign(ctx,mode="TOTAL"){
-  const normalized=String(mode||"TOTAL").toUpperCase();
-  setRobotUi(ctx.root,{phase:normalized==="EXTREME"?"Matriz exhaustiva cruzada":"Ciclos transversales profundos",detail:normalized==="EXTREME"?"Cruzando las 336 entradas con cada etapa, notas, novedades, reportes, esperas, aprobaciones, cancelaciones y no-entregas…":"Probando notas, novedades, reportes, esperas, aprobaciones y cancelación en todas las etapas…",progress:normalized==="EXTREME"?8:16});
-  const built=await api.qaRobotBuildDeepCampaign(ctx.runId,normalized);
-  let progress=await api.qaRobotDeepProgress(ctx.runId,12);
-  const total=Math.max(1,progress.total||built.totalCases||1);let transportFailures=[];
-  appendLog(ctx.root,`${normalized==="EXTREME"?"Campaña exhaustiva":"Campaña profunda"}: ${fmt.number(total)} casos aislados.`);
-  while((progress.pending||0)>0){
-    const ids=progress.pendingIds||[];
-    if(!ids.length)break;
-    const batch=await executeDeepBatch(ids,normalized==="EXTREME"?6:4);
-    transportFailures.push(...batch.filter(x=>x?.transportFailure));
-    progress=await api.qaRobotDeepProgress(ctx.runId,12);
-    const done=(progress.passed||0)+(progress.failed||0);
-    const pct=normalized==="EXTREME"?12+Math.min(43,(done/total)*43):17+Math.min(18,(done/total)*18);
-    setRobotUi(ctx.root,{detail:`${fmt.number(done)}/${fmt.number(total)} casos · ${fmt.number(progress.failed||0)} fallidos`,progress:pct});
-    if(transportFailures.length){break}
-    await sleep(30);
+async function runReleaseCampaign(ctx,{build=true}={}){
+  setRobotUi(ctx.root,{phase:"Certificación funcional completa",detail:"Inventariando 336 rutas + 336 recorridos secuenciales + todas las ramas finitas aplicables…",progress:9});
+  let built=null;
+  let progress=await api.qaRobotDeepProgress(ctx.runId,36).catch(()=>null);
+  if(build||progress?.routes?.planned!==336||progress?.journeys?.planned!==336){
+    built=await api.qaRobotBuildReleaseCampaign(ctx.runId);
+    progress=await api.qaRobotDeepProgress(ctx.runId,36);
   }
-  progress=await api.qaRobotDeepProgress(ctx.runId,30);
-  const ok=progress.done===true&&(progress.failed||0)===0&&transportFailures.length===0;
-  const failures=[...(progress.failures||[]),...transportFailures].slice(0,20);
-  await record(ctx,{checkKey:normalized==="EXTREME"?"DOMAIN-EXTREME-CAMPAIGN":"DOMAIN-DEEP-CAMPAIGN",layer:"DOMAIN",suite:normalized==="EXTREME"?"MATRIZ_EXHAUSTIVA_CRUZADA":"CICLOS_TRANSVERSALES",severity:"CRITICAL",status:ok?"PASSED":"FAILED",actual:{...progress,mode:normalized,transportFailures:transportFailures.length},errorMessage:ok?null:`${progress.failed||0} caso(s) funcionales fallaron${transportFailures.length?` · ${transportFailures.length} fallo(s) de transporte`:""}. ${failures.slice(0,3).map(x=>x.caseKey||x.caseId||x.error).filter(Boolean).join(" · ")}`});
+  await api.qaRobotResetStaleCases(ctx.runId,60).catch(()=>{});
+  progress=await api.qaRobotDeepProgress(ctx.runId,36);
+  const total=Math.max(1,progress.total||built?.totalCases||1);
+  appendLog(ctx.root,`Plan de liberación: ${fmt.number(total)} casos persistentes. Rutas canónicas: ${fmt.number(progress.routes?.planned||0)} · recorridos completos: ${fmt.number(progress.journeys?.planned||0)}.`);
+  let stagnant=0;let lastDone=-1;
+  while((progress.pending||0)>0||(progress.running||0)>0){
+    if((progress.pending||0)>0){
+      const ids=progress.pendingIds||[];
+      if(ids.length)await executeDeepBatch(ids,6);
+    }
+    progress=await api.qaRobotDeepProgress(ctx.runId,36);
+    const done=(progress.executed??((progress.passed||0)+(progress.failed||0)));
+    const pct=10+Math.min(45,(done/total)*45);
+    setRobotUi(ctx.root,{detail:`${fmt.number(done)}/${fmt.number(total)} ejecutados · ${fmt.number(progress.passed||0)} aprobados · ${fmt.number(progress.failed||0)} fallidos · ${fmt.number(progress.pending||0)} pendientes · timeouts ${fmt.number(progress.timeoutFailures||0)} · transporte ${fmt.number(progress.transportFailures||0)}`,progress:pct});
+    if(done===lastDone)stagnant++;else stagnant=0;
+    lastDone=done;
+    if(stagnant>=4&&(progress.running||0)>0){await api.qaRobotResetStaleCases(ctx.runId,45).catch(()=>{});stagnant=0}
+    if(!progress.pendingIds?.length&&(progress.pending||0)>0)await sleep(180);
+    else await sleep(30);
+  }
+  progress=await api.qaRobotDeepProgress(ctx.runId,50);
+  const routeOk=progress.routes?.planned===336&&progress.routes?.passed===336&&progress.routes?.failed===0;
+  const journeyOk=progress.journeys?.planned===336&&progress.journeys?.passed===336&&progress.journeys?.failed===0;
+  const fullOk=progress.done===true&&(progress.failed||0)===0&&(progress.transportFailures||0)===0&&(progress.timeoutFailures||0)===0;
+  await record(ctx,{checkKey:"DOMAIN-ROUTING-336",layer:"DOMAIN",suite:"RUTAS_CANONICAS",severity:"CRITICAL",status:routeOk?"PASSED":"FAILED",actual:progress.routes||{},errorMessage:routeOk?null:`Rutas: ${progress.routes?.passed||0}/336 aprobadas · ${progress.routes?.failed||0} fallidas.`});
+  await record(ctx,{checkKey:"DOMAIN-JOURNEYS-336",layer:"DOMAIN",suite:"RECORRIDOS_COMPLETOS",severity:"CRITICAL",status:journeyOk?"PASSED":"FAILED",actual:progress.journeys||{},errorMessage:journeyOk?null:`Recorridos secuenciales: ${progress.journeys?.passed||0}/336 aprobados.`});
+  await record(ctx,{checkKey:"DOMAIN-EXTREME-CAMPAIGN",layer:"DOMAIN",suite:"CAMPAÑA_EXTREME",severity:"CRITICAL",status:fullOk?"PASSED":"FAILED",actual:progress,errorMessage:fullOk?null:`Planificados ${progress.total||0} · ejecutados ${progress.executed||0} · fallidos ${progress.failed||0} · pendientes ${progress.pending||0} · timeout ${progress.timeoutFailures||0} · transporte ${progress.transportFailures||0}.`});
   return progress;
 }
+
 
 export async function runDeepQaCampaign(root,mode="EXTREME"){
   if(!hasRole("super_admin"))throw new Error("La campaña QA profunda es exclusiva de Superadministración.");
@@ -210,11 +231,16 @@ export async function runDeepQaCampaign(root,mode="EXTREME"){
   let finalResult=null;
   try{
     await record(ctx,{checkKey:"PLAN-DEEP-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:{mode:normalized,runId:run.runId}});
-    await runDeepCampaign(ctx,normalized);
+    if(normalized==="EXTREME")await runReleaseCampaign(ctx);else{
+      const built=await api.qaRobotBuildDeepCampaign(ctx.runId,normalized);
+      let progress=await api.qaRobotDeepProgress(ctx.runId,24);
+      while((progress.pending||0)>0){await executeDeepBatch(progress.pendingIds||[],4);progress=await api.qaRobotDeepProgress(ctx.runId,24)}
+      await record(ctx,{checkKey:"DOMAIN-DEEP-CAMPAIGN",layer:"DOMAIN",suite:"CICLOS_TRANSVERSALES",severity:"CRITICAL",status:progress.failed===0&&progress.pending===0?"PASSED":"FAILED",actual:{...progress,built},errorMessage:progress.failed===0&&progress.pending===0?null:`${progress.failed||0} fallidos · ${progress.pending||0} pendientes.`});
+    }
   }catch(error){
     await record(ctx,{checkKey:"DEEP-FATAL",layer:"DOMAIN",suite:"ORQUESTADOR_PROFUNDO",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});
   }finally{
-    finalResult=await api.qaRobotFinishRun(run.runId,true).catch(error=>({status:"FAILED",failed:1,error:summarizeError(error)}));
+    finalResult=await api.qaRobotFinishDirectedRun(run.runId,normalized).catch(error=>({status:"FAILED",failed:1,error:summarizeError(error)}));
     setRobotUi(root,{phase:finalResult.status==="PASSED"?"Campaña aprobada":"Campaña con hallazgos",detail:finalResult.status==="PASSED"?"Todos los casos profundos finalizaron correctamente.":`${finalResult.failed||0} comprobación(es) agregadas fallaron. Revisa los casos profundos.`,progress:100,counts:`${finalResult.passed||0} correctas · ${finalResult.failed||0} fallidas · ${finalResult.warnings||0} advertencias`});
     root.dispatchEvent(new CustomEvent("erp:qa-total-finished",{detail:{runId:run.runId,result:finalResult}}));
   }
@@ -260,6 +286,37 @@ function rowForOrder(doc,orderNumber){
   for(const node of nodes){const row=node.closest("article,tr,.erp-work-row,.queue-row,.lab-order-row,.sent-order-card,.order-row");if(row)return row}
   return nodes[0]?.parentElement||null;
 }
+
+async function exercisePrimarySandboxAction(frame,step){
+  const doc=frame.contentDocument,w=frame.contentWindow;const before=frameErrors(w).length;
+  const selectors={
+    CARTERA:"[data-financial-start]:not([disabled])",CAJA:"[data-financial-start]:not([disabled])",
+    COMPRAS:"[data-next-action]:not([disabled]),[data-status-choice='WORKING']:not([disabled])",
+    RECEPCION_MERCANCIA:"[data-next-action]:not([disabled]),[data-status-choice='WORKING']:not([disabled])",
+    RECEPCION_PEDIDO:"[data-take-order]:not([disabled])",ALISTAMIENTO:"[data-picking-take]:not([disabled]),[data-resume-partial]:not([disabled])",
+    FACTURACION:"[data-billing-action='accept']:not([disabled])",CAJA_FACTURACION:"[data-cash-action='accept']:not([disabled])",
+    CLIENT_POINT:"[data-take-shipping]:not([disabled])",CLIENT_PICKUP:"[data-take-shipping]:not([disabled])",
+    LOCAL_DISPATCH:"[data-take-shipping]:not([disabled])",NATIONAL_DISPATCH:"[data-take-shipping]:not([disabled])"
+  };
+  if(step==="CLOSURE"){
+    const input=doc.querySelector("#modal-root [data-closure-photo]");
+    if(!input)return {executed:false,action:"CLOSURE_EVIDENCE",reason:"No apareció el control de foto de cierre."};
+    try{
+      const file=new w.File([new Uint8Array([137,80,78,71,13,10,26,10])],"qa-cierre.png",{type:"image/png"});
+      const dt=new w.DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new w.Event("change",{bubbles:true}));
+      await sleep(1500);
+      const errors=frameErrors(w).slice(before);
+      return {executed:errors.length===0,action:"CLOSURE_EVIDENCE",errors};
+    }catch(error){return {executed:false,action:"CLOSURE_EVIDENCE",reason:summarizeError(error)}}
+  }
+  const selector=selectors[step];
+  if(!selector)return {executed:false,action:"PRIMARY",reason:`No existe driver UI para ${step}.`};
+  const button=doc.querySelector(`#modal-root ${selector}`);
+  if(!button||button.disabled||!visible(button))return {executed:false,action:"PRIMARY",reason:`No apareció una acción primaria habilitada para ${step}.`};
+  const label=(button.textContent||button.getAttribute("aria-label")||step).trim().replace(/\s+/g," ").slice(0,120);
+  try{button.click();await sleep(850);const errors=frameErrors(w).slice(before);return {executed:errors.length===0,action:label,errors}}
+  catch(error){return {executed:false,action:label,reason:summarizeError(error)}}
+}
 async function runSandboxProbes(ctx,frame){
   setRobotUi(ctx.root,{phase:"Operación Sandbox",detail:"Creando pedidos TEST y abriendo cada etapa con la interfaz real…",progress:88});
   for(const [step,module,type] of STEP_PROBES){
@@ -268,16 +325,16 @@ async function runSandboxProbes(ctx,frame){
       seeded=await api.qaRobotSeedOrder(ctx.runId,{scenarioKey:`STEP-${step}`,stepCode:step,orderType:type,paymentCondition:type==="PVN"?"CASH":"CREDIT",deliveryRoute:step==="NATIONAL_DISPATCH"?"NATIONAL_DISPATCH":"LOCAL_DISPATCH",requiresPurchase:type==="PVE"});
       await gotoFrame(frame,module,{sandbox:"1",step});
       const found=await waitForFrame(frame,doc=>Boolean(rowForOrder(doc,seeded.orderNumber)),10000);
-      let opened=false;
+      let opened=false;let primary={executed:false,action:null,reason:null};
       if(found){
         const row=rowForOrder(frame.contentDocument,seeded.orderNumber);
         const open=[...row.querySelectorAll("button")].find(btn=>visible(btn)&&/(abrir|continuar|retomar|gestionar|ver|tomar)/i.test(btn.textContent||""));
-        if(open){open.click();opened=true;await sleep(300)}
+        if(open){open.click();opened=true;await sleep(500);primary=await exercisePrimarySandboxAction(frame,step)}
       }
       const moduleError=frame.contentDocument.querySelector("#page-content .module-error")?.textContent?.trim()||null;
       const runtime=frameErrors(frame.contentWindow).filter(e=>e.at&&new Date(e.at).getTime()>=Date.now()-15000).slice(-10);
-      const ok=found&&!moduleError&&runtime.length===0;
-      await record(ctx,{checkKey:`SANDBOX-STEP-${step}`,layer:"SANDBOX",suite:"ETAPAS_OPERATIVAS",moduleCode:module,orderId:seeded.orderId,severity:"CRITICAL",status:ok?"PASSED":"FAILED",actual:{orderNumber:seeded.orderNumber,found,opened,moduleError,runtimeErrors:runtime},durationMs:Math.round(performance.now()-started),errorMessage:ok?null:moduleError||(!found?"El pedido TEST no apareció en la cola Sandbox de su etapa.":runtime.map(x=>x.message).join(" · "))});
+      const ok=found&&opened&&primary.executed&&!moduleError&&runtime.length===0;
+      await record(ctx,{checkKey:`SANDBOX-STEP-${step}`,layer:"SANDBOX",suite:"ETAPAS_OPERATIVAS",moduleCode:module,orderId:seeded.orderId,severity:"CRITICAL",status:ok?"PASSED":"FAILED",actual:{orderNumber:seeded.orderNumber,found,opened,primaryActionExecuted:primary.executed,primaryAction:primary.action,primaryReason:primary.reason,moduleError,runtimeErrors:runtime},durationMs:Math.round(performance.now()-started),errorMessage:ok?null:[moduleError,!found?"El pedido TEST no apareció en la cola Sandbox de su etapa.":null,found&&!opened?"La tarjeta apareció pero el Robot no logró abrirla.":null,opened&&!primary.executed?`La tarjeta abrió, pero no ejecutó su acción primaria: ${primary.reason||primary.action||"sin detalle"}.`:null,runtime.map(x=>x.message).join(" · ")].filter(Boolean).join(" · ")});
       frame.contentDocument.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
     }catch(error){
       await record(ctx,{checkKey:`SANDBOX-STEP-${step}`,layer:"SANDBOX",suite:"ETAPAS_OPERATIVAS",moduleCode:module,orderId:seeded?.orderId||null,severity:"CRITICAL",status:"FAILED",durationMs:Math.round(performance.now()-started),errorMessage:summarizeError(error)});
@@ -289,8 +346,18 @@ async function runSandboxProbes(ctx,frame){
     cutOrder=await api.qaRobotSeedOrder(ctx.runId,{scenarioKey:"CUT-PARALLEL-EVIDENCE",stepCode:"ALISTAMIENTO",orderType:"PVC",paymentCondition:"CREDIT",deliveryRoute:"LOCAL_DISPATCH",requiresCut:true});
     await gotoFrame(frame,"cutting",{sandbox:"1"});
     const found=await waitForFrame(frame,doc=>doc.querySelector("#page-content")?.textContent?.includes("QA-REF-001"),10000);
+    let opened=false,startedCut=false;
+    if(found){
+      const groupButton=[...frame.contentDocument.querySelectorAll("[data-cut-group]")].find(visible);
+      if(groupButton){groupButton.click();opened=await waitForFrame(frame,doc=>Boolean(doc.querySelector("#modal-root [data-start-cut],#modal-root [data-pause-cut],#modal-root [data-resume-cut]")),8000);
+        const startButton=frame.contentDocument.querySelector("#modal-root [data-start-cut]");
+        if(startButton&&visible(startButton)&&!startButton.disabled){startButton.click();await sleep(900);startedCut=Boolean(frame.contentDocument.querySelector("#modal-root [data-pause-cut],#modal-root [data-cut-step='1']"))}
+        else startedCut=Boolean(frame.contentDocument.querySelector("#modal-root [data-pause-cut],#modal-root [data-resume-cut]"));
+      }
+    }
     const error=frame.contentDocument.querySelector("#page-content .module-error")?.textContent?.trim()||null;
-    await record(ctx,{checkKey:"SANDBOX-CUTTING-PARALLEL",layer:"SANDBOX",suite:"CORTE_MODERNO",moduleCode:"cutting",orderId:cutOrder.orderId,severity:"CRITICAL",status:found&&!error?"PASSED":"FAILED",actual:{found,error},durationMs:Math.round(performance.now()-started),errorMessage:found&&!error?null:error||"El requerimiento de Corte TEST no apareció en el Centro de Corte."});
+    const ok=found&&opened&&startedCut&&!error;
+    await record(ctx,{checkKey:"SANDBOX-CUTTING-PARALLEL",layer:"SANDBOX",suite:"CORTE_MODERNO",moduleCode:"cutting",orderId:cutOrder.orderId,severity:"CRITICAL",status:ok?"PASSED":"FAILED",actual:{found,opened,primaryActionExecuted:startedCut,error},durationMs:Math.round(performance.now()-started),errorMessage:ok?null:error||(!found?"El requerimiento de Corte TEST no apareció en el Centro de Corte.":!opened?"La referencia apareció pero no abrió el flujo de Corte.":"El flujo abrió pero no logró ejecutar Iniciar corte.")});
   }catch(error){await record(ctx,{checkKey:"SANDBOX-CUTTING-PARALLEL",layer:"SANDBOX",suite:"CORTE_MODERNO",moduleCode:"cutting",orderId:cutOrder?.orderId||null,severity:"CRITICAL",status:"FAILED",durationMs:Math.round(performance.now()-started),errorMessage:summarizeError(error)})}
 }
 
@@ -306,18 +373,73 @@ export async function runTotalQaRobot(root){
     const plan=await api.qaRobotPlan();ctx.plannedChecks=5+(plan?.domain?.enterpriseControls||10)+(plan?.domain?.branchChecks||10)+8+((state.modules||[]).filter(m=>m.canRead).length)+RESPONSIVE_MODULES.length*RESPONSIVE_WIDTHS.length+STEP_PROBES.length+1;
     await record(ctx,{checkKey:"PLAN-READY",layer:"CONTRACT",suite:"PLAN_QA",severity:"INFO",status:"PASSED",actual:plan});
     await runBackend(ctx);
-    await runDeepCampaign(ctx,"EXTREME");
+    await runReleaseCampaign(ctx);
     frame=await prepareFrame(ctx);await runModuleCrawler(ctx,frame);await runResponsive(ctx,frame);await runSandboxProbes(ctx,frame);
   }catch(error){
     await record(ctx,{checkKey:"ROBOT-FATAL",layer:"UI",suite:"ORQUESTADOR",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});
   }finally{
     setRobotUi(root,{phase:"Cerrando y limpiando",detail:"Eliminando pedidos TEST creados por esta ejecución…",progress:97});
-    finalResult=await api.qaRobotFinishRun(run.runId,true).catch(error=>({status:"FAILED",failed:(ctx.lastCounts?.failed||0)+1,error:summarizeError(error)}));
-    setRobotUi(root,{phase:finalResult.status==="PASSED"?"Sistema aprobado":"Revisión necesaria",detail:finalResult.status==="PASSED"?"El Robot QA terminó sin fallos críticos.":`${finalResult.failed||0} comprobación(es) fallaron. Abre el detalle antes de liberar cambios.`,progress:100,counts:`${finalResult.passed||0} correctas · ${finalResult.failed||0} fallidas · ${finalResult.warnings||0} advertencias`});
-    appendLog(root,finalResult.status==="PASSED"?"✓ Ejecución total aprobada.":`× Ejecución terminada con ${finalResult.failed||0} fallo(s).`,finalResult.status==="PASSED"?"passed":"failed");
+    finalResult=await api.qaRobotFinishRun(run.runId,true).catch(error=>({status:"FAILED",releaseState:"FAILED",certified:false,failed:(ctx.lastCounts?.failed||0)+1,error:summarizeError(error)}));
+    const certified=finalResult.certified===true;
+    const releaseState=finalResult.releaseState||"FAILED";
+    const gates=finalResult.certificate?.gates||{};
+    const releaseDetail=certified
+      ?`336/336 rutas · 336/336 recorridos · ${fmt.number(gates.extreme?.executed||0)}/${fmt.number(gates.extreme?.planned||0)} casos · 0 pendientes · 0 transporte · interfaz, integridad y responsive aprobados.`
+      :releaseState==="INCOMPLETE"
+        ?`QA incompleto: ${fmt.number(gates.extreme?.executed||0)}/${fmt.number(gates.extreme?.planned||0)} casos ejecutados · ${fmt.number(gates.extreme?.pending||0)} pendientes. No liberar.`
+        :`No certificado. Rutas ${fmt.number(gates.routing?.passed||0)}/336 · recorridos ${fmt.number(gates.journeys?.passed||0)}/336 · fallidos ${fmt.number(gates.extreme?.failed||0)} · timeout ${fmt.number(gates.extreme?.timeouts||0)} · transporte ${fmt.number(gates.extreme?.transport||0)}.`;
+    setRobotUi(root,{phase:certified?"ERP CERTIFICADO PARA LIBERACIÓN":releaseState==="INCOMPLETE"?"QA INCOMPLETO":"ERP NO CERTIFICADO",detail:releaseDetail,progress:100,counts:`${finalResult.passed||0} correctas · ${finalResult.failed||0} fallidas · ${finalResult.warnings||0} advertencias`});
+    appendLog(root,certified?"✓ CERTIFICADO: todos los gates de liberación quedaron en verde.":`× ${releaseState}: el ERP no queda autorizado por el Robot para liberación.`,certified?"passed":"failed");
     root.dispatchEvent(new CustomEvent("erp:qa-total-finished",{detail:{runId:run.runId,result:finalResult}}));
   }
   return {runId:run.runId,result:finalResult};
+}
+
+export async function runRouteQaCampaign(root){
+  if(!hasRole("super_admin"))throw new Error("La certificación de rutas es exclusiva de Superadministración.");
+  const run=await api.qaRobotCreateRun({appVersion:CONFIG.version,build:CONFIG.build,campaign:"ROUTES_336",startedAt:new Date().toISOString()});
+  const ctx={runId:run.runId,root,plannedChecks:1,lastCounts:null};root.dataset.qaRobotRun=run.runId;
+  let finalResult=null;
+  try{
+    const built=await api.qaRobotBuildRouteCampaign(run.runId);
+    let progress=await api.qaRobotDeepProgress(run.runId,36);
+    const total=built.canonicalRoutes||336;
+    while((progress.pending||0)>0||(progress.running||0)>0){
+      if(progress.pendingIds?.length)await executeDeepBatch(progress.pendingIds,6);
+      progress=await api.qaRobotDeepProgress(run.runId,36);
+      const done=progress.executed||0;
+      setRobotUi(root,{phase:"336 rutas canónicas",detail:`${fmt.number(done)}/${fmt.number(total)} ejecutadas · ${fmt.number(progress.passed||0)} aprobadas · ${fmt.number(progress.failed||0)} fallidas · timeouts ${fmt.number(progress.timeoutFailures||0)} · transporte ${fmt.number(progress.transportFailures||0)}`,progress:Math.min(98,5+(done/Math.max(1,total))*90)});
+      if(!progress.pendingIds?.length&&(progress.pending||0)>0)await sleep(120);
+    }
+    finalResult=await api.qaRobotFinishDirectedRun(run.runId,"ROUTES_336");
+    setRobotUi(root,{phase:finalResult.status==="PASSED"?"336/336 RUTAS APROBADAS":"RUTAS NO APROBADAS",detail:`Ejecutadas ${fmt.number(finalResult.executed||0)}/${fmt.number(finalResult.planned||0)} · fallidas ${fmt.number(finalResult.failed||0)} · pendientes ${fmt.number(finalResult.pending||0)} · timeout ${fmt.number(finalResult.timeoutFailures||0)} · transporte ${fmt.number(finalResult.transportFailures||0)}`,progress:100});
+  }catch(error){
+    finalResult={status:"FAILED",error:summarizeError(error)};setRobotUi(root,{phase:"RUTAS NO APROBADAS",detail:summarizeError(error),progress:100});
+  }finally{root.dispatchEvent(new CustomEvent("erp:qa-total-finished",{detail:{runId:run.runId,result:finalResult}}))}
+  return {runId:run.runId,result:finalResult};
+}
+
+export async function resumeTotalQaRobot(root,runId){
+  if(!hasRole("super_admin"))throw new Error("El Robot QA total es exclusivo de Superadministración.");
+  if(!runId)throw new Error("No se indicó la ejecución QA que debe reanudarse.");
+  const ctx={runId,root,plannedChecks:90,lastCounts:null};root.dataset.qaRobotRun=runId;
+  setRobotUi(root,{phase:"Reanudando certificación",detail:`Continuando ejecución ${runId.slice(0,8)} desde los casos persistidos…`,progress:4});
+  appendLog(root,`Reanudando ${runId.slice(0,8)}. Los casos ya aprobados no se ejecutarán de nuevo.`);
+  let finalResult=null;
+  try{
+    await api.qaRobotResetStaleCases(runId,30).catch(()=>{});
+    await runBackend(ctx);
+    await runReleaseCampaign(ctx,{build:false});
+    const frame=await prepareFrame(ctx);await runModuleCrawler(ctx,frame);await runResponsive(ctx,frame);await runSandboxProbes(ctx,frame);
+  }catch(error){
+    await record(ctx,{checkKey:"ROBOT-FATAL",layer:"UI",suite:"ORQUESTADOR",severity:"CRITICAL",status:"FAILED",errorMessage:summarizeError(error)}).catch(()=>{});
+  }finally{
+    finalResult=await api.qaRobotFinishRun(runId,true).catch(error=>({status:"FAILED",releaseState:"FAILED",certified:false,error:summarizeError(error)}));
+    const certified=finalResult.certified===true;const state=finalResult.releaseState||"FAILED";
+    setRobotUi(root,{phase:certified?"ERP CERTIFICADO PARA LIBERACIÓN":state==="INCOMPLETE"?"QA INCOMPLETO":"ERP NO CERTIFICADO",detail:certified?"La ejecución reanudada completó todos los gates sin pendientes ni transporte.":"La ejecución reanudada todavía contiene hallazgos. Revisa el certificado.",progress:100});
+    root.dispatchEvent(new CustomEvent("erp:qa-total-finished",{detail:{runId,result:finalResult}}));
+  }
+  return {runId,result:finalResult};
 }
 
 export function robotCheckRows(checks=[]){
