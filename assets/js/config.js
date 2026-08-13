@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.25.10-qa-timeout-resilience",
-  build: "2026-08-13.5",
+  version: "10.25.11-qa-pool-protection",
+  build: "2026-08-13.6",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

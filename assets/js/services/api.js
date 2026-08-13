@@ -9,6 +9,7 @@ function friendly(message=""){
     [/duplicate|already exists|unique constraint/i,"Ya existe un registro con esa información."],
     [/version|concurrent|simult/i,"El pedido fue actualizado por otra persona. Actualiza la información antes de continuar."],
     [/jwt expired|token.*expired/i,"Tu sesión venció. Ingresa nuevamente."],
+    [/503|504|service unavailable|gateway timeout|connection pool|pgrst003/i,"Supabase está temporalmente ocupado. Espera unos segundos antes de reintentar."],
     [/failed to fetch|networkerror|load failed/i,"No fue posible conectar con el ERP. Revisa la conexión e inténtalo nuevamente."]
   ];
   return rules.find(([re])=>re.test(raw))?.[1]||raw||"No fue posible completar la operación.";

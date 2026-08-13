@@ -21,13 +21,10 @@ function log(root,message,tone=""){
 }
 function errText(e){return e?.technicalMessage||e?.message||String(e||"Error desconocido")}
 function isTransient(e){return /statement timeout|canceling statement|timeout|gateway|status of 50[04]|failed to fetch|network|load failed|connection/i.test(errText(e))}
-async function withRetry(fn,{attempts=4,baseDelay=800}={}){
-  let lastError=null;
-  for(let attempt=1;attempt<=attempts;attempt++){
-    try{return await fn()}
-    catch(e){lastError=e;if(attempt<attempts)await sleep(baseDelay*attempt)}
-  }
-  throw lastError;
+async function withRetry(fn){
+  // V10.25.11: una sola solicitud. Los reintentos automáticos bajo 503/504
+  // pueden agotar el pool y convertir una degradación puntual en una tormenta.
+  return await fn();
 }
 
 async function refreshProgress(root,runId,{soft=true,attempts=3}={}){
@@ -44,23 +41,24 @@ async function refreshProgress(root,runId,{soft=true,attempts=3}={}){
   }
 }
 
-async function runOneCase(root,item,{attempts=3}={}){
+async function runOneCase(root,item){
   let slices=0;
   for(;;){
     slices++;
     if(slices>MAX_SLICE_STEPS)throw new Error(`${item.caseKey}: excedió ${MAX_SLICE_STEPS} etapas sin terminar.`);
-    let result=null,lastError=null;
-    for(let attempt=1;attempt<=attempts;attempt++){
-      try{result=await api.qaFlowExecuteSlice(item.caseId);lastError=null;break}
-      catch(e){lastError=e;log(root,`${item.caseKey} · intento ${attempt}/${attempts} · ${errText(e)}`,"warning");await sleep(350*attempt)}
+    let result=null;
+    try{result=await api.qaFlowExecuteSlice(item.caseId)}
+    catch(e){
+      log(root,`${item.caseKey} · conexión interrumpida · ${errText(e)}`,"warning");
+      throw e;
     }
-    if(lastError)throw lastError;
     if(result?.status==="FAILED"){
       log(root,`× ${item.caseKey} · ${result.failedStep||"?"} · ${result.module||"?"} · ${result.expectedRole||"?"} · ${result.errorMessage||"Error"}`,"failed");
       return result;
     }
     if(result?.completed){log(root,`✓ ${item.caseKey} · CLOSED`,"passed");return result}
     log(root,`${item.caseKey} → ${result?.currentStep||"siguiente etapa"}`);
+    await sleep(250);
   }
 }
 
@@ -122,8 +120,14 @@ export async function runFlowCertification(root,{runId=null}={}){
     for(const item of queue){
       try{await runOneCase(root,item,{attempts:2})}
       catch(e){
+        if(isTransient(e)){
+          log(root,`■ QA detenido de forma segura: ${item.caseKey} recibió ${errText(e)}. No se enviarán más RPC hasta reanudar manualmente.`,"warning");
+          setUi(root,{phase:"Supabase ocupado · QA detenido",detail:"El avance quedó guardado. No recargues repetidamente; espera a que la base se recupere y pulsa Reanudar una sola vez.",counts:"Sin nuevas solicitudes automáticas",progress:Math.min(96,5+((completedSinceRefresh||0)/336)*90)});
+          toast("QA detenido para proteger la conexión. El avance quedó guardado.","warning",10000);
+          return {runId:id,incomplete:true,transportPending:true,stoppedSafely:true,error:errText(e)};
+        }
         deferred.push({item,error:e});
-        log(root,`↻ ${item.caseKey} se pospone por ${isTransient(e)?"timeout/transporte":"error de conexión"}: ${errText(e)}. La cola continúa.`,"warning");
+        log(root,`↻ ${item.caseKey} se pospone: ${errText(e)}.`,"warning");
       }
       completedSinceRefresh++;
       if(completedSinceRefresh>=8){completedSinceRefresh=0;await refreshProgress(root,id,{soft:true,attempts:2})}

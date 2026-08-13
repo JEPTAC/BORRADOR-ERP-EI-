@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-10-qa-timeout-resilience-20260813b";
+const CACHE="erp-electroingenieria-v10-25-11-qa-pool-protection-20260813";
 const ASSETS=[
   "./",
   "./index.html",
@@ -28,6 +28,7 @@ const ASSETS=[
   "./assets/js/modules/orders.js",
   "./assets/js/modules/inventory.js",
   "./assets/js/services/api.js",
+  "./assets/js/services/supabase.js",
   "./assets/js/services/materials.js",
   "./assets/js/services/drive.js",
   "./assets/js/services/location.js",
