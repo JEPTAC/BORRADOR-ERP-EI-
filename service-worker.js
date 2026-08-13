@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-8-closure-canary-20260813";
+const CACHE="erp-electroingenieria-v10-25-10-qa-timeout-resilience-20260813b";
 const ASSETS=[
   "./",
   "./index.html",

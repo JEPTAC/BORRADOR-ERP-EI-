@@ -20,24 +20,39 @@ function log(root,message,tone=""){
   box.prepend(row);
 }
 function errText(e){return e?.technicalMessage||e?.message||String(e||"Error desconocido")}
-
-async function refreshProgress(root,runId){
-  const p=await api.qaFlowProgress(runId);
-  const done=(p.passed||0)+(p.failed||0);
-  setUi(root,{phase:"Certificando flujo real de pedidos",detail:`${done}/336 pedidos terminados · ${p.passed||0} cerrados correctamente · ${p.failed||0} con error · ${p.pending||0} pendientes`,counts:`${p.stepsAudited||0} etapas auditadas`,progress:5+(done/336)*90});
-  root.dispatchEvent(new CustomEvent("erp:qa-flow-progress",{detail:p}));
-  return p;
+function isTransient(e){return /statement timeout|canceling statement|timeout|gateway|status of 50[04]|failed to fetch|network|load failed|connection/i.test(errText(e))}
+async function withRetry(fn,{attempts=4,baseDelay=800}={}){
+  let lastError=null;
+  for(let attempt=1;attempt<=attempts;attempt++){
+    try{return await fn()}
+    catch(e){lastError=e;if(attempt<attempts)await sleep(baseDelay*attempt)}
+  }
+  throw lastError;
 }
 
-async function runOneCase(root,item){
+async function refreshProgress(root,runId,{soft=true,attempts=3}={}){
+  try{
+    const p=await withRetry(()=>api.qaFlowProgress(runId),{attempts,baseDelay:700});
+    const done=(p.passed||0)+(p.failed||0);
+    setUi(root,{phase:"Certificando flujo real de pedidos",detail:`${done}/336 pedidos terminados · ${p.passed||0} cerrados correctamente · ${p.failed||0} con error · ${p.pending||0} pendientes`,counts:`${p.stepsAudited||0} etapas auditadas`,progress:5+(done/336)*90});
+    root.dispatchEvent(new CustomEvent("erp:qa-flow-progress",{detail:p}));
+    return p;
+  }catch(e){
+    if(!soft)throw e;
+    log(root,`El contador no respondió todavía (${errText(e)}). La ejecución continúa.`,"warning");
+    return null;
+  }
+}
+
+async function runOneCase(root,item,{attempts=3}={}){
   let slices=0;
   for(;;){
     slices++;
     if(slices>MAX_SLICE_STEPS)throw new Error(`${item.caseKey}: excedió ${MAX_SLICE_STEPS} etapas sin terminar.`);
     let result=null,lastError=null;
-    for(let attempt=1;attempt<=3;attempt++){
+    for(let attempt=1;attempt<=attempts;attempt++){
       try{result=await api.qaFlowExecuteSlice(item.caseId);lastError=null;break}
-      catch(e){lastError=e;log(root,`${item.caseKey} · intento ${attempt}/3 · ${errText(e)}`,"warning");await sleep(350*attempt)}
+      catch(e){lastError=e;log(root,`${item.caseKey} · intento ${attempt}/${attempts} · ${errText(e)}`,"warning");await sleep(350*attempt)}
     }
     if(lastError)throw lastError;
     if(result?.status==="FAILED"){
@@ -84,7 +99,7 @@ export async function runFlowCertification(root,{runId=null}={}){
     let id=runId;
     if(!id){
       setUi(root,{phase:"Validando usuarios operativos",detail:"Comprobando que cada rol del flujo tenga usuarios activos vinculados a Authentication.",counts:"Preflight",progress:2});
-      const ready=await api.qaFlowUserReadiness();
+      const ready=await withRetry(()=>api.qaFlowUserReadiness(),{attempts:4,baseDelay:800});
       if(!ready?.success){
         const missing=(ready?.missingAuthenticatedRoles||[]).map(fmt.label);
         const invalid=(ready?.activeProfilesWithoutAuth||[]).map(x=>`${x.name||x.email||x.profileId} (${fmt.label(x.role||"")})`);
@@ -93,35 +108,56 @@ export async function runFlowCertification(root,{runId=null}={}){
         throw new Error(detail||"Faltan usuarios operativos para certificar el flujo.");
       }
       setUi(root,{phase:"Construyendo 336 pedidos",detail:"Creando el inventario completo de combinaciones comerciales.",counts:"0/336",progress:3});
-      const created=await api.qaFlowCreateRun();id=created.runId;
+      const created=await withRetry(()=>api.qaFlowCreateRun(),{attempts:3,baseDelay:1000});id=created.runId;
       log(root,`Corrida de flujo creada: ${String(id).slice(0,8)} · 336 pedidos TEST-QA.`);
     }else log(root,`Reanudando certificación ${String(id).slice(0,8)}.`);
 
-    const pending=await api.qaFlowPendingCases(id);
+    const pending=await withRetry(()=>api.qaFlowPendingCases(id),{attempts:5,baseDelay:900});
     const queue=[...(pending.items||[])];
-    log(root,`${queue.length} pedido(s) pendientes. Se procesan de a 2 para no auto-saturar Supabase.`);
-    await refreshProgress(root,id);
+    log(root,`${queue.length} pedido(s) pendientes. Modo estable: 1 pedido a la vez; sin refrescos productivos entre slices.`);
+    await refreshProgress(root,id,{soft:true,attempts:3});
 
-    let cursor=0,completedSinceRefresh=0,stopError=null;
-    const worker=async()=>{
-      while(cursor<queue.length&&!stopError){
-        const item=queue[cursor++];
-        try{await runOneCase(root,item)}
-        catch(e){stopError=e;log(root,`La conexión no permitió continuar ${item.caseKey}: ${errText(e)}. La corrida queda reanudable.`,"failed");break}
-        completedSinceRefresh++;
-        if(completedSinceRefresh>=4){completedSinceRefresh=0;await refreshProgress(root,id)}
+    let completedSinceRefresh=0;
+    const deferred=[];
+    for(const item of queue){
+      try{await runOneCase(root,item,{attempts:2})}
+      catch(e){
+        deferred.push({item,error:e});
+        log(root,`↻ ${item.caseKey} se pospone por ${isTransient(e)?"timeout/transporte":"error de conexión"}: ${errText(e)}. La cola continúa.`,"warning");
       }
-    };
-    await Promise.all([worker(),worker()]);
-    const progress=await refreshProgress(root,id);
-    if(stopError||progress.pending>0){
-      setUi(root,{phase:"Certificación incompleta",detail:`Quedan ${progress.pending||0} pedidos pendientes. Puedes reanudar sin repetir los terminados.`,counts:`${progress.passed||0} correctos · ${progress.failed||0} fallidos`,progress:Math.min(96,5+((progress.executed||0)/336)*90)});
-      toast("La certificación quedó reanudable; no se marcó como lanzable.","warning",9000);
+      completedSinceRefresh++;
+      if(completedSinceRefresh>=8){completedSinceRefresh=0;await refreshProgress(root,id,{soft:true,attempts:2})}
+      await sleep(180);
+    }
+
+    if(deferred.length){
+      log(root,`Reintentando ${deferred.length} pedido(s) demorados uno por uno después de enfriar la conexión.`);
+      setUi(root,{phase:"Reintentando pedidos demorados",detail:`${deferred.length} caso(s) pendientes de transporte/timeouts.`,counts:"Modo serial",progress:94});
+      await sleep(2500);
+      for(const {item} of deferred){
+        try{await runOneCase(root,item,{attempts:3})}
+        catch(e){log(root,`○ ${item.caseKey} sigue pendiente: ${errText(e)}. No se invalida como error funcional; queda reanudable.`,"warning")}
+        await sleep(500);
+      }
+    }
+
+    let progress=null;
+    try{progress=await refreshProgress(root,id,{soft:false,attempts:5})}
+    catch(e){
+      log(root,`No fue posible leer el contador final: ${errText(e)}. La corrida conserva su avance y puede reanudarse.`,"warning");
+      setUi(root,{phase:"Certificación reanudable",detail:"Supabase no respondió al contador final. Espera unos segundos y pulsa Reanudar; no se repetirán los casos cerrados.",counts:"Avance guardado",progress:96});
+      toast("El avance quedó guardado; el contador final no respondió todavía.","warning",9000);
+      return {runId:id,incomplete:true,transportPending:true};
+    }
+
+    if(progress.pending>0){
+      setUi(root,{phase:"Certificación incompleta",detail:`Se recorrió toda la cola. Quedan ${progress.pending||0} pedido(s) pendientes por timeout/transporte; puedes reanudar sin repetir los terminados.`,counts:`${progress.passed||0} correctos · ${progress.failed||0} fallidos · ${progress.pending||0} pendientes`,progress:Math.min(96,5+((progress.executed||0)/336)*90)});
+      toast("Se procesó toda la cola; solo quedan casos pendientes por reintento.","warning",9000);
       return {runId:id,progress,incomplete:true};
     }
 
     setUi(root,{phase:"Validando ramas especiales",detail:"Comprobando aprobaciones, cambio de ruta, reapertura, excepciones y cancelación.",progress:97});
-    const final=await api.qaFlowFinish(id);
+    const final=await withRetry(()=>api.qaFlowFinish(id),{attempts:3,baseDelay:1200});
     setUi(root,{phase:final.launchable?"ERP LANZABLE":"ERP NO LANZABLE",detail:final.launchable?"336/336 pedidos cerraron por su ruta exacta con roles y módulos válidos.":`${final.failed||0} pedido(s) fallaron o una rama especial no cumplió.`,counts:`${final.passed||0}/336 correctos`,progress:100});
     log(root,final.launchable?"✓ CERTIFICACIÓN DE FLUJO APROBADA · ERP LANZABLE":"× CERTIFICACIÓN DE FLUJO FALLIDA · revisar hallazgos",final.launchable?"passed":"failed");
     root.dispatchEvent(new CustomEvent("erp:qa-flow-finished",{detail:{...final,runId:id}}));
@@ -131,7 +167,9 @@ export async function runFlowCertification(root,{runId=null}={}){
 }
 
 export async function resumeLatestFlow(root){
-  const latest=await api.qaFlowLatestResumable();
+  let latest;
+  try{latest=await withRetry(()=>api.qaFlowLatestResumable(),{attempts:5,baseDelay:1000})}
+  catch(e){toast(`Supabase sigue ocupado: ${errText(e)}. Espera 10–20 segundos y vuelve a pulsar Reanudar.`,"warning",9000);return null}
   if(!latest?.available){toast("No hay una certificación de flujo pendiente.","info",5000);return null}
   return runFlowCertification(root,{runId:latest.runId});
 }

@@ -29,7 +29,10 @@ async function rpc(name,params={}){
 
 async function mutationRpc(name,params={}){
   const data=await rpc(name,params);
-  if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent("erp:work-changed",{detail:{rpc:name}}));
+  // Las mutaciones QA trabajan solo con pedidos TEST. Evitamos refrescos productivos
+  // después de cada slice porque cientos de eventos pueden auto-saturar Supabase.
+  const qaOnly=String(name||"").startsWith("erp_x_qa_");
+  if(typeof window!=="undefined"&&!qaOnly)window.dispatchEvent(new CustomEvent("erp:work-changed",{detail:{rpc:name}}));
   return data;
 }
 

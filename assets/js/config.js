@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.25.8-closure-canary-flow",
-  build: "2026-08-13.3",
+  version: "10.25.10-qa-timeout-resilience",
+  build: "2026-08-13.5",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
