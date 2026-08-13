@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-3-qa-release-stable-20260812";
+const CACHE="erp-electroingenieria-v10-25-5-order-flow-certification-20260813";
 const ASSETS=[
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const ASSETS=[
   "./assets/js/modules/support-flow.js",
   "./assets/js/modules/sandbox.js",
   "./assets/js/modules/qa-total.js",
+  "./assets/js/modules/qa-flow.js",
   "./assets/js/modules/qa.js",
   "./assets/js/modules/receiving-order.js",
   "./assets/js/modules/financial-flow.js",

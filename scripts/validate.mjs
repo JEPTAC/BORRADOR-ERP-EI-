@@ -92,6 +92,15 @@ check(fs.existsSync(path.join(root,"sql/migrations/053_total_system_qa_robot_v10
 check(fs.existsSync(path.join(root,"sql/migrations/054_qa_deep_capacity_integrity_v10_25_1.sql")),"Falta la migración 054 de QA profundo y capacidad V10.25.1.");
 check(fs.existsSync(path.join(root,"sql/migrations/055_release_certification_orchestrator_v10_25_2.sql")),"Falta la migración 055 de certificación reanudable V10.25.2.");
 check(fs.existsSync(path.join(root,"sql/migrations/056_qa_release_stability_real_journeys_v10_25_3.sql")),"Falta la migración 056 de estabilidad QA release V10.25.3.");
+check(fs.existsSync(path.join(root,"sql/migrations/057_qa_route_observatory_evidence_v10_25_4.sql")),"Falta la migración 057 del Observatorio de Rutas V10.25.4.");
+
+check(fs.existsSync(path.join(root,"sql/migrations/058_order_flow_role_certification_v10_25_5.sql")),"Falta la migración 058 de certificación del flujo por roles V10.25.5.");
+check(fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"Falta el orquestador qa-flow.js V10.25.5.");
+check(sql.includes("qa_flow_step_audit")&&sql.includes("erp_x_qa_flow_execute_slice")&&sql.includes("qa_flow_profile_for_role")&&sql.includes("ORDER_FLOW_CERTIFICATION"),"V10.25.5 no conserva auditoría de flujo, roles o ejecución por etapas.");
+check(sql.includes("erp_x_qa_flow_user_readiness")&&sql.includes("erp_x_qa_flow_delivery_exception_suite")&&sql.includes("shipping_report_no_delivery"),"V10.25.5 no valida usuarios operativos o no-entrega por roles reales.");
+check(executable.includes("Certificación del flujo de pedidos")&&executable.includes("qaFlowExecuteSlice")&&executable.includes("336/336")&&executable.includes("usuario(s) real(es) usado(s)"),"La UI V10.25.5 no expone certificación verificable por pedido/usuario.");
+check(sql.includes("qa_release_step_evidence")&&sql.includes("erp_x_qa_release_route_matrix")&&sql.includes("erp_x_qa_release_case_evidence"),"V10.25.4 no conserva evidencia por etapa o RPC de auditoría de rutas.");
+check(executable.includes("qaReleaseRouteMatrix")&&executable.includes("Ruta esperada")&&executable.includes("Ruta real"),"V10.25.4 perdió la auditoría de rutas esperada/real.");
 check(sql.includes("erp_x_qa_robot_execute_release_slice")&&sql.includes("qa_release_journey_state")&&sql.includes("CUTTING_PICKUP_AND_PICKING_FULL")&&sql.includes("erp_x_qa_release_health"),"V10.25.3 no conserva recorridos por etapas, Corte/recogida real o health de release.");
 check(executable.includes("qaRobotExecuteReleaseSlice")&&executable.includes("safeDeepProgress")&&executable.includes("runPostCampaignHealth"),"El frontend V10.25.3 no usa el orquestador por etapas o health posterior a campaña.");
 check(!read("assets/js/modules/qa-total.js").includes("executeDeepBatch(progress.pendingIds,6)"),"El QA V10.25.3 no debe volver a lanzar seis recorridos pesados simultáneos.");

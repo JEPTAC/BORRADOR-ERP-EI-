@@ -1,4 +1,4 @@
--- ERP Electroingeniería V10.25.3
+-- ERP Electroingeniería V10.25.4
 -- Verificación posterior. Solo lectura; no crea ni modifica datos.
 
 select
@@ -181,3 +181,42 @@ select
 -- Ejecutar como Super Admin: debe devolver una estructura con success/counts.
 select public.erp_x_qa_release_flow_integrity();
 
+
+
+-- V10.25.4 · Observatorio auditable de rutas.
+select
+  to_regclass('erp_supply.qa_release_step_evidence') is not null as evidencia_etapas_qa,
+  to_regprocedure('public.erp_x_qa_release_route_matrix(uuid,text,text,text,integer,integer)') is not null as matriz_visual_rutas,
+  to_regprocedure('public.erp_x_qa_release_case_evidence(uuid)') is not null as detalle_evidencia_ruta,
+  position('10.25.4' in pg_get_functiondef('public.erp_x_qa_release_route_matrix(uuid,text,text,text,integer,integer)'::regprocedure))>0 as observatorio_v10_25_4;
+
+-- V10.25.5 · Certificación del flujo del pedido por roles/módulos.
+select
+  to_regclass('erp_supply.qa_flow_case_state') is not null as flow_state_ok,
+  to_regclass('erp_supply.qa_flow_step_audit') is not null as flow_audit_ok,
+  to_regprocedure('public.erp_x_qa_flow_create_run()') is not null as flow_create_ok,
+  to_regprocedure('public.erp_x_qa_flow_execute_slice(uuid)') is not null as flow_slice_ok,
+  to_regprocedure('public.erp_x_qa_flow_progress(uuid)') is not null as flow_progress_ok,
+  to_regprocedure('public.erp_x_qa_flow_case_detail(uuid)') is not null as flow_detail_ok,
+  to_regprocedure('public.erp_x_qa_flow_user_readiness()') is not null as flow_usuarios_reales_ok,
+  to_regprocedure('public.erp_x_qa_flow_delivery_exception_suite(uuid)') is not null as flow_no_entrega_roles_ok,
+  to_regprocedure('public.erp_x_qa_flow_finish(uuid)') is not null as flow_finish_ok,
+  position('10.25.5' in pg_get_functiondef('public.erp_x_qa_flow_execute_slice(uuid)'::regprocedure))>0 as flow_v10_25_5;
+
+select
+  s.code as step_code,
+  s.module_code,
+  erp_supply.default_role_for_step(s.code,null) as default_role,
+  exists(
+    select 1 from erp_supply.step_roles sr
+    where sr.step_code=s.code
+      and sr.role_code=erp_supply.default_role_for_step(s.code,null)
+      and sr.can_view
+  ) as role_can_view
+from erp_supply.workflow_steps s
+where s.active and not s.terminal
+order by s.sort_order;
+
+
+-- Debe devolver success=true antes de certificar salida.
+select public.erp_x_qa_flow_user_readiness();

@@ -4,94 +4,94 @@ import {loading,toast,modal,empty,wizard,guide} from "../core/ui.js";
 import {summaryItem} from "../core/guided.js";
 import {hasRole} from "../core/state.js";
 import {runTotalQaRobot,runDeepQaCampaign,runRouteQaCampaign,resumeTotalQaRobot,robotCheckRows} from "./qa-total.js";
+import {runFlowCertification,resumeLatestFlow,openFlowResults} from "./qa-flow.js";
 
 export async function renderQa(root){
   if(!hasRole("super_admin")){
-    root.innerHTML=`<section class="card card-pad"><h3>Acceso restringido</h3><p>El Robot QA total es exclusivo de Superadministración.</p></section>`;
+    root.innerHTML=`<section class="card card-pad"><h3>Acceso restringido</h3><p>La certificación del flujo es exclusiva de Superadministración.</p></section>`;
     return;
   }
   root.innerHTML=`
     <section class="qa-total-page">
       <header class="qa-total-hero card">
         <div class="qa-total-hero-copy">
-          <span class="qa-total-eyebrow">SUPER ADMIN · CONTROL DE LIBERACIÓN</span>
-          <h2>Robot QA total del sistema</h2>
-          <p>Recorre rutas de pedidos, notas, novedades, reportes, aprobaciones, cancelaciones, integridad de datos, módulos, colas Sandbox y responsive. Los pedidos que crea son <strong>TEST-QA</strong> aislados de producción y se eliminan al terminar.</p>
+          <span class="qa-total-eyebrow">SUPER ADMIN · CERTIFICACIÓN DE SALIDA</span>
+          <h2>Certificación del flujo de pedidos</h2>
+          <p>Esta es la prueba de lanzamiento: crea <strong>336 pedidos TEST-QA</strong> y los hace pasar por la ruta completa usando los <strong>roles, usuarios y RPC reales de cada módulo</strong>. Una combinación solo aprueba si llega exactamente a <strong>CLOSED</strong>.</p>
           <div class="qa-total-hero-actions">
-            <button class="btn btn-primary btn-large" id="run-total-robot">▶ Ejecutar prueba total</button>
-            <button class="btn btn-ghost" id="resume-total-robot" hidden>↻ Reanudar certificación</button>
-            <button class="btn btn-ghost" id="qa-help">Ver cobertura</button>
+            <button class="btn btn-primary btn-large" id="run-flow-cert">▶ Certificar flujo completo</button>
+            <button class="btn btn-ghost" id="resume-flow-cert" hidden>↻ Reanudar flujo</button>
+            <button class="btn btn-ghost" id="view-flow-result">Ver resultado / rutas</button>
           </div>
         </div>
-        <div class="qa-total-seal"><span>QA</span><strong>10.25.3</strong><small>Release Certification</small></div>
+        <div class="qa-total-seal"><span>FLOW</span><strong>10.25.5</strong><small>Order Certification</small></div>
       </header>
 
       <section class="qa-total-grid">
         <article class="qa-total-console card" id="qa-total-console">
           <div class="qa-total-console-head">
-            <div><span class="qa-total-eyebrow">EJECUCIÓN ACTUAL</span><h3 id="qa-total-phase">Listo para probar</h3><p id="qa-total-detail">Ninguna prueba total está ejecutándose.</p></div>
+            <div><span class="qa-total-eyebrow">EJECUCIÓN ACTUAL</span><h3 id="qa-total-phase">Listo para certificar</h3><p id="qa-total-detail">La prueba principal todavía no está ejecutándose.</p></div>
             <strong id="qa-total-counts">—</strong>
           </div>
           <div class="qa-total-progress"><span id="qa-total-progress-bar"></span></div>
-          <div class="qa-total-log" id="qa-total-log"><div class="qa-total-log-empty">Los eventos del Robot aparecerán aquí.</div></div>
+          <div class="qa-total-log" id="qa-total-log"><div class="qa-total-log-empty">Aquí verás cada pedido avanzando por su flujo real.</div></div>
         </article>
         <aside class="qa-total-scope card">
-          <span class="qa-total-eyebrow">COBERTURA</span>
-          <div class="qa-scope-item"><strong>336</strong><div><b>Rutas comerciales</b><span>Tipos, pagos, mora/Caja, entrega, corte y compra.</span></div></div>
-          <div class="qa-scope-item"><strong>10</strong><div><b>Controles empresariales</b><span>Concurrencia, gates, parciales, entrega y Corte.</span></div></div>
-          <div class="qa-scope-item"><strong>10</strong><div><b>Ramas críticas</b><span>Aprobación/rechazo, cambio de ruta, reapertura, excepciones y cancelación.</span></div></div>
-          <div class="qa-scope-item"><strong>DINÁMICO</strong><div><b>Ciclos transversales</b><span>Cada tipo y etapa aplicable: nota, novedad, reporte, espera, aprobación y cancelación.</span></div></div>
-          <div class="qa-scope-item"><strong>EXTREMO</strong><div><b>Cruce profundo</b><span>Las 336 entradas se cruzan con cada etapa: nota, novedad, reporte, espera, prioridad, cancelación, excepciones y no-entrega.</span></div></div>
-          <div class="qa-scope-item"><strong>100%</strong><div><b>Módulos Super Admin</b><span>Navegación automática y controles no destructivos.</span></div></div>
-          <div class="qa-scope-item"><strong>6</strong><div><b>Viewports</b><span>360, 390, 424, 768, 960 y 1440 px.</span></div></div>
-          <div class="qa-scope-item"><strong>TEST</strong><div><b>Operación real aislada</b><span>Pedidos sintéticos por etapa y por caso; cada caso vive en su propia transacción.</span></div></div>
-          <div class="qa-scope-item"><strong>k6</strong><div><b>Capacidad real</b><span>Smoke, normal, alta, pico, spike, soak y breakpoint con p50/p95/p99, RPS y errores.</span></div></div>
+          <span class="qa-total-eyebrow">QUÉ CERTIFICA</span>
+          <div class="qa-scope-item"><strong>336</strong><div><b>Pedidos completos</b><span>Tipo, condición de pago, mora/Caja, ruta de entrega, Corte y Compra.</span></div></div>
+          <div class="qa-scope-item"><strong>ROL</strong><div><b>Usuario operativo real</b><span>En cada etapa toma un perfil autenticado del rol esperado y prueba sus permisos.</span></div></div>
+          <div class="qa-scope-item"><strong>RPC</strong><div><b>Operación real</b><span>Cartera, Caja, Compras, Recepción, Corte, Alistamiento, Facturación y Despachos usan las mismas funciones del ERP.</span></div></div>
+          <div class="qa-scope-item"><strong>FILTROS</strong><div><b>Bloqueos transversales</b><span>Nota, novedad + solución, reporte + solución, espera/reanudación y aprobación.</span></div></div>
+          <div class="qa-scope-item"><strong>100%</strong><div><b>Ruta exacta</b><span>Etapa esperada = etapa obtenida, hasta CLOSED. Un salto incorrecto hace fallar el pedido.</span></div></div>
+          <div class="qa-scope-item"><strong>22</strong><div><b>Ramas especiales</b><span>10 ramas de aprobación/cancelación + 12 casos de no-entrega (4 rutas × reprogramar/devolver/resolver).</span></div></div>
         </aside>
       </section>
 
-      <section class="qa-robot-stage card" id="qa-robot-stage" hidden></section>
-
-      <section class="qa-manual card">
-        <div class="qa-manual-head"><div><span class="qa-total-eyebrow">PRUEBAS DIRIGIDAS</span><h3>Ejecutar solo una capa</h3><p>Úsalas cuando quieras validar una corrección específica sin recorrer toda la aplicación.</p></div><button class="btn btn-ghost" id="check-queues">Verificar colas</button></div>
-        <div class="qa-manual-actions">
-          <button class="qa-mini-action" id="run-matrix"><strong>336 combinaciones</strong><span>Enrutamiento comercial completo</span></button>
-          <button class="qa-mini-action" id="run-controls"><strong>10 controles</strong><span>Reglas empresariales transversales</span></button>
-          <button class="qa-mini-action" id="run-integral"><strong>Certificación integral</strong><span>Rutas + ramas + interfaz + integridad + responsive</span></button>
-          <button class="qa-mini-action" id="run-deep"><strong>Ciclos profundos</strong><span>Cada tipo × cada etapa: notas, novedades, reportes, esperas y aprobaciones</span></button>
-          <button class="qa-mini-action qa-mini-action-danger" id="run-extreme"><strong>Prueba exhaustiva cruzada</strong><span>Miles de casos · recomendada fuera de operación</span></button>
-          <button class="qa-mini-action" id="run-pulse"><strong>Pulso concurrente</strong><span>5 → 10 → 20 → 40 solicitudes simultáneas</span></button>
-        </div>
+      <section class="card">
+        <header class="card-head"><div><span class="qa-total-eyebrow">EVIDENCIA DE LANZAMIENTO</span><h3>Ruta, módulo y usuario — pedido por pedido</h3><p>El resultado muestra las 336 combinaciones y, dentro de cada una, quién operó cada etapa, qué acción ejecutó, qué etapa esperaba y cuál obtuvo.</p></div><button class="btn btn-primary" id="view-flow-result-2">Abrir certificación</button></header>
       </section>
 
-      <section class="card"><header class="card-head"><div><span class="qa-total-eyebrow">CAPACIDAD Y CONCURRENCIA</span><h3>Últimas mediciones</h3><p>El pulso del navegador es una comprobación rápida. El límite real se obtiene con el workflow k6 de capacidad.</p></div><button class="btn btn-ghost" id="refresh-capacity">Actualizar</button></header><div class="card-body" id="qa-capacity">${loading()}</div></section>
+      <details class="card qa-manual">
+        <summary class="qa-manual-head"><div><span class="qa-total-eyebrow">DIAGNÓSTICOS COMPLEMENTARIOS</span><h3>Pruebas técnicas secundarias</h3><p>Responsive, carga, EXTREME y robots antiguos quedan disponibles, pero no son el criterio principal del flujo.</p></div></summary>
+        <div class="qa-manual-actions">
+          <button class="qa-mini-action" id="run-matrix"><strong>336 rutas antiguas</strong><span>Diagnóstico de enrutamiento</span></button>
+          <button class="qa-mini-action" id="run-controls"><strong>10 controles</strong><span>Reglas empresariales transversales</span></button>
+          <button class="qa-mini-action" id="run-deep"><strong>Ciclos profundos</strong><span>Casos aislados por etapa</span></button>
+          <button class="qa-mini-action qa-mini-action-danger" id="run-extreme"><strong>EXTREME</strong><span>Campaña masiva; no necesaria para certificar el flujo normal</span></button>
+          <button class="qa-mini-action" id="run-pulse"><strong>Pulso concurrente</strong><span>Capacidad rápida</span></button>
+        </div>
+      </details>
 
       <section class="card"><header class="card-head"><div><span class="qa-total-eyebrow">HISTORIAL</span><h3>Ejecuciones QA</h3></div><button class="btn btn-ghost" id="refresh-qa">Actualizar</button></header><div class="card-body" id="qa-runs">${loading()}</div></section>
     </section>`;
 
-  root.querySelector("#run-total-robot").onclick=()=>confirmTotal(root);
-  root.querySelector("#resume-total-robot").onclick=()=>resumeLatest(root);
+  root.querySelector("#run-flow-cert").onclick=()=>confirmFlow(root);
+  root.querySelector("#resume-flow-cert").onclick=()=>resumeLatestFlow(root);
+  root.querySelector("#view-flow-result").onclick=()=>openLatestFlow();
+  root.querySelector("#view-flow-result-2").onclick=()=>openLatestFlow();
   root.querySelector("#run-matrix").onclick=()=>confirmRun(root,"matrix");
   root.querySelector("#run-controls").onclick=()=>confirmRun(root,"controls");
-  root.querySelector("#run-integral").onclick=()=>confirmRun(root,"all");
   root.querySelector("#run-deep").onclick=()=>confirmDeep(root,"TOTAL");
   root.querySelector("#run-extreme").onclick=()=>confirmDeep(root,"EXTREME");
   root.querySelector("#run-pulse").onclick=()=>runConcurrencyPulse(root);
-  root.querySelector("#check-queues").onclick=()=>checkQueues(root);
   root.querySelector("#refresh-qa").onclick=()=>load(root);
-  root.querySelector("#refresh-capacity").onclick=()=>loadCapacity(root);
-  root.querySelector("#qa-help").onclick=()=>guide({title:"Cobertura del Robot QA total",description:"Combina pruebas de dominio con uso automático de la aplicación real.",items:[
-    {title:"Dominio exhaustivo",detail:"Ejecuta las 336 combinaciones finitas de extremo a extremo, 10 controles empresariales y ramas críticas."},
-    {title:"Ciclos profundos",detail:"Cruza cada tipo de pedido con cada etapa activa para abrir/cerrar Nota, Novedad y Reporte, probar Espera/Reanudación y aprobar/rechazar solicitudes y cancelaciones."},
-    {title:"Modo extremo",detail:"Cruza las 336 entradas con cada etapa real de su ruta e inyecta Nota/Novedad/Reporte/Espera, prioridad y cancelación aprobada/rechazada, excepciones, cambio de ruta, reapertura y no-entrega. Puede generar decenas de miles de casos."},
-    {title:"Integridad y contratos",detail:"Verifica health check, Workforce, colas, aislamiento Sandbox, roles y motores críticos."},
-    {title:"Recorrido de interfaz",detail:"Abre todos los módulos visibles para Super Admin, acciona controles seguros y captura errores JS/RPC."},
-    {title:"Sandbox por etapa",detail:"Crea pedidos TEST-QA en cada etapa, exige abrir la tarjeta y ejecutar una acción primaria real; encontrar la tarjeta sin abrirla ya no aprueba."},
-    {title:"Responsive",detail:"Vuelve a recorrer módulos críticos en seis anchos de viewport y busca overflow o diálogos fuera de pantalla."},
-    {title:"Playwright externo",detail:"El repositorio incluye E2E de navegador real para login, navegación, Sandbox, consola, capturas, video y trazas en CI."},
-    {title:"Capacidad con k6",detail:"La prueba externa incrementa usuarios virtuales, mezcla lecturas y escrituras TEST, incluye spike/soak y mide RPS, error rate y percentiles p50/p90/p95/p99 hasta localizar el punto de degradación."}
-  ]});
   root.addEventListener("erp:qa-total-finished",()=>load(root));
-  await Promise.all([load(root),loadCapacity(root),loadResumable(root)]);
+  root.addEventListener("erp:qa-flow-finished",()=>{load(root);loadFlowResumable(root)});
+  await Promise.all([load(root),loadFlowResumable(root)]);
+}
+
+function confirmFlow(root){
+  wizard({title:"Certificar flujo completo",subtitle:"336 pedidos TEST-QA operados con roles reales",steps:[
+    {title:"Qué va a hacer",description:"Creará las 336 combinaciones y recorrerá cada pedido hasta CLOSED usando los usuarios/roles esperados en Cartera, Caja, Compras, Recepción, Alistamiento, Corte, Facturación y Despachos."},
+    {title:"Filtros incluidos",description:"En cada etapa prueba Nota, Novedad y solución, Reporte y solución, Espera/Reanudación; además cada pedido prueba una aprobación de prioridad."},
+    {title:"Criterio",description:"Solo muestra LANZABLE si 336/336 cierran por la ruta exacta, ningún módulo/rol falla y también pasan las ramas especiales y de no-entrega."}
+  ],confirmLabel:"Iniciar certificación",onConfirm:()=>runFlowCertification(root)});
+}
+async function openLatestFlow(){
+  try{const latest=await api.qaFlowLatest();if(!latest?.available)return toast("Todavía no existe una certificación de flujo.","info",5000);await openFlowResults(latest.runId)}catch(error){toast(error.message||String(error),"error",9000)}
+}
+async function loadFlowResumable(root){
+  try{const latest=await api.qaFlowLatestResumable();const b=root.querySelector("#resume-flow-cert");if(!b)return;if(latest?.available){b.hidden=false;b.textContent=`↻ Reanudar ${latest.progress?.passed||0}/${latest.progress?.planned||336}`}else b.hidden=true}catch{}
 }
 
 
@@ -191,13 +191,44 @@ async function runSuite(root,type){
 }
 function notify(result,label){toast(result.failed?`${label}: ${result.failed} fallo(s).`:`${label}: ${result.passed}/${result.total} aprobadas.`,result.failed?"error":"success",7000)}
 
+
+function qaPath(path){
+  return Array.isArray(path)&&path.length?path.map(step=>fmt.step(step)).join(" → "):"—";
+}
+function qaCombination(spec={}){
+  const bits=[spec.orderType||"—",spec.paymentCondition||"—",spec.deliveryRoute||"—"];
+  bits.push(`Corte ${spec.requiresCut?"Sí":"No"}`);
+  bits.push(`Compra ${spec.requiresPurchase?"Sí":"No"}`);
+  if(spec.hasCreditArrears)bits.push("Mora Sí");
+  if(spec.heldByCashier)bits.push("Caja Sí");
+  return bits.join(" · ");
+}
+function qaTimeline(timeline=[]){
+  if(!Array.isArray(timeline)||!timeline.length)return `<div class="empty compact"><strong>Sin evidencia por etapas</strong><div>La ruta aún no ha ejecutado transiciones o corresponde a una corrida anterior sin evidencia recuperable.</div></div>`;
+  return `<div class="table-wrap mobile-card-table"><table><thead><tr><th>#</th><th>Etapa</th><th>Acciones ejecutadas</th><th>Siguiente esperada</th><th>Siguiente real</th><th>Resultado</th></tr></thead><tbody>${timeline.map(e=>`<tr><td data-label="#">${e.stepIndex||"—"}</td><td data-label="Etapa"><strong>${fmt.escape(fmt.step(e.stepCode||""))}</strong></td><td data-label="Acciones"><small>${fmt.escape((e.actions||[]).map(a=>fmt.label(a)).join(" → ")||"—")}</small></td><td data-label="Esperada">${fmt.escape(fmt.step(e.expectedNextStep||""))}</td><td data-label="Real">${fmt.escape(fmt.step(e.actualNextStep||""))}</td><td data-label="Resultado">${e.status==="PASSED"?'<strong class="success">PASSED</strong>':'<strong class="danger">FAILED</strong>'}${e.errorMessage?`<small class="danger">${fmt.escape(e.errorMessage)}</small>`:""}</td></tr>`).join("")}</tbody></table></div>`;
+}
+async function openRouteObservatory(family,runId=null){
+  try{
+    const data=await api.qaReleaseRouteMatrix(runId,family,"ALL",null,1,500);
+    const items=data.items||[],summary=data.summary||{};
+    const complete=Number(summary.planned||0)===336&&Number(summary.normal||0)===336&&Number(summary.failed||0)===0&&Number(summary.pending||0)===0;
+    const label=family==="JOURNEY_FULL"?"Recorridos completos":"Rutas canónicas";
+    const rows=items.map((x,index)=>{
+      const evidenceOk=Number(x.evidenceSteps||0)===Number(x.expectedEvidenceSteps||0)&&Number(x.evidenceFailed||0)===0;
+      const state=x.normal?'<strong class="success">NORMAL</strong>':x.status==="FAILED"?'<strong class="danger">FALLÓ</strong>':x.status==="PASSED"?'<strong class="danger">NO AUDITABLE</strong>':`<strong>${fmt.escape(fmt.label(x.status||"PENDING"))}</strong>`;
+      return `<tr><td data-label="#">${index+1}</td><td data-label="Combinación"><strong>${fmt.escape(x.caseKey||"—")}</strong><small>${fmt.escape(qaCombination(x.specification||{}))}</small></td><td data-label="Estado">${state}<small>${fmt.escape(x.orderNumber||"")}</small></td><td data-label="Ruta esperada"><small>${fmt.escape(qaPath(x.expectedPath))}</small></td><td data-label="Ruta real"><small class="${x.pathMatch?"success":"danger"}">${fmt.escape(qaPath(x.actualPath))}</small></td><td data-label="Evidencia"><strong class="${evidenceOk?"success":"danger"}">${x.evidenceSteps||0}/${x.expectedEvidenceSteps||0}</strong><small>${x.evidenceFailed||0} etapa(s) fallidas</small></td><td data-label="Transporte"><strong class="${(x.transportFailures||0)||(x.timeoutFailures||0)?"danger":"success"}">${x.transportFailures||0} / ${x.timeoutFailures||0}</strong><small>transporte / timeout</small></td><td data-label="Detalle"><details><summary>Ver recorrido</summary><div class="section-gap-small"></div><p><strong>Esperada:</strong> ${fmt.escape(qaPath(x.expectedPath))}</p><p><strong>Real:</strong> ${fmt.escape(qaPath(x.actualPath))}</p><p><strong>Limpieza:</strong> ${x.cleanupVerified?"OK":"NO"} · <strong>Intentos:</strong> ${x.attemptCount||0} · <strong>Cerró:</strong> ${x.closed?"Sí":"No"}</p>${x.errorMessage?`<p class="danger"><strong>${fmt.escape(x.errorSqlstate||"ERROR")}</strong> · ${fmt.escape(x.errorMessage)}</p>`:""}${qaTimeline(x.timeline||[])}</details></td></tr>`;
+    }).join("");
+    modal({title:`Observatorio · ${label}`,size:"xwide",confirmLabel:"",body:`<div class="qa-summary"><div class="qa-box"><span class="muted">Planificadas</span><strong>${summary.planned||0}/336</strong></div><div class="qa-box"><span class="muted">Normales auditadas</span><strong class="${complete?"success":"danger"}">${summary.normal||0}/336</strong></div><div class="qa-box"><span class="muted">Fallidas</span><strong class="${summary.failed?"danger":"success"}">${summary.failed||0}</strong></div><div class="qa-box"><span class="muted">Pendientes</span><strong class="${summary.pending?"danger":"success"}">${summary.pending||0}</strong></div></div><div class="section-gap-small"></div><div class="wizard-tip"><strong>Una ruta solo cuenta como NORMAL</strong> si la ruta esperada coincide exactamente con la real, termina en CLOSED, tiene evidencia para cada transición, limpió su pedido TEST y registró 0 timeout / 0 transporte.</div><div class="section-gap-small"></div><div class="table-wrap mobile-card-table"><table><thead><tr><th>#</th><th>Combinación</th><th>Estado</th><th>Ruta esperada</th><th>Ruta real</th><th>Evidencia</th><th>Transporte</th><th>Detalle</th></tr></thead><tbody>${rows||`<tr><td colspan="8">No hay rutas creadas en la última corrida QA.</td></tr>`}</tbody></table></div>`});
+  }catch(error){toast(error.message||String(error),"error",10000)}
+}
+
 async function detail(id,type){
   if(type==="TOTAL_ROBOT"){
     const [data,certificate]=await Promise.all([api.qaRobotDetail(id),api.qaRobotReleaseCertificate(id).catch(()=>null)]),run=data.run||{},checks=data.checks||[],deep=data.deepSummary||{},deepFailures=data.deepFailures||[];
     const cert=certificate||run.summary?.releaseCertificate||null;
     const gates=cert?.gates||{};
     const gate=(label,g,detailText)=>`<div class="qa-box"><span class="muted">${fmt.escape(label)}</span><strong class="${g?.ok?"success":"danger"}">${g?.ok?"PASSED":"NO PASSED"}</strong><small>${fmt.escape(detailText(g||{}))}</small></div>`;
-    const certificateBlock=cert?`<div class="section-gap-small"></div><section class="qa-release-certificate"><div class="card-head compact"><div><span class="qa-total-eyebrow">CERTIFICADO DE LIBERACIÓN</span><h3 class="${cert.certified?"success":"danger"}">${cert.certified?"ERP CERTIFICADO":"ERP NO CERTIFICADO"}</h3><p>Estado: ${fmt.escape(cert.releaseState||"—")} · versión ${fmt.escape(cert.version||"10.25.3")}</p></div></div><div class="qa-summary qa-release-gates">${gate("Rutas canónicas",gates.routing,g=>`${g.passed||0}/336 aprobadas · ${g.pending||0} pendientes`)}${gate("Recorridos completos",gates.journeys,g=>`${g.passed||0}/336 aprobados · ${g.pending||0} pendientes`)}${gate("Campaña EXTREME",gates.extreme,g=>`${g.executed||0}/${g.planned||0} ejecutados · ${g.failed||0} fallidos · timeout ${g.timeouts||0} · transporte ${g.transport||0}`)}${gate("Interfaz",gates.interface,g=>`${g.passedModules||0}/${g.expectedModules||0} módulos`)}${gate("Integridad",gates.integrity,g=>`${g.passed||0}/${g.expected||0} checks`)}${gate("Responsive",gates.responsive,g=>`${g.passed||0}/${g.expected||0} viewports/módulos`)}${gate("Acciones Sandbox UI",gates.sandboxUi,g=>`${g.passed||0}/${g.expected||0} acciones`)}${gate("Limpieza",gates.cleanup,g=>`${g.remainingTestOrders||0} pedidos TEST remanentes`)}</div></section>`:"";
+    const certificateBlock=cert?`<div class="section-gap-small"></div><section class="qa-release-certificate"><div class="card-head compact"><div><span class="qa-total-eyebrow">CERTIFICADO DE LIBERACIÓN</span><h3 class="${cert.certified?"success":"danger"}">${cert.certified?"ERP CERTIFICADO":"ERP NO CERTIFICADO"}</h3><p>Estado: ${fmt.escape(cert.releaseState||"—")} · versión ${fmt.escape(cert.version||"10.25.4")}</p></div></div><div class="qa-summary qa-release-gates">${gate("Rutas canónicas",gates.routing,g=>`${g.passed||0}/336 aprobadas · ${g.pending||0} pendientes`)}${gate("Recorridos completos",gates.journeys,g=>`${g.passed||0}/336 aprobados · ${g.pending||0} pendientes`)}${gate("Campaña EXTREME",gates.extreme,g=>`${g.executed||0}/${g.planned||0} ejecutados · ${g.failed||0} fallidos · timeout ${g.timeouts||0} · transporte ${g.transport||0}`)}${gate("Interfaz",gates.interface,g=>`${g.passedModules||0}/${g.expectedModules||0} módulos`)}${gate("Integridad",gates.integrity,g=>`${g.passed||0}/${g.expected||0} checks`)}${gate("Responsive",gates.responsive,g=>`${g.passed||0}/${g.expected||0} viewports/módulos`)}${gate("Acciones Sandbox UI",gates.sandboxUi,g=>`${g.passed||0}/${g.expected||0} acciones`)}${gate("Limpieza",gates.cleanup,g=>`${g.remainingTestOrders||0} pedidos TEST remanentes`)}</div></section>`:"";
     const deepBlock=Number(deep.total||0)>0?`<div class="section-gap"></div><div class="card-head compact"><div><span class="qa-total-eyebrow">CASOS FUNCIONALES AISLADOS</span><h3>Campaña profunda</h3><p>${fmt.number(deep.total||0)} casos · ${fmt.number(deep.passed||0)} correctos · ${fmt.number(deep.failed||0)} fallidos · ${fmt.number(deep.pending||0)} pendientes.</p></div></div>${deepFailures.length?`<div class="table-wrap mobile-card-table"><table><thead><tr><th>Caso</th><th>Familia</th><th>SQLSTATE</th><th>Contexto</th><th>Error original</th><th>Tiempo</th></tr></thead><tbody>${deepFailures.map(x=>`<tr><td data-label="Caso"><strong>${fmt.escape(x.caseKey||"—")}</strong><small>${fmt.escape(x.campaignMode||"")}</small></td><td data-label="Familia">${fmt.escape(fmt.label(x.family||""))}</td><td data-label="SQLSTATE"><code>${fmt.escape(x.errorSqlstate||"—")}</code></td><td data-label="Contexto"><small>${fmt.escape(fmt.data(x.specification||{}))}</small></td><td data-label="Error" class="danger">${fmt.escape(x.errorMessage||"—")}</td><td data-label="Tiempo">${x.durationMs!=null?fmt.number(x.durationMs)+" ms":"—"}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty compact"><strong>Sin fallos funcionales profundos</strong><div>Todos los casos aislados registrados finalizaron correctamente.</div></div>`}`:"";
     modal({title:`Robot QA ${id.slice(0,8)}`,size:"xwide",confirmLabel:"",body:`<div class="qa-summary"><div class="qa-box"><span class="muted">Estado</span><strong>${fmt.escape(fmt.label(run.status))}</strong></div><div class="qa-box"><span class="muted">Comprobaciones</span><strong>${run.total_scenarios}</strong></div><div class="qa-box"><span class="muted">Correctas</span><strong class="success">${run.passed_scenarios}</strong></div><div class="qa-box"><span class="muted">Fallidas</span><strong class="danger">${run.failed_scenarios}</strong></div></div><div class="section-gap-small"></div><div class="table-wrap mobile-card-table qa-robot-detail-table"><table><thead><tr><th>Capa</th><th>Prueba</th><th>Módulo</th><th>Estado</th><th>Tiempo</th><th>Detalle</th></tr></thead><tbody>${robotCheckRows(checks)}</tbody></table></div>${certificateBlock}${deepBlock}`});return;
   }
