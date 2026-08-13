@@ -81,11 +81,15 @@ export async function renderQa(root){
 }
 
 function confirmFlow(root){
-  wizard({title:"Certificar flujo completo",subtitle:"336 pedidos TEST-QA operados con roles reales",steps:[
+  wizard({title:"Certificar flujo completo",subtitle:"336 pedidos TEST-QA operados con roles reales",finishLabel:"Iniciar certificación",steps:[
     {title:"Qué va a hacer",description:"Creará las 336 combinaciones y recorrerá cada pedido hasta CLOSED usando los usuarios/roles esperados en Cartera, Caja, Compras, Recepción, Alistamiento, Corte, Facturación y Despachos."},
     {title:"Filtros incluidos",description:"En cada etapa prueba Nota, Novedad y solución, Reporte y solución, Espera/Reanudación; además cada pedido prueba una aprobación de prioridad."},
     {title:"Criterio",description:"Solo muestra LANZABLE si 336/336 cierran por la ruta exacta, ningún módulo/rol falla y también pasan las ramas especiales y de no-entrega."}
-  ],confirmLabel:"Iniciar certificación",onConfirm:()=>runFlowCertification(root)});
+  ],onFinish:()=>{
+    void runFlowCertification(root).catch(error=>{
+      toast(error?.technicalMessage||error?.message||String(error),"error",10000);
+    });
+  }});
 }
 async function openLatestFlow(){
   try{const latest=await api.qaFlowLatest();if(!latest?.available)return toast("Todavía no existe una certificación de flujo.","info",5000);await openFlowResults(latest.runId)}catch(error){toast(error.message||String(error),"error",9000)}
