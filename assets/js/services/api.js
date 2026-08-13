@@ -99,6 +99,7 @@ export const api={
   qaRuns:(limit=20)=>rpc("erp_x_qa_runs",{p_limit:limit}),
   qaFlowUserReadiness:()=>rpc("erp_x_qa_flow_user_readiness"),
   qaFlowCreateRun:()=>mutationRpc("erp_x_qa_flow_create_run"),
+  qaFlowCreateCanary:()=>mutationRpc("erp_x_qa_flow_create_canary"),
   qaFlowBuildCampaign:runId=>mutationRpc("erp_x_qa_flow_build_campaign",{p_run_id:runId}),
   qaFlowPendingCases:runId=>rpc("erp_x_qa_flow_pending_cases",{p_run_id:runId}),
   qaFlowExecuteSlice:caseId=>mutationRpc("erp_x_qa_flow_execute_slice",{p_case_id:caseId}),

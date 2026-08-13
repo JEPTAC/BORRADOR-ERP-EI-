@@ -49,6 +49,33 @@ async function runOneCase(root,item){
   }
 }
 
+export async function runFlowCanary(root){
+  const button=root.querySelector("#run-flow-canary");
+  if(button)button.disabled=true;
+  try{
+    setUi(root,{phase:"Pedido canario",detail:"Validando usuarios antes de ejecutar un único flujo de extremo a extremo.",counts:"1 pedido",progress:4});
+    const ready=await api.qaFlowUserReadiness();
+    if(!ready?.success){
+      const missing=(ready?.missingAuthenticatedRoles||[]).map(fmt.label);
+      throw new Error(missing.length?`Faltan roles con usuario autenticado: ${missing.join(", ")}`:"Configuración QA incompleta.");
+    }
+    const created=await api.qaFlowCreateCanary();
+    log(root,`Canario creado: ${created.caseKey||String(created.caseId).slice(0,8)}.`);
+    setUi(root,{phase:"Ejecutando pedido canario",detail:"Debe recorrer Ventas → filtros → logística → facturación → entrega → Cierre → CLOSED.",counts:"0/1",progress:10});
+    const result=await runOneCase(root,{caseId:created.caseId,caseKey:created.caseKey});
+    const passed=result?.status==="PASSED"&&result?.completed;
+    setUi(root,{phase:passed?"CANARIO PASSED":"CANARIO FAILED",detail:passed?"El pedido llegó a CLOSED. Ya puedes ejecutar la certificación de 336 rutas.":`${result?.failedStep||"Etapa desconocida"} · ${result?.errorMessage||"El flujo encontró un error."}`,counts:passed?"1/1 CLOSED":"0/1",progress:100});
+    toast(passed?"Pedido canario cerrado correctamente. Ahora sí ejecuta los 336.":"El pedido canario encontró un fallo. Revisa sus etapas antes de ejecutar los 336.",passed?"success":"error",10000);
+    await openFlowCase(created.caseId);
+    return {...result,runId:created.runId,caseId:created.caseId};
+  }catch(e){
+    log(root,`Canario · ${errText(e)}`,"failed");
+    setUi(root,{phase:"CANARIO FAILED",detail:errText(e),counts:"0/1",progress:100});
+    toast(errText(e),"error",10000);
+    throw e;
+  }finally{if(button)button.disabled=false}
+}
+
 export async function runFlowCertification(root,{runId=null}={}){
   const button=root.querySelector("#run-flow-cert")||root.querySelector("#run-total-robot");
   const resume=root.querySelector("#resume-flow-cert")||root.querySelector("#resume-total-robot");

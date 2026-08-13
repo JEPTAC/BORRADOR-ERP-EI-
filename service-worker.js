@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-25-6-order-flow-start-hotfix-20260813";
+const CACHE="erp-electroingenieria-v10-25-8-closure-canary-20260813";
 const ASSETS=[
   "./",
   "./index.html",

@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  version: "10.25.6-order-flow-start-hotfix",
+  version: "10.25.8-closure-canary-flow",
   build: "2026-08-13.3",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",

@@ -4,7 +4,7 @@ import {loading,toast,modal,empty,wizard,guide} from "../core/ui.js";
 import {summaryItem} from "../core/guided.js";
 import {hasRole} from "../core/state.js";
 import {runTotalQaRobot,runDeepQaCampaign,runRouteQaCampaign,resumeTotalQaRobot,robotCheckRows} from "./qa-total.js";
-import {runFlowCertification,resumeLatestFlow,openFlowResults} from "./qa-flow.js";
+import {runFlowCertification,runFlowCanary,resumeLatestFlow,openFlowResults} from "./qa-flow.js";
 
 export async function renderQa(root){
   if(!hasRole("super_admin")){
@@ -19,12 +19,13 @@ export async function renderQa(root){
           <h2>Certificación del flujo de pedidos</h2>
           <p>Esta es la prueba de lanzamiento: crea <strong>336 pedidos TEST-QA</strong> y los hace pasar por la ruta completa usando los <strong>roles, usuarios y RPC reales de cada módulo</strong>. Una combinación solo aprueba si llega exactamente a <strong>CLOSED</strong>.</p>
           <div class="qa-total-hero-actions">
-            <button class="btn btn-primary btn-large" id="run-flow-cert">▶ Certificar flujo completo</button>
+            <button class="btn btn-primary btn-large" id="run-flow-canary">▶ Probar 1 pedido canario</button>
+            <button class="btn btn-primary btn-large" id="run-flow-cert">▶ Certificar 336 flujos</button>
             <button class="btn btn-ghost" id="resume-flow-cert" hidden>↻ Reanudar flujo</button>
             <button class="btn btn-ghost" id="view-flow-result">Ver resultado / rutas</button>
           </div>
         </div>
-        <div class="qa-total-seal"><span>FLOW</span><strong>10.25.5</strong><small>Order Certification</small></div>
+        <div class="qa-total-seal"><span>FLOW</span><strong>10.25.8</strong><small>Canary + 336</small></div>
       </header>
 
       <section class="qa-total-grid">
@@ -65,6 +66,7 @@ export async function renderQa(root){
       <section class="card"><header class="card-head"><div><span class="qa-total-eyebrow">HISTORIAL</span><h3>Ejecuciones QA</h3></div><button class="btn btn-ghost" id="refresh-qa">Actualizar</button></header><div class="card-body" id="qa-runs">${loading()}</div></section>
     </section>`;
 
+  root.querySelector("#run-flow-canary").onclick=()=>runFlowCanary(root);
   root.querySelector("#run-flow-cert").onclick=()=>confirmFlow(root);
   root.querySelector("#resume-flow-cert").onclick=()=>resumeLatestFlow(root);
   root.querySelector("#view-flow-result").onclick=()=>openLatestFlow();
@@ -81,15 +83,11 @@ export async function renderQa(root){
 }
 
 function confirmFlow(root){
-  wizard({title:"Certificar flujo completo",subtitle:"336 pedidos TEST-QA operados con roles reales",finishLabel:"Iniciar certificación",steps:[
+  wizard({title:"Certificar flujo completo",subtitle:"336 pedidos TEST-QA operados con roles reales",steps:[
     {title:"Qué va a hacer",description:"Creará las 336 combinaciones y recorrerá cada pedido hasta CLOSED usando los usuarios/roles esperados en Cartera, Caja, Compras, Recepción, Alistamiento, Corte, Facturación y Despachos."},
     {title:"Filtros incluidos",description:"En cada etapa prueba Nota, Novedad y solución, Reporte y solución, Espera/Reanudación; además cada pedido prueba una aprobación de prioridad."},
     {title:"Criterio",description:"Solo muestra LANZABLE si 336/336 cierran por la ruta exacta, ningún módulo/rol falla y también pasan las ramas especiales y de no-entrega."}
-  ],onFinish:()=>{
-    void runFlowCertification(root).catch(error=>{
-      toast(error?.technicalMessage||error?.message||String(error),"error",10000);
-    });
-  }});
+  ],finishLabel:"Iniciar certificación",onFinish:()=>runFlowCertification(root)});
 }
 async function openLatestFlow(){
   try{const latest=await api.qaFlowLatest();if(!latest?.available)return toast("Todavía no existe una certificación de flujo.","info",5000);await openFlowResults(latest.runId)}catch(error){toast(error.message||String(error),"error",9000)}

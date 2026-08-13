@@ -201,7 +201,7 @@ select
   to_regprocedure('public.erp_x_qa_flow_user_readiness()') is not null as flow_usuarios_reales_ok,
   to_regprocedure('public.erp_x_qa_flow_delivery_exception_suite(uuid)') is not null as flow_no_entrega_roles_ok,
   to_regprocedure('public.erp_x_qa_flow_finish(uuid)') is not null as flow_finish_ok,
-  position('10.25.5' in pg_get_functiondef('public.erp_x_qa_flow_execute_slice(uuid)'::regprocedure))>0 as flow_v10_25_5;
+  position('10.25.8' in pg_get_functiondef('public.erp_x_qa_flow_execute_slice(uuid)'::regprocedure))>0 as flow_v10_25_8;
 
 select
   s.code as step_code,
@@ -218,8 +218,8 @@ where s.active and not s.terminal
 order by s.sort_order;
 
 
--- Debe devolver success=true antes de certificar salida.
-select public.erp_x_qa_flow_user_readiness();
+-- La disponibilidad de usuarios operativos se valida desde el ERP autenticado al iniciar el canario/certificación.
+-- No se invoca aquí porque SQL Editor no tiene JWT de un perfil ERP.
 
 
 -- V10.25.7 · identidad transaccional y creación real por Ventas
@@ -228,4 +228,16 @@ select
   to_regprocedure('public.erp_x_qa_flow_identity_contract()') is not null as qa_flow_identity_contract_ok,
   position('qa_flow_context_active' in pg_get_functiondef('erp_supply.can_view_order(uuid)'::regprocedure))>0 as qa_test_visibility_scoped,
   position('qa_flow_create_case_id' in pg_get_functiondef('public.erp_x_create_order(jsonb,text)'::regprocedure))>0 as qa_sales_create_scoped;
-select public.erp_x_qa_flow_identity_contract();
+-- El contrato 10.25.7 requiere sesión ERP autenticada; no se invoca desde SQL Editor.
+
+
+-- V10.25.8 · coherencia CLOSURE + canario + resiliencia
+select
+  to_regprocedure('public.erp_x_qa_flow_create_canary()') is not null as flow_canary_rpc_ok,
+  to_regprocedure('public.erp_x_qa_flow_execute_slice_v10257_core(uuid)') is not null as flow_core_preserved_ok,
+  erp_supply.default_role_for_step('CLOSURE','CLIENT_PICKUP')='coordinador_logistico' as closure_local_role_ok,
+  erp_supply.default_role_for_step('CLOSURE','NATIONAL_DISPATCH')='despacho_nacional' as closure_national_role_ok,
+  position('wrapperCaptured' in pg_get_functiondef('public.erp_x_qa_flow_execute_slice(uuid)'::regprocedure))>0 as flow_slice_resilient_ok;
+
+-- Este contrato NO requiere JWT y puede ejecutarse desde SQL Editor.
+select public.erp_x_qa_flow_v10258_contract();
