@@ -220,3 +220,12 @@ order by s.sort_order;
 
 -- Debe devolver success=true antes de certificar salida.
 select public.erp_x_qa_flow_user_readiness();
+
+
+-- V10.25.7 · identidad transaccional y creación real por Ventas
+select
+  to_regprocedure('erp_supply.qa_flow_context_active(uuid)') is not null as qa_flow_context_ok,
+  to_regprocedure('public.erp_x_qa_flow_identity_contract()') is not null as qa_flow_identity_contract_ok,
+  position('qa_flow_context_active' in pg_get_functiondef('erp_supply.can_view_order(uuid)'::regprocedure))>0 as qa_test_visibility_scoped,
+  position('qa_flow_create_case_id' in pg_get_functiondef('public.erp_x_create_order(jsonb,text)'::regprocedure))>0 as qa_sales_create_scoped;
+select public.erp_x_qa_flow_identity_contract();
