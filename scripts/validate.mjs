@@ -26,8 +26,9 @@ check(!fs.existsSync(path.join(root,"assets/js/modules/sandbox.js")),"sandbox.js
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"qa-total.js no debe existir.");
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"qa-flow.js no debe existir.");
 check(!/\.from\s*\(/.test(jsFiles.map(f=>fs.readFileSync(f,"utf8")).join("\n")),"El navegador no debe acceder a tablas directamente; use RPC.");
-check(read("assets/js/config.js").includes('10.33.0-estabilizacion-total'),"Versión visual incorrecta.");
-check(read("service-worker.js").includes('10-33-0-estabilizacion-total'),"Cache del Service Worker no corresponde a V10.33.0.");
+check(read("assets/js/config.js").includes('10.33.1-regresion-total'),"Versión visual incorrecta.");
+check(read("service-worker.js").includes('10-33-1-regresion-total'),"Cache del Service Worker no corresponde a V10.33.1.");
+check(read("index.html").includes("app.css?v=10.33.1")&&read("index.html").includes("main.js?v=10.33.1"),"index.html no invalida cache con la versión V10.33.1.");
 check(read("assets/js/services/drive.js").includes("export async function uploadWorkEvidence"),"drive.js no exporta uploadWorkEvidence requerido por Workforce.");
 check(read("assets/js/services/supabase.js").includes("export async function clearLocalSession"),"Falta recuperación de sesión local obsoleta.");
 check(read("assets/js/main.js").includes("await clearLocalSession()"),"Login no limpia una sesión anterior antes de autenticar.");
@@ -72,7 +73,7 @@ if(failures.length){
   failures.forEach(x=>console.error(`- ${x}`));
   process.exit(1);
 }
-console.log("VALIDACIÓN V10.33.0 CORRECTA");
+console.log("VALIDACIÓN V10.33.1 CORRECTA");
 console.log(`- ${jsFiles.length} archivos JavaScript de producción revisados.`);
 console.log("- Sin rutas, módulos ni RPC de Robot QA/Sandbox en el runtime.");
 console.log("- Acceso a datos productivos mediante RPC y administración Auth mediante Edge Function protegida.");

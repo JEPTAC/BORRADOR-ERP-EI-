@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-33-0-estabilizacion-total-20260814";
+const CACHE="erp-electroingenieria-v10-33-1-regresion-total-20260814";
 const ASSETS=[
   "./",
   "./index.html",

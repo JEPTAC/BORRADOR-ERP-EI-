@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  version: "10.33.0-estabilizacion-total",
+  version: "10.33.1-regresion-total",
   build: "2026-08-14.9",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
