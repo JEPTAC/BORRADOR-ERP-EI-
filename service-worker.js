@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-26-2-estable-20260814";
+const CACHE="erp-electroingenieria-v10-26-3-auth-estable-20260814";
 const ASSETS=[
   "./",
   "./index.html",

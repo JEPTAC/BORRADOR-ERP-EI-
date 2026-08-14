@@ -1,7 +1,7 @@
 import {state,setState} from "./core/state.js";
 import {renderLogin,renderShell,updateShell} from "./core/layout.js";
 import {initRouter,navigate} from "./core/router.js";
-import {signIn,getSession,onAuthChange} from "./services/supabase.js";
+import {signIn,getSession,onAuthChange,clearLocalSession} from "./services/supabase.js";
 import {api} from "./services/api.js";
 import {toast,loading,installDialogSystem} from "./core/ui.js";
 import {renderDashboard} from "./modules/dashboard.js";
@@ -23,12 +23,17 @@ import {initWorkClock} from "./modules/work-clock.js";
 
 const routes={dashboard:renderDashboard,orders:renderOrders,sales:renderOrders,credit:renderCredit,inventory:renderInventory,approvals:renderApprovals,vsm:renderVsm,imports:renderImports,audit:renderAudit,admin:renderAdmin,reports:renderReports,cutting:renderCutting,workforce:renderWorkforce};
 const queueModules={cartera:["CARTERA"],caja:["CAJA","CAJA_FACTURACION"],purchasing:["COMPRAS"],receiving:["RECEPCION_MERCANCIA","RECEPCION_PEDIDO"],picking:["ALISTAMIENTO"],billing:["FACTURACION"],shipping:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]};
+let authBootPromise=null;
+const SESSION_PROFILE_ERROR=/usuario sin perfil operativo activo|perfil operativo activo|jwt expired|token.*expired/i;
+
 const titles={dashboard:["Centro de operación","Visibilidad ejecutiva, cargas y cuellos de botella"],orders:["Control de pedidos","Consulta, trazabilidad y operación integral"],sales:["Registro de ventas","Creación de pedidos y control comercial"],credit:["Solicitudes de crédito","Radicación, estudio y decisión"],cartera:["Cartera","Validación de riesgo y liberación"],caja:["Caja","Retenidos y facturación de pedidos PVN"],purchasing:["Compras","Abastecimiento y órdenes PVE"],receiving:["Recepción","Ingreso documental, físico, calidad y etiquetas"],picking:["Alistamiento","Preparación, controles y novedades"],cutting:["Centro de corte","Referencias agrupadas, control de carretos y entrega a Alistamiento"],billing:["Facturación","Factura, soporte y liberación"],shipping:["Despachos y entregas","Rutas locales, nacionales, recogidas y cierre"],inventory:["Inventario","Existencias, lotes, ubicaciones y movimientos"],workforce:["Mi jornada y actividades","Tiempo, planificación, evidencias y capacidad del equipo"],approvals:["Centro de excepciones","Novedades, reportes, aprobaciones, SLA y escalamiento"],vsm:["Flujo y tiempos","Tiempo total, trabajo productivo, espera y productividad"],reports:["Reportes y analítica","Pareto de causas, indicadores y exportaciones"],imports:["Importar histórico","Carga controlada de pedidos cerrados por CSV"],audit:["Auditoría","Registro inmutable de decisiones y movimientos"],admin:["Administración","Usuarios, roles, calendarios y reglas"]};
 
 async function bootAuthenticated(){
-  document.querySelector("#app").innerHTML=loading("Preparando tu espacio de trabajo…");
-  try{
-    const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();initActiveWork();initWorkClock();installSupportFlow();
+  if(authBootPromise)return authBootPromise;
+  authBootPromise=(async()=>{
+    document.querySelector("#app").innerHTML=loading("Preparando tu espacio de trabajo…");
+    try{
+      const context=await api.session();setState({profile:context.profile,organization:context.organization,modules:context.modules,catalogs:context.catalogs});renderShell();initActiveWork();initWorkClock();installSupportFlow();
     initRouter(async route=>{
       if(route.segments[0]==="order"&&route.segments[1]){navigate("orders");setTimeout(()=>openOrder(route.segments[1]),0);return}
       const moduleId=route.module;const [title,sub]=titles[moduleId]||["ERP Electroingeniería",""];updateShell(moduleId,title,sub);
@@ -38,19 +43,52 @@ async function bootAuthenticated(){
         else await (routes[moduleId]||renderDashboard)(root,{moduleId,params:route.params});
       }catch(e){console.error("[ERP MODULE]",moduleId,e);root.innerHTML=`<div class="card card-pad module-error"><h3>No fue posible cargar el módulo</h3><p class="danger">${e.message}</p><button class="btn btn-primary" id="retry-module">Reintentar</button></div>`;root.querySelector("#retry-module")?.addEventListener("click",()=>location.reload());toast(e.message,"error",8000)}
     });
-  }catch(e){renderLogin(e.message);bindLogin()}
+    }catch(e){
+      const technical=String(e?.technicalMessage||e?.message||"");
+      if(e?.rpc==="erp_x_session"&&SESSION_PROFILE_ERROR.test(technical)){
+        await clearLocalSession();
+        setState({session:null,profile:null,organization:null,modules:[],catalogs:{}});
+        renderLogin("La sesión anterior ya no es válida. Inicia sesión nuevamente.");
+      }else renderLogin(e.message);
+      bindLogin();
+    }
+  })();
+  try{return await authBootPromise}finally{authBootPromise=null}
 }
 
 function bindLogin(){
   const form=document.querySelector("#login-form");if(!form)return;
-  form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector("button");btn.disabled=true;try{await signIn(form.email.value.trim(),form.password.value)}catch(err){renderLogin(err.message);bindLogin()}finally{btn.disabled=false}};
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const btn=form.querySelector("button");
+    const email=form.email.value.trim();
+    const password=form.password.value;
+    btn.disabled=true;
+    try{
+      await clearLocalSession();
+      setState({session:null,profile:null,organization:null,modules:[],catalogs:{}});
+      const auth=await signIn(email,password);
+      setState({session:auth.session||null});
+      await bootAuthenticated();
+    }catch(err){
+      setState({session:null,profile:null,organization:null,modules:[],catalogs:{}});
+      renderLogin(err.message||"No fue posible iniciar sesión.");
+      bindLogin();
+    }finally{btn.disabled=false}
+  };
 }
 
 installDialogSystem();
 
 async function start(){
-  const session=await getSession();setState({session});if(session)await bootAuthenticated();else{renderLogin();bindLogin()}
-  onAuthChange(async session=>{setState({session});if(session&&!state.profile)await bootAuthenticated();if(!session){setState({profile:null,modules:[],catalogs:{}});renderLogin();bindLogin()}});
+  const session=await getSession();
+  setState({session});
+  if(session)await bootAuthenticated();else{renderLogin();bindLogin()}
+  onAuthChange(async(session,event)=>{
+    setState({session});
+    if(session&&!state.profile&&event!=="INITIAL_SESSION")await bootAuthenticated();
+    if(!session){setState({profile:null,organization:null,modules:[],catalogs:{}});renderLogin();bindLogin()}
+  });
 }
 window.addEventListener("erp:open-order",e=>openOrder(e.detail));
 document.addEventListener("click",event=>{
