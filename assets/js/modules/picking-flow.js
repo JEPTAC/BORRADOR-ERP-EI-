@@ -17,7 +17,7 @@ export async function openCutPickup(orderId,{refreshLists}={}){
     const data=await api.cutPickupDetail(orderId);
     renderStandaloneCutPickup(host,data,{refreshLists});
   }catch(error){
-    host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><div><h3>No fue posible abrir la recogida</h3></div><button class="icon-btn" data-close>×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
+    host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><div><h3>No fue posible abrir la recogida</h3></div><button class="icon-btn" data-close aria-label="Cerrar">×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
     bindClose(host);
   }
 }

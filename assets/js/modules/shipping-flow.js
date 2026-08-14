@@ -2,7 +2,7 @@ import {api} from "../services/api.js";
 import {fmt,statusBadge,priorityBadge} from "../core/format.js";
 import {modal,toast,loading,empty,paginationHtml} from "../core/ui.js";
 import {uploadOrderFile} from "../services/drive.js";
-import {hasRole} from "../core/state.js";
+import {state,hasRole} from "../core/state.js";
 import {parallelWorkFooter} from "./active-work.js";
 
 const ROUTE_STEPS=new Set(["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH"]);
@@ -30,6 +30,7 @@ async function storeShippingFile(data,file,category,taskId){
 function guideFile(data){return (data.files||[]).filter(file=>file.file_category==="SHIPPING_GUIDE").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]||null}
 function canReportNoDelivery(){return hasRole("ventas")||hasRole("super_admin")}
 function canOperateShipping(){return hasRole("super_admin")||hasRole("coordinador_logistico")||hasRole("despacho_nacional")||hasRole("jefe_logistica")}
+function canOperateTask(task){const assignee=task?.assigned_profile_id||task?.assignedProfileId;return !assignee||assignee===state.profile?.id||hasRole("super_admin")||hasRole("jefe_logistica")}
 
 export function renderShippingFlow(host,data,{reload,refreshLists}={}){
   if(!canOperateShipping())return renderCommercialViewer(host,data,{refreshLists});
@@ -58,6 +59,10 @@ function renderDispatch(host,data,{reload,refreshLists}){
   const task=activeTask(data),delivery=latestDelivery(data),place=destination(delivery,data.order);
   const started=task?.status==="IN_PROGRESS";
   const guideReady=Boolean(delivery?.tracking_number);
+  if(started&&!canOperateTask(task)){
+    shell(host,data,`<section class="shipping-commercial-view"><header><div><span>Despacho en gestión</span><h4>Pedido tomado por otro responsable</h4><p>La información queda disponible para consulta, pero solo el responsable actual o Jefatura puede registrar guía y avanzar el despacho.</p></div>${statusBadge(data.order.status)}</header>${locationSummary(place)}<details class="simple-details" open><summary>Ver trazabilidad y tiempos</summary>${shippingSummary(data)}</details></section>`,``);
+    return;
+  }
   if(!started){
     shell(host,data,`<section class="shipping-take-card"><span class="shipping-route-chip">${fmt.escape(fmt.route(data.order.delivery_route_code))}</span><div class="shipping-take-icon">↗</div><h4>El pedido está listo para despacho</h4><p>Tómalo para registrar la guía y enviarlo directamente al cierre. La dirección ya fue registrada por Ventas.</p><button class="btn btn-primary btn-hero" data-take-shipping>Tomar pedido</button>${task?.status==="WAITING"||task?.status==="BLOCKED"?`<small>El pedido estaba en espera. Al tomarlo se retomará la gestión.</small>`:""}</section>${locationSummary(place)}<details class="simple-details"><summary>Ver información completa del pedido</summary>${shippingSummary(data)}</details>`);
     host.querySelector("[data-take-shipping]")?.addEventListener("click",async event=>{

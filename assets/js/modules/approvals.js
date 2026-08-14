@@ -2,6 +2,7 @@ import {api} from "../services/api.js";
 import {fmt,statusBadge} from "../core/format.js";
 import {empty,loading,wizard,toast,guide,modal} from "../core/ui.js";
 import {summaryItem} from "../core/guided.js";
+import {state} from "../core/state.js";
 import {openOrder} from "./orders.js";
 
 let activeMode="CENTER";
@@ -35,7 +36,7 @@ export async function renderApprovals(root){
   root.querySelector("#exceptions-refresh")?.addEventListener("click",async()=>{
     try{await api.refreshOperationalSla();toast("SLA y escalamiento actualizados.","success",4500);await Promise.all([loadSummary(root),loadWorkspace(root)]);}catch(error){toast(error.message,"error",7000)}
   });
-  root.querySelector("#approvals-help")?.addEventListener("click",()=>guide({title:"Centro de excepciones",description:"La bandeja prioriza lo que puede afectar el flujo y separa las notas operativas de las verdaderas excepciones.",items:[{title:"Atiende primero lo escalado",detail:"Los casos en nivel Alto o Crítico ya superaron el SLA laboral configurado."},{title:"Cierra la causa, no solo la alerta",detail:"Una Novedad o Reporte desaparece del bloqueo cuando registras la solución."},{title:"Decide las aprobaciones",detail:"Solo Jefatura Logística, Auditoría, Gerencia o Superadministración pueden aprobar."},{title:"Revisa el historial",detail:"Todas las decisiones y tiempos quedan trazados para análisis posterior."}]}));
+  root.querySelector("#approvals-help")?.addEventListener("click",()=>guide({title:"Centro de excepciones",description:"La bandeja prioriza lo que puede afectar el flujo y separa las notas operativas de las verdaderas excepciones.",items:[{title:"Atiende primero lo escalado",detail:"Los casos en nivel Alto o Crítico ya superaron el SLA laboral configurado."},{title:"Cierra la causa, no solo la alerta",detail:"Una Novedad o Reporte desaparece del bloqueo cuando registras la solución."},{title:"Decide las aprobaciones",detail:"Solo los perfiles con capacidad de aprobación pueden decidir; Auditoría permanece en consulta."},{title:"Revisa el historial",detail:"Todas las decisiones y tiempos quedan trazados para análisis posterior."}]}));
   await Promise.all([loadSummary(root),loadWorkspace(root)]);
 }
 
@@ -72,9 +73,12 @@ async function loadWorkspace(root){
   }catch(error){target.innerHTML=`<div class="module-error"><strong>No fue posible cargar el Centro de Excepciones</strong><p>${fmt.escape(error.message)}</p></div>`}
 }
 
+function isReadOnlyAudit(){const roles=state.profile?.roles||[];return roles.includes("auditoria")&&roles.every(role=>role==="auditoria")}
+
 function exceptionCard(item){
   const level=Number(item.slaLevel||0);
   const open=item.itemType==="ISSUE"?item.status==="OPEN":item.status==="PENDING";
+  const canIntervene=!isReadOnlyAudit();
   const typeLabel=item.itemType==="APPROVAL"?"APROBACIÓN":item.subtype==="NOVELTY"?"NOVEDAD":"REPORTE";
   return `<article class="exception-card sla-${level} ${open?"open":"closed"}" data-exception-id="${fmt.escape(item.id)}">
     <div class="exception-card-rail"></div>
@@ -84,7 +88,7 @@ function exceptionCard(item){
       <h3>${fmt.escape(readable(item.title||item.subtype))}</h3><p>${fmt.escape(item.detail||"")}</p>
       <footer><span>Registró: <strong>${fmt.escape(item.actorName||"Usuario")}</strong></span><span>${Number(item.slaLevel||0)>=2&&item.escalatedRole?"Escalado a":"Destino"}: <strong>${fmt.escape(fmt.role((Number(item.slaLevel||0)>=2&&item.escalatedRole)||item.targetRole||"Sin asignar"))}</strong></span><span>${fmt.date(item.createdAt)}</span></footer>
     </div>
-    <div class="exception-card-actions"><button class="btn btn-ghost" data-open-order="${fmt.escape(item.orderId)}">Ver pedido</button>${open&&item.itemType==="ISSUE"&&item.canResolve?`<button class="btn btn-primary" data-resolve-issue="${fmt.escape(item.id)}">Solucionar</button>`:""}${open&&item.itemType==="APPROVAL"&&item.canResolve?`<button class="btn btn-primary" data-go-approval>Decidir</button>`:""}</div>
+    <div class="exception-card-actions"><button class="btn btn-ghost" data-open-order="${fmt.escape(item.orderId)}">Ver pedido</button>${open&&item.itemType==="ISSUE"&&item.canResolve&&canIntervene?`<button class="btn btn-primary" data-resolve-issue="${fmt.escape(item.id)}">Solucionar</button>`:""}${open&&item.itemType==="APPROVAL"&&item.canResolve&&canIntervene?`<button class="btn btn-primary" data-go-approval>Decidir</button>`:""}</div>
   </article>`;
 }
 
@@ -134,7 +138,7 @@ async function loadApprovals(root){
   await load();
 }
 
-function approvalCards(rows){return `<div class="decision-grid">${rows.map(request=>`<article class="decision-card sla-${Number(request.slaLevel||0)}"><div class="decision-card-head"><div><strong>${fmt.escape(request.orderNumber)}</strong><span>${fmt.escape(request.clientName)}</span></div>${statusBadge(request.status)}</div><div class="decision-card-body"><div class="exception-identifiers">${slaBadge(Number(request.slaLevel||0),request.ageBusinessSeconds)}${priorityBadge(request.priority)}</div><label>Solicitud</label><h3>${fmt.escape(fmt.request(request.requestType))}</h3>${request.requestPayload?.exceptionCode?`<span class="decision-exception-code">${fmt.escape(request.requestPayload.exceptionCode.replaceAll("_"," "))}</span>`:""}<p>${fmt.escape(request.reason)}</p><div class="decision-meta"><span>Solicita: <strong>${fmt.escape(request.requestedBy)}</strong></span><span>Destino: <strong>${fmt.escape(fmt.role(request.assignedRole||"jefe_logistica"))}</strong></span><span>${businessAge(request.ageBusinessSeconds)}</span></div></div><footer class="decision-card-foot"><button class="btn btn-ghost" data-order="${request.orderId}">Ver pedido</button>${request.status==="PENDING"?`<button class="btn btn-success" data-decide data-decision="APPROVED" data-request='${fmt.escape(JSON.stringify(request))}'>Aprobar</button><button class="btn btn-danger" data-decide data-decision="REJECTED" data-request='${fmt.escape(JSON.stringify(request))}'>Rechazar</button>`:""}</footer></article>`).join("")}</div>`}
+function approvalCards(rows){return `<div class="decision-grid">${rows.map(request=>`<article class="decision-card sla-${Number(request.slaLevel||0)}"><div class="decision-card-head"><div><strong>${fmt.escape(request.orderNumber)}</strong><span>${fmt.escape(request.clientName)}</span></div>${statusBadge(request.status)}</div><div class="decision-card-body"><div class="exception-identifiers">${slaBadge(Number(request.slaLevel||0),request.ageBusinessSeconds)}${priorityBadge(request.priority)}</div><label>Solicitud</label><h3>${fmt.escape(fmt.request(request.requestType))}</h3>${request.requestPayload?.exceptionCode?`<span class="decision-exception-code">${fmt.escape(request.requestPayload.exceptionCode.replaceAll("_"," "))}</span>`:""}<p>${fmt.escape(request.reason)}</p><div class="decision-meta"><span>Solicita: <strong>${fmt.escape(request.requestedBy)}</strong></span><span>Destino: <strong>${fmt.escape(fmt.role(request.assignedRole||"jefe_logistica"))}</strong></span><span>${businessAge(request.ageBusinessSeconds)}</span></div></div><footer class="decision-card-foot"><button class="btn btn-ghost" data-order="${request.orderId}">Ver pedido</button>${request.status==="PENDING"&&request.canDecide?`<button class="btn btn-success" data-decide data-decision="APPROVED" data-request='${fmt.escape(JSON.stringify(request))}'>Aprobar</button><button class="btn btn-danger" data-decide data-decision="REJECTED" data-request='${fmt.escape(JSON.stringify(request))}'>Rechazar</button>`:request.status==="PENDING"?`<span class="muted">Solo consulta</span>`:""}</footer></article>`).join("")}</div>`}
 
 function decisionWizard(request,decision,reload){
   const approve=decision==="APPROVED";

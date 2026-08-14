@@ -26,8 +26,8 @@ check(!fs.existsSync(path.join(root,"assets/js/modules/sandbox.js")),"sandbox.js
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"qa-total.js no debe existir.");
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"qa-flow.js no debe existir.");
 check(!/\.from\s*\(/.test(jsFiles.map(f=>fs.readFileSync(f,"utf8")).join("\n")),"El navegador no debe acceder a tablas directamente; use RPC.");
-check(read("assets/js/config.js").includes('10.32.0-refined-workspaces'),"Versión visual incorrecta.");
-check(read("service-worker.js").includes('10-32-0-refined-workspaces'),"Cache del Service Worker no corresponde a V10.32.0.");
+check(read("assets/js/config.js").includes('10.33.0-estabilizacion-total'),"Versión visual incorrecta.");
+check(read("service-worker.js").includes('10-33-0-estabilizacion-total'),"Cache del Service Worker no corresponde a V10.33.0.");
 check(read("assets/js/services/drive.js").includes("export async function uploadWorkEvidence"),"drive.js no exporta uploadWorkEvidence requerido por Workforce.");
 check(read("assets/js/services/supabase.js").includes("export async function clearLocalSession"),"Falta recuperación de sesión local obsoleta.");
 check(read("assets/js/main.js").includes("await clearLocalSession()"),"Login no limpia una sesión anterior antes de autenticar.");
@@ -38,6 +38,16 @@ check(read("assets/js/services/api.js").includes('edgeFunction("erp-admin-users"
 check(fs.existsSync(path.join(root,"supabase/functions/erp-admin-users/index.ts")),"Falta el código fuente de la Edge Function erp-admin-users.");
 check(read("supabase/config.toml").includes("[functions.erp-admin-users]")&&read("supabase/config.toml").includes("verify_jwt = true"),"La Edge Function administrativa debe exigir JWT.");
 
+check(!read("assets/js/modules/orders.js").includes('value="CANCELLATION"'),"El modal genérico todavía ofrece Cancelación fuera de su flujo dedicado.");
+check(read("assets/js/modules/approvals.js").includes('request.canDecide'),"Aprobaciones no respeta canDecide del backend.");
+check(read("assets/js/modules/credit.js").includes('request.canTake')&&read("assets/js/modules/credit.js").includes('request.canDecide'),"Crédito no respeta capacidades del backend.");
+check(read("assets/js/modules/support-flow.js").includes('Modo solo lectura'),"Auditoría no tiene representación explícita de solo lectura en soporte.");
+check(read("assets/js/modules/inventory.js").includes('bindInventoryActions')&&read("assets/js/modules/inventory.js").includes('data-inventory-view'),"Inventario no re-enlaza acciones o no separa consulta de ajuste.");
+check(read("assets/js/modules/shipping-flow.js").includes('canOperateTask'),"Shipping no respeta al responsable de la tarea en UI.");
+check(read("assets/js/modules/orders.js").includes('state.catalogs.orderTypes'),"Ventas conserva tipos de pedido hardcodeados.");
+check(read("assets/js/modules/orders.js").includes('data.requiresPurchase'),"La ruta visual no contempla Requiere compra.");
+check(read("service-worker.js").includes('event.request.mode==="navigate"'),"El Service Worker conserva fallback HTML para assets no navegables.");
+
 
 if(failures.length){
   console.error("VALIDACIÓN FALLIDA");
@@ -45,7 +55,7 @@ if(failures.length){
   process.exit(1);
 }
 const css=read("assets/css/app.css");
-check(css.includes("Refined Workspaces"),"Falta el sistema visual V10.32.0.");
+check(css.includes("Refined Workspaces"),"Falta el sistema visual base Refined Workspaces.");
 check((css.match(/:root\{/g)||[]).length===1,"app.css debe tener una sola raíz de tokens visuales.");
 check(css.includes('font-family:"Century Gothic"'),"La tipografía institucional no está aplicada en el sistema visual.");
 check(css.includes('.btn-primary{')&&css.includes('.btn-create{')&&css.includes('.btn-search{')&&css.includes('.modal-overlay{')&&css.includes('.sidebar{'),"Faltan componentes visuales o semánticos base.");
@@ -62,7 +72,7 @@ if(failures.length){
   failures.forEach(x=>console.error(`- ${x}`));
   process.exit(1);
 }
-console.log("VALIDACIÓN V10.32.0 CORRECTA");
+console.log("VALIDACIÓN V10.33.0 CORRECTA");
 console.log(`- ${jsFiles.length} archivos JavaScript de producción revisados.`);
 console.log("- Sin rutas, módulos ni RPC de Robot QA/Sandbox en el runtime.");
 console.log("- Acceso a datos productivos mediante RPC y administración Auth mediante Edge Function protegida.");

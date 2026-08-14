@@ -7,9 +7,12 @@ import {syncSiesaFile} from "../services/materials.js";
 
 let currentItems=[];
 let currentPage=1;
+let currentPagination=null;
+let inventoryCanUpdate=false;
 
 export async function renderInventory(root){
   const canUpdate=can("inventory","canUpdate");
+  inventoryCanUpdate=canUpdate;
   root.innerHTML=`
     <section class="page-head"><div><h2>Maestro de materiales e inventario</h2><p>Una sola fuente de verdad para Ventas, Recepción, Inventario y Corte. Solo se muestran materiales oficiales vinculados a Siesa.</p></div><div class="page-actions">${canUpdate?'<button class="btn btn-primary" id="sync-siesa">Actualizar maestro Siesa</button>':""}<button class="btn btn-help" id="inventory-help">Ver guía</button></div></section>
     ${workspaceIntro({title:"Inventario oficial",description:"Referencia y nombre se protegen con el maestro Siesa. Los registros de prueba quedan fuera de esta operación sin borrar su historial.",cards:actionCards([
@@ -30,9 +33,9 @@ export async function renderInventory(root){
     target.innerHTML=loading("Consultando inventario oficial…");
     const data=await api.inventory(root.querySelector("#inv-search").value,page,50);
     currentItems=data.items||[];
-    target.innerHTML=currentItems.length?`${cards(currentItems)}${paginationHtml(data.pagination)}`:empty("Sin coincidencias oficiales","Ajusta la búsqueda o actualiza el maestro Siesa.");
-    target.querySelectorAll("[data-inventory-item]").forEach(button=>button.onclick=()=>movementWizard(load,button.dataset.inventoryItem));
-    target.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>load(Number(button.dataset.page)));
+    currentPagination=data.pagination||null;
+    target.innerHTML=currentItems.length?`${cards(currentItems)}${paginationHtml(currentPagination)}`:empty("Sin coincidencias oficiales","Ajusta la búsqueda o actualiza el maestro Siesa.");
+    bindInventoryActions(target,load);
   }
 
   async function loadSyncStatus(){
@@ -50,7 +53,7 @@ export async function renderInventory(root){
   root.querySelector("#inv-search").onkeydown=event=>{if(event.key==="Enter")load(1)};
   root.querySelector("#search-inventory").onclick=()=>root.querySelector("#inv-search").focus();
   root.querySelector("#inventory-source").onclick=loadSyncStatus;
-  root.querySelector("#low-stock").onclick=()=>{currentItems.sort((a,b)=>Number(a.availableToPromise??a.available)-Number(b.availableToPromise??b.available));root.querySelector("#inv-result").innerHTML=cards(currentItems)};
+  root.querySelector("#low-stock").onclick=()=>{currentItems.sort((a,b)=>Number(a.availableToPromise??a.available)-Number(b.availableToPromise??b.available));const target=root.querySelector("#inv-result");target.innerHTML=`${cards(currentItems)}${currentPagination?paginationHtml(currentPagination):""}`;bindInventoryActions(target,load)};
   root.querySelector("#sync-siesa")?.addEventListener("click",()=>openSiesaSync(async()=>{await loadSyncStatus();await load(1)}));
   root.querySelector("#inventory-help").onclick=()=>guide({title:"Maestro Siesa e inventario",description:"La referencia y el nombre son la identidad oficial del material.",items:[
     {title:"Ventas selecciona, no escribe",detail:"Los asesores buscan materiales en este mismo maestro."},
@@ -68,8 +71,21 @@ function cards(rows){
       <div class="inventory-numbers inventory-numbers-v1015"><div><label>Existencia física</label><strong>${fmt.number(item.physicalExistence??(Number(item.available||0)+Number(item.siesaCommitted||0)+Number(item.blocked||0)),3)}</strong></div><div><label>Disponible Siesa</label><strong>${fmt.number(item.available,3)}</strong></div><div><label>Reservado ERP</label><strong class="info">${fmt.number(item.erpReserved||0,3)}</strong></div><div><label>Disponible para venta</label><strong class="success">${fmt.number(item.availableToPromise??item.available,3)}</strong></div><div><label>Comprometido Siesa</label><strong>${fmt.number(item.siesaCommitted||0,3)}</strong></div><div><label>Bloqueado</label><strong class="warning">${fmt.number(item.blocked,3)}</strong></div><div><label>Registros físicos</label><strong>${fmt.number(item.lots)}</strong></div></div>
       ${Number(item.variantCount||0)>0?`<p class="inventory-variant-note">${fmt.number(item.variantCount)} variante(s) con existencia física separada.</p>`:""}
     </div>
-    <footer><span>Referencia y nombre validados</span><button class="btn btn-primary" data-inventory-item="${item.id}">Ver lotes / ajustar</button></footer>
+    <footer><span>Referencia y nombre validados</span>${inventoryCanUpdate?`<button class="btn btn-primary" data-inventory-item="${item.id}">Ver lotes / ajustar</button>`:`<button class="btn btn-ghost" data-inventory-view="${item.id}">Ver lotes</button>`}</footer>
   </article>`).join("")}</div>`;
+}
+
+function bindInventoryActions(target,reload){
+  target.querySelectorAll("[data-inventory-item]").forEach(button=>button.onclick=()=>movementWizard(reload,button.dataset.inventoryItem));
+  target.querySelectorAll("[data-inventory-view]").forEach(button=>button.onclick=()=>viewLots(button.dataset.inventoryView));
+  target.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>reload(Number(button.dataset.page)));
+}
+
+async function viewLots(itemId){
+  const item=currentItems.find(row=>row.id===itemId);
+  if(!item)return toast("El material ya no está disponible en esta vista.","error");
+  const lots=await api.inventoryLots(item.id,"");
+  modal({title:`Lotes · ${item.reference}`,size:"wide",confirmLabel:"Cerrar",body:lots.length?`<div class="inventory-choice-grid official-lot-grid">${lots.map(lot=>`<article class="inventory-choice official-lot-choice"><span><strong>${fmt.escape(lot.variantLabel?`${lot.variantLabel} · ${lot.lotNumber||"Lote"}`:(lot.lotNumber||lot.serialNumber||"Lote"))}</strong><small>${fmt.escape([lot.warehouseCode,lot.location,lot.locationName,lot.serialNumber].filter(Boolean).join(" · ")||"Sin ubicación")}</small><b>Disponible: ${fmt.number(lot.available,3)} ${fmt.escape(lot.unit)}</b><em>${fmt.escape(lot.sourceSystem||"ERP")}</em></span></article>`).join("")}</div>`:`<div class="empty-state"><strong>Sin lotes activos</strong><p>Este material no tiene registros físicos activos.</p></div>`});
 }
 
 async function movementWizard(reload,preselectedId){

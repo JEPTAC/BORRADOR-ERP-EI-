@@ -1,6 +1,7 @@
 import {api} from "../services/api.js";
 import {fmt} from "../core/format.js";
 import {toast,taskPanel} from "../core/ui.js";
+import {state,hasRole} from "../core/state.js";
 
 let installed=false;
 
@@ -36,7 +37,10 @@ function enhance(root){
   });
 }
 
+function isReadOnlyAudit(){const roles=state.profile?.roles||[];return hasRole("auditoria")&&roles.every(role=>role==="auditoria")}
+
 function toolbar(orderId){
+  if(isReadOnlyAudit())return `<div class="order-support-toolbar read-only"><div class="order-support-title"><span>AUDITORÍA</span><strong>Modo solo lectura</strong></div><div class="muted">Puedes consultar la trazabilidad, pero no modificar el pedido.</div></div>`;
   return `<div class="order-support-toolbar">
     <div class="order-support-title"><span>TRAZABILIDAD OPERATIVA</span><strong>Registrar situación</strong></div>
     <div class="order-support-actions">
@@ -120,7 +124,7 @@ function openApproval(orderId){
         <option value="FLOW_EXCEPTION">Excepción operativa / de flujo</option>
         <option value="DATA_CORRECTION">Corrección de datos</option>
       </select></div>
-      <div class="field"><label>Enviar a *</label><select class="control" name="assignedRole" required><option value="jefe_logistica">Jefatura Logística</option><option value="auditoria">Auditoría</option><option value="gerencia">Gerencia</option></select></div>
+      <div class="field"><label>Enviar a *</label><select class="control" name="assignedRole" required><option value="jefe_logistica">Jefatura Logística</option><option value="gerencia">Gerencia</option></select></div>
       <div class="field"><label>Justificación *</label><textarea class="control" name="reason" required rows="4" placeholder="Explica por qué la excepción debe ser aprobada"></textarea></div>`,
     onConfirm:async dialog=>{
       const kind=dialog.querySelector('[name="approvalKind"]').value;

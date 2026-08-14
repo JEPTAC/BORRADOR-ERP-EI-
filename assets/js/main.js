@@ -100,4 +100,4 @@ document.addEventListener("click",event=>{
   toast("El pedido anterior continúa en Mis pedidos activos. Puedes tomar otro sin perder el avance.","success",6000);
 });
 start().catch(e=>{renderLogin(e.message);bindLogin()});
-if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}))}
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(error=>console.warn("Service Worker no disponible",error)))}
