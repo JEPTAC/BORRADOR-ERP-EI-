@@ -34,6 +34,27 @@ async function mutationRpc(name,params={}){
   return data;
 }
 
+async function edgeFunction(name,body={}){
+  const {data,error}=await getSupabase().functions.invoke(name,{body});
+  if(error){
+    let technical=error.message||"";
+    try{
+      const response=error.context;
+      if(response&&typeof response.clone==="function"){
+        const payload=await response.clone().json();
+        technical=payload?.error||payload?.message||technical;
+      }
+    }catch{}
+    console.error(`[ERP EDGE] ${name}`,{body,error});
+    const e=new Error(friendly(technical||error.message));
+    Object.assign(e,error,{edgeFunction:name,technicalMessage:technical});
+    e.message=friendly(technical||error.message);
+    throw e;
+  }
+  if(data?.error){const e=new Error(friendly(data.error));Object.assign(e,{edgeFunction:name,technicalMessage:data.error});throw e}
+  return data;
+}
+
 export const api={
   session:()=>rpc("erp_x_session"),
   health:()=>rpc("erp_x_health_check"),
@@ -70,6 +91,11 @@ export const api={
   vsm:(from,to)=>rpc("erp_x_vsm",{p_date_from:from,p_date_to:to}),
   importHistory:(fileName,rows,batchId=null)=>mutationRpc("erp_x_import_history",{p_file_name:fileName,p_rows:rows,p_batch_id:batchId}),
   users:()=>rpc("erp_x_users"),
+  adminDirectory:()=>edgeFunction("erp-admin-users",{action:"list"}),
+  adminCreateUser:user=>edgeFunction("erp-admin-users",{action:"create",user}),
+  adminUpdateUser:user=>edgeFunction("erp-admin-users",{action:"update",user}),
+  adminSetPassword:(profileId,password)=>edgeFunction("erp-admin-users",{action:"password",profileId,password}),
+  adminDeleteUser:(profileId,reason=null)=>edgeFunction("erp-admin-users",{action:"delete",profileId,reason}),
   assignmentPool:step=>rpc("erp_x_assignment_pool",{p_step_code:step}),
   updateChecklist:(taskId,itemCode,completed,note=null)=>mutationRpc("erp_x_update_checklist",{p_task_id:taskId,p_item_code:itemCode,p_completed:completed,p_note:note}),
   saveFinancialValidation:(orderId,payload)=>mutationRpc("erp_x_save_financial_validation",{p_order_id:orderId,p_payload:payload}),

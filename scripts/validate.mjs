@@ -26,20 +26,25 @@ check(!fs.existsSync(path.join(root,"assets/js/modules/sandbox.js")),"sandbox.js
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"qa-total.js no debe existir.");
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"qa-flow.js no debe existir.");
 check(!/\.from\s*\(/.test(jsFiles.map(f=>fs.readFileSync(f,"utf8")).join("\n")),"El navegador no debe acceder a tablas directamente; use RPC.");
-check(read("assets/js/config.js").includes('10.26.3-auth-estable'),"Versión de producción limpia incorrecta.");
-check(read("service-worker.js").includes('10-26-3-auth-estable'),"Cache del Service Worker no corresponde a V10.26.3.");
+check(read("assets/js/config.js").includes('10.27.0-super-admin'),"Versión de producción limpia incorrecta.");
+check(read("service-worker.js").includes('10-27-0-super-admin'),"Cache del Service Worker no corresponde a V10.26.3.");
 check(read("assets/js/services/drive.js").includes("export async function uploadWorkEvidence"),"drive.js no exporta uploadWorkEvidence requerido por Workforce.");
 check(read("assets/js/services/supabase.js").includes("export async function clearLocalSession"),"Falta recuperación de sesión local obsoleta.");
 check(read("assets/js/main.js").includes("await clearLocalSession()"),"Login no limpia una sesión anterior antes de autenticar.");
 check(read("assets/js/main.js").includes("La sesión anterior ya no es válida"),"Falta recuperación visible para perfil eliminado.");
 check(fs.existsSync(path.join(root,"templates/historical_orders.csv")),"Falta la plantilla de importación histórica.");
+check(read("assets/js/modules/admin.js").includes("Consola Super Admin"),"Falta la consola de Super Admin.");
+check(read("assets/js/services/api.js").includes('edgeFunction("erp-admin-users"'),"El frontend no está integrado con la función segura de administración Auth.");
+check(fs.existsSync(path.join(root,"supabase/functions/erp-admin-users/index.ts")),"Falta el código fuente de la Edge Function erp-admin-users.");
+check(read("supabase/config.toml").includes("[functions.erp-admin-users]")&&read("supabase/config.toml").includes("verify_jwt = true"),"La Edge Function administrativa debe exigir JWT.");
+
 
 if(failures.length){
   console.error("VALIDACIÓN FALLIDA");
   failures.forEach(x=>console.error(`- ${x}`));
   process.exit(1);
 }
-console.log("VALIDACIÓN V10.26.3 CORRECTA");
+console.log("VALIDACIÓN V10.27.0 CORRECTA");
 console.log(`- ${jsFiles.length} archivos JavaScript de producción revisados.`);
 console.log("- Sin rutas, módulos ni RPC de Robot QA/Sandbox en el runtime.");
-console.log("- Acceso a datos únicamente mediante RPC.");
+console.log("- Acceso a datos productivos mediante RPC y administración Auth mediante Edge Function protegida.");

@@ -1,0 +1,2 @@
+[functions.erp-admin-users]
+verify_jwt = true
