@@ -13,7 +13,7 @@ export async function renderApprovals(root){
   root.innerHTML=`
     <section class="page-head exception-page-head">
       <div><span class="exception-kicker">Control operacional</span><h2>Centro de excepciones</h2><p>Novedades, reportes, aprobaciones y alertas SLA en una sola bandeja de gestión.</p></div>
-      <div class="page-actions"><button class="btn btn-ghost" id="exceptions-refresh">Actualizar SLA</button><button class="btn btn-ghost" id="approvals-help">Guía</button></div>
+      <div class="page-actions"><button class="btn btn-ghost" id="exceptions-refresh">Actualizar SLA</button><button class="btn btn-help" id="approvals-help">Guía</button></div>
     </section>
     <section class="grid grid-kpi exception-summary" id="exception-summary">${loading("Calculando excepciones…")}</section>
     <section class="exception-mode-bar">

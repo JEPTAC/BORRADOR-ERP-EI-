@@ -19,7 +19,7 @@ export async function renderAdmin(root){
   ];
 
   root.innerHTML=`
-    <section class="page-head"><div><h2>${superAdmin?"Consola Super Admin":"Administración del ERP"}</h2><p>${superAdmin?"Control central de cuentas, perfiles, roles y seguridad de acceso del ERP.":"Consulta calendario y controles del sistema según tus permisos."}</p></div><div class="page-actions"><button class="btn btn-ghost" id="admin-help">Ver guía</button></div></section>
+    <section class="page-head"><div><h2>${superAdmin?"Consola Super Admin":"Administración del ERP"}</h2><p>${superAdmin?"Control central de cuentas, perfiles, roles y seguridad de acceso del ERP.":"Consulta calendario y controles del sistema según tus permisos."}</p></div><div class="page-actions"><button class="btn btn-help" id="admin-help">Ver guía</button></div></section>
     ${superAdmin?`<section class="admin-security-banner"><div><span class="admin-security-icon">◆</span><div><strong>Privilegios de Super Admin activos</strong><p>Las operaciones de Supabase Auth se ejecutan en servidor. La clave administrativa nunca se expone en el navegador y cada cambio queda auditado.</p></div></div><span class="badge badge-green"><span class="badge-dot"></span>Acceso total</span></section>`:""}
     ${workspaceIntro({title:superAdmin?"Centro de administración":"Herramientas administrativas",description:superAdmin?"Gestiona accesos reales de Supabase Auth y perfiles operativos desde un único lugar.":"Solo se muestran las acciones disponibles para tu rol.",cards:actionCards(cards)})}
     <section class="card"><div class="card-body" id="admin-panel">${loading()}</div></section>`;
@@ -70,7 +70,7 @@ async function users(panel){
   panel.innerHTML=`
     <section class="admin-directory-head">
       <div><span class="eyebrow">Directorio de seguridad</span><h3>Usuarios, accesos y roles</h3><p>Gestiona tanto la cuenta real de Supabase Auth como el perfil operativo del ERP.</p></div>
-      <button class="btn btn-primary" id="directory-new-user">＋ Crear usuario</button>
+      <button class="btn btn-create" id="directory-new-user">Crear usuario</button>
     </section>
     <div class="summary-grid admin-summary-grid">
       <div class="summary-box"><span class="muted">Perfiles</span><strong>${rows.length}</strong></div>
@@ -147,7 +147,7 @@ function userDetail({user,roles,reload}){
       <div class="admin-profile-role-list"><label>Roles asignados</label><div class="user-roles">${roleLabels.map(label=>`<span class="badge badge-blue"><span class="badge-dot"></span>${fmt.escape(label)}</span>`).join(" ")||'<span class="muted">Sin roles</span>'}</div></div>
       <div class="admin-profile-actions">
         <button class="admin-command" id="profile-edit"><span>01</span><div><strong>Editar datos y roles</strong><small>Nombre, correo, código, estado y permisos.</small></div></button>
-        ${user.authLinked?`<button class="admin-command" id="profile-password"><span>02</span><div><strong>Cambiar contraseña</strong><small>Define una contraseña nueva desde Super Admin.</small></div></button>`:`<button class="admin-command" id="profile-provision"><span>02</span><div><strong>Crear cuenta de acceso</strong><small>Vuelve a habilitar una identidad Auth para este perfil histórico.</small></div></button>`}
+        ${user.authLinked?`<button class="admin-command" id="profile-password"><span>02</span><div><strong>Cambiar contraseña</strong><small>Define una contraseña nueva desde Super Admin.</small></div></button>`:`<button class="admin-command create" id="profile-provision"><span>02</span><div><strong>Crear cuenta de acceso</strong><small>Vuelve a habilitar una identidad Auth para este perfil histórico.</small></div></button>`}
         <button class="admin-command" id="profile-toggle"><span>03</span><div><strong>${user.active?"Desactivar usuario":"Activar usuario"}</strong><small>${user.active?"Bloquea Auth y el perfil ERP sin borrar trazabilidad.":"Habilita nuevamente Auth y el perfil ERP."}</small></div></button>
         <button class="admin-command danger ${user.isCurrentUser?"disabled":""}" id="profile-delete" ${user.isCurrentUser?"disabled":""}><span>04</span><div><strong>Eliminar usuario</strong><small>Elimina la cuenta Auth y conserva el perfil histórico desactivado.</small></div></button>
       </div>

@@ -205,7 +205,7 @@ async function renderPlanner(root,content){
   content.innerHTML=`
     <section class="work-planner-toolbar card">
       <div class="work-planner-nav"><button class="icon-btn" data-plan-prev aria-label="Anterior">‹</button><button class="btn btn-ghost" data-plan-today>Hoy</button><button class="icon-btn" data-plan-next aria-label="Siguiente">›</button><div><strong>${fmt.escape(plannerTitle())}</strong><span>${plannerMode==="week"?"Distribución semanal de capacidad":"Panorama mensual de compromisos"}</span></div></div>
-      <div class="work-planner-actions"><div class="segment-control"><button class="${plannerMode==="week"?"active":""}" data-plan-mode="week">Semana</button><button class="${plannerMode==="month"?"active":""}" data-plan-mode="month">Mes</button></div><button class="btn btn-ghost" data-plan-new-custom>+ Nueva actividad</button><button class="btn btn-primary" data-plan-new>Asignar del catálogo</button></div>
+      <div class="work-planner-actions"><div class="segment-control"><button class="${plannerMode==="week"?"active":""}" data-plan-mode="week">Semana</button><button class="${plannerMode==="month"?"active":""}" data-plan-mode="month">Mes</button></div><button class="btn btn-create" data-plan-new-custom>Nueva actividad</button><button class="btn btn-primary" data-plan-new>Asignar del catálogo</button></div>
     </section>
     ${plannerMode==="week"?weekPlannerHtml(data):monthPlannerHtml(data)}
     <section class="card work-team-now"><header class="card-head"><div><h3>Capacidad del equipo</h3><p>La carga se calcula con los minutos planificados; no es un ranking de personas.</p></div></header><div class="card-body">${teamCapacityHtml(data.people||[],data.assignments||[],range)}</div></section>`;

@@ -39,7 +39,7 @@ export async function renderOrders(root,{moduleId="orders",params={}}={}){
         ${select("f-route","Modalidad",state.catalogs.deliveryRoutes,"code","name",currentList.filters.route)}
         ${simpleSelect("f-assignment","Asignación",["ALL","MINE","UNASSIGNED"],currentList.filters.assignment)}
         <label class="filter-pill"><input type="checkbox" id="f-history" ${currentList.filters.includeHistory!==false?"checked":""}> Incluir historial</label>
-        <button class="btn btn-primary" id="apply-filters">Buscar</button>
+        <button class="btn btn-search" id="apply-filters">Buscar</button>
       </div>
       <div class="selection-hint"><strong>Lista de pedidos</strong><span>Usa los filtros y abre el pedido desde la acción de la derecha. La lista está pensada para operar alto volumen sin perder contexto.</span></div>
       <div id="orders-result">${loading("Cargando pedidos…")}</div>
@@ -149,7 +149,7 @@ function openCreateOrder(){
           <div class="sales-materials-intro-main"><span class="official-material-mark">SIESA</span><div><strong>Busca, selecciona y registra la necesidad</strong><p>No escribas referencias, nombres, lotes ni ubicaciones. El ERP usa el maestro oficial y reserva lógicamente la cantidad al crear el pedido.</p></div></div>
           <label class="sales-purchase-toggle"><input type="checkbox" name="requiresPurchase"><span><strong>Requiere compra</strong><small>Úsalo cuando comercialmente el pedido dependa de abastecimiento. PVE conserva su ruta por Compras.</small></span></label>
         </section>
-        <div class="items-wizard-head"><div><strong>Materiales vendidos</strong><p>Para materiales en metros puedes registrar entrega directa o varias medidas de corte. El total se calcula automáticamente.</p></div><button class="btn btn-primary" type="button" id="add-item">＋ Agregar material</button></div>
+        <div class="items-wizard-head"><div><strong>Materiales vendidos</strong><p>Para materiales en metros puedes registrar entrega directa o varias medidas de corte. El total se calcula automáticamente.</p></div><button class="btn btn-create" type="button" id="add-item">Agregar material</button></div>
         <div class="sales-material-list" id="items-editor"></div>`,validate:({root})=>{
           const cards=[...root.querySelectorAll("[data-sales-material]")];
           if(!cards.length)throw new Error("Agrega al menos un material.");
@@ -246,7 +246,7 @@ function salesMaterialCardHtml(){
           <label class="field"><span>Cantidad solicitada *</span><div class="sales-quantity-control"><input class="control" data-sales-quantity type="number" min="0.0001" step="any" placeholder="0"><b data-sales-unit>UND</b></div></label>
         </div>
         <div class="sales-cuts-demand" data-cuts-demand hidden>
-          <div class="sales-cut-head"><div><strong>Plan de cortes</strong><p>Agrega una fila por medida. Puedes pedir varias piezas de la misma longitud.</p></div><button type="button" class="btn btn-ghost" data-add-cut>＋ Agregar medida</button></div>
+          <div class="sales-cut-head"><div><strong>Plan de cortes</strong><p>Agrega una fila por medida. Puedes pedir varias piezas de la misma longitud.</p></div><button type="button" class="btn btn-create" data-add-cut>Agregar medida</button></div>
           <div class="sales-cut-list" data-cut-list></div>
         </div>
         <div class="sales-demand-summary" data-demand-summary><div><small>Total solicitado</small><strong>0</strong></div><div><small>Disponible para venta</small><strong>—</strong></div><div><small>Después de reservar</small><strong>—</strong></div></div>
@@ -423,7 +423,7 @@ function renderSimpleOrder(host,data){
           </section>
 
           <section class="simple-secondary-actions">
-            ${actions.has("COMMENT")?'<button class="btn btn-ghost" data-secondary="COMMENT">Agregar nota</button>':""}
+            ${actions.has("COMMENT")?'<button class="btn btn-create" data-secondary="COMMENT">Agregar nota</button>':""}
             ${actions.has("ASSIGN")?'<button class="btn btn-ghost" data-secondary="ASSIGN">Asignar responsable</button>':""}
             ${actions.has("REQUEST_APPROVAL")?'<button class="btn btn-ghost" data-secondary="REQUEST_APPROVAL">Solicitar aprobación</button>':""}
             ${(data.actions?.domainActions||[]).some(item=>item.code==="FILE")?'<button class="btn btn-ghost" data-secondary="FILE">Adjuntar soporte</button>':""}

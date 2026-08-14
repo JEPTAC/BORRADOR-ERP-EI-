@@ -17,7 +17,7 @@ export async function renderCutting(root){
       <div class="page-actions"><button class="btn btn-ghost" id="cutting-refresh">Actualizar</button></div>
     </section>
     <section class="card card-pad cutting-workspace">
-      <div class="cutting-toolbar"><input class="control search-wide" id="cutting-search" placeholder="Buscar referencia o nombre del cable"><button class="btn btn-primary" id="cutting-search-button">Buscar</button></div>
+      <div class="cutting-toolbar"><input class="control search-wide" id="cutting-search" placeholder="Buscar referencia o nombre del cable"><button class="btn btn-search" id="cutting-search-button">Buscar</button></div>
       <div id="cutting-result">${loading("Consultando referencias de Corte…")}</div>
     </section>`;
   root.querySelector("#cutting-search-button")?.addEventListener("click",()=>loadCuttingGroups(1));
@@ -103,7 +103,7 @@ function renderExecution(host,data,{message=""}={}){
   <section class="cut-step-panel" data-cut-step="2" hidden>
     <div class="cut-step-title"><span>PASO 2 DE 4</span><h4>Selecciona de qué carreto vas a cortar</h4><p>La referencia está bloqueada. Solo podrás seleccionar existencias compatibles.</p></div>
     <section class="cut-material-lock"><div><small>Material bloqueado</small><strong>${fmt.escape(group.reference||"")}</strong><span>${fmt.escape(group.description||"")}</span></div><b>${fmt.number(group.totalLength,3)} m pendientes</b></section>
-    <section class="cut-origin-picker"><div class="cut-origin-search"><input class="control" data-origin-search placeholder="Buscar carreto, lote, bodega o ubicación"><button type="button" class="btn btn-ghost" data-origin-search-button>Buscar</button></div><div class="cut-origin-results" data-origin-results>${loading("Consultando inventario compatible…")}</div></section>
+    <section class="cut-origin-picker"><div class="cut-origin-search"><input class="control" data-origin-search placeholder="Buscar carreto, lote, bodega o ubicación"><button type="button" class="btn btn-search" data-origin-search-button>Buscar</button></div><div class="cut-origin-results" data-origin-results>${loading("Consultando inventario compatible…")}</div></section>
     <section class="cut-origin-confirm" data-origin-confirm hidden><div class="cut-selected-origin" data-selected-origin></div><div class="cut-origin-fields"><label><span>Cantidad que registra el ERP</span><input class="control" data-system-length readonly></label><label><span>Cantidad física encontrada *</span><input class="control" data-reel-length type="number" min="0.0001" step="0.0001"></label><label><span>Merma prevista</span><input class="control" data-scrap-length type="number" min="0" step="0.0001" value="0"></label></div><div class="cut-inventory-difference" data-inventory-difference hidden></div></section>
     <section class="cut-primary-action split"><button class="btn btn-ghost" data-cut-prev="1">Volver a revisar</button><div><strong>Siguiente: calcular qué cortes caben</strong><span>Primero debes seleccionar un carreto y confirmar su cantidad física.</span></div><button class="btn btn-primary cut-main-cta" data-preview-batch disabled>Calcular este carreto</button></section>
   </section>

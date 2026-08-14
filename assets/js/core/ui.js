@@ -114,7 +114,7 @@ export function installDialogSystem(){
 
 function renderDialogShell(root,{title,body,footer="",size="",className="",subtitle="",kicker=""}){
   const titleId=`erp-dialog-title-${crypto.randomUUID?.()||Math.random().toString(36).slice(2)}`;
-  root.innerHTML=`<div class="modal-overlay"><section class="modal ${size} ${className}" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1"><header class="modal-head"><div class="modal-title-group">${kicker?`<span class="modal-kicker">${fmt.escape(kicker)}</span>`:""}<h3 id="${titleId}">${fmt.escape(title)}</h3>${subtitle?`<p>${fmt.escape(subtitle)}</p>`:""}</div><button type="button" class="icon-btn" data-close aria-label="Cerrar ventana">×</button></header><div class="modal-body">${body}</div>${footer?`<footer class="modal-foot">${footer}</footer>`:""}</section></div>`;
+  root.innerHTML=`<div class="modal-overlay"><section class="modal ${size} ${className}" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1"><header class="modal-head"><div class="modal-title-group">${kicker?`<span class="modal-kicker">${fmt.escape(kicker)}</span>`:""}<h3 id="${titleId}">${fmt.escape(title)}</h3>${subtitle?`<p>${fmt.escape(subtitle)}</p>`:""}</div><button type="button" class="icon-btn icon-close" data-close aria-label="Cerrar ventana">×</button></header><div class="modal-body">${body}</div>${footer?`<footer class="modal-foot">${footer}</footer>`:""}</section></div>`;
 }
 
 export function taskPanel(host,{title,body,confirmLabel="Confirmar",cancelLabel="Cancelar",kicker="Acción de la operación",tone="",onConfirm,onClose}={}){
@@ -126,7 +126,7 @@ export function taskPanel(host,{title,body,confirmLabel="Confirmar",cancelLabel=
   const wrapper=document.createElement("div");
   wrapper.className="modal-task-panel-shell";
   wrapper.dataset.modalTaskPanel="1";
-  wrapper.innerHTML=`<div class="modal-task-panel-scrim" aria-hidden="true"></div><section class="modal-task-panel ${fmt.escape(tone)}" role="region" aria-labelledby="${titleId}" tabindex="-1"><header><div><span>${fmt.escape(kicker)}</span><h4 id="${titleId}">${fmt.escape(title||"Acción")}</h4></div><button type="button" class="icon-btn" data-task-panel-close aria-label="Cerrar acción">×</button></header><div class="modal-task-panel-body">${body||""}</div><footer><button type="button" class="btn btn-ghost" data-task-panel-close>${fmt.escape(cancelLabel)}</button>${confirmLabel?`<button type="button" class="btn btn-primary" data-task-panel-confirm>${fmt.escape(confirmLabel)}</button>`:""}</footer></section>`;
+  wrapper.innerHTML=`<div class="modal-task-panel-scrim" aria-hidden="true"></div><section class="modal-task-panel ${fmt.escape(tone)}" role="region" aria-labelledby="${titleId}" tabindex="-1"><header><div><span>${fmt.escape(kicker)}</span><h4 id="${titleId}">${fmt.escape(title||"Acción")}</h4></div><button type="button" class="icon-btn icon-close" data-task-panel-close aria-label="Cerrar acción">×</button></header><div class="modal-task-panel-body">${body||""}</div><footer><button type="button" class="btn btn-ghost" data-task-panel-close>${fmt.escape(cancelLabel)}</button>${confirmLabel?`<button type="button" class="btn ${semanticActionClass(confirmLabel)}" data-task-panel-confirm>${fmt.escape(confirmLabel)}</button>`:""}</footer></section>`;
   parent.append(wrapper);
   parent.classList.add("has-task-panel");
   const contextState=[...parent.children].filter(node=>node!==wrapper).map(node=>({node,inert:node.hasAttribute("inert"),ariaHidden:node.getAttribute("aria-hidden")}));
@@ -161,7 +161,7 @@ export function taskPanel(host,{title,body,confirmLabel="Confirmar",cancelLabel=
 export function modal({title,body,confirmLabel="Guardar",cancelLabel="Cancelar",size="",onConfirm}){
   installDialogSystem();
   const root=document.querySelector("#modal-root");
-  renderDialogShell(root,{title,body,size,footer:`<button class="btn btn-ghost" type="button" data-close>${fmt.escape(cancelLabel)}</button>${confirmLabel?`<button class="btn btn-primary" type="button" data-confirm>${fmt.escape(confirmLabel)}</button>`:""}`});
+  renderDialogShell(root,{title,body,size,footer:`<button class="btn btn-ghost" type="button" data-close>${fmt.escape(cancelLabel)}</button>${confirmLabel?`<button class="btn ${semanticActionClass(confirmLabel)}" type="button" data-confirm>${fmt.escape(confirmLabel)}</button>`:""}`});
   const close=closeDialog;
   const confirm=root.querySelector("[data-confirm]");
   if(confirm)confirm.onclick=async()=>{
@@ -177,6 +177,11 @@ export function modal({title,body,confirmLabel="Guardar",cancelLabel="Cancelar",
     }
   };
   return {root,close};
+}
+
+function semanticActionClass(label,fallback="btn-primary"){
+  const value=String(label||"").trim().toLowerCase();
+  return /^(crear|agregar|nuevo|nueva|añadir)\b/.test(value)?"btn-create":fallback;
 }
 
 function validatePanel(panel){
@@ -209,7 +214,7 @@ export function wizard({
       <section class="modal wizard-modal ${size}" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1">
         <header class="modal-head wizard-head">
           <div><span class="wizard-kicker">Flujo asistido</span><h3 id="${titleId}">${fmt.escape(title)}</h3><p>${fmt.escape(subtitle)}</p></div>
-          <button type="button" class="icon-btn" data-close aria-label="Cerrar ventana">×</button>
+          <button type="button" class="icon-btn icon-close" data-close aria-label="Cerrar ventana">×</button>
         </header>
         <div class="wizard-progress" role="list">
           ${steps.map((step,index)=>`<button type="button" class="wizard-progress-item ${index===0?"active":""}" data-wizard-jump="${index}" role="listitem"><span>${index+1}</span><strong>${fmt.escape(step.title)}</strong></button>`).join("")}
@@ -244,7 +249,10 @@ export function wizard({
       button.setAttribute("aria-current",buttonIndex===index?"step":"false");
     });
     prev.disabled=index===0;
-    next.textContent=index===steps.length-1?finishLabel:"Continuar";
+    const finalStep=index===steps.length-1;
+    next.textContent=finalStep?finishLabel:"Continuar";
+    next.classList.remove("btn-primary","btn-create");
+    next.classList.add(finalStep?semanticActionClass(finishLabel):"btn-primary");
     const panel=root.querySelector(`[data-wizard-panel="${index}"]`);
     await steps[index].onEnter?.({root,form,panel,data:serializeForm(form),index});
     requestAnimationFrame(()=>panel.querySelector(FOCUSABLE)?.focus?.({preventScroll:true}));

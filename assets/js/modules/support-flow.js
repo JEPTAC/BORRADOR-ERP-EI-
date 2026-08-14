@@ -40,7 +40,7 @@ function toolbar(orderId){
   return `<div class="order-support-toolbar">
     <div class="order-support-title"><span>TRAZABILIDAD OPERATIVA</span><strong>Registrar situación</strong></div>
     <div class="order-support-actions">
-      <button type="button" class="support-btn note" data-support-action="NOTE" data-order-id="${fmt.escape(orderId)}"><span>+</span> Nota</button>
+      <button type="button" class="support-btn note support-create" data-support-action="NOTE" data-order-id="${fmt.escape(orderId)}"><span>+</span> Nota</button>
       <button type="button" class="support-btn novelty" data-support-action="NOVELTY" data-order-id="${fmt.escape(orderId)}"><span>!</span> Novedad</button>
       <button type="button" class="support-btn report" data-support-action="REPORT" data-order-id="${fmt.escape(orderId)}"><span>■</span> Reporte</button>
       <button type="button" class="support-btn approval" data-support-action="APPROVAL" data-order-id="${fmt.escape(orderId)}"><span>✓</span> Enviar aprobación</button>

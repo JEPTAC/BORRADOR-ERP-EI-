@@ -54,7 +54,7 @@ function navHtml(){return NAV_GROUPS.map(group=>{
 
 export function renderShell(){
   const p=state.profile||{};
-  const quickOrder=allowed("sales")?`<button class="btn btn-accent top-new-order" id="quick-order">${icon("plus")}<span>Nuevo pedido</span></button>`:"";
+  const quickOrder=allowed("sales")?`<button class="btn btn-create top-new-order" id="quick-order"><span>Nuevo pedido</span></button>`:"";
   document.querySelector("#app").innerHTML=`<div class="shell">
     <aside class="sidebar" id="sidebar" aria-label="Menú principal" aria-hidden="true">
       <header class="sidebar-head">

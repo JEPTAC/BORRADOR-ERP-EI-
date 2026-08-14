@@ -11,7 +11,7 @@ let currentPage=1;
 export async function renderInventory(root){
   const canUpdate=can("inventory","canUpdate");
   root.innerHTML=`
-    <section class="page-head"><div><h2>Maestro de materiales e inventario</h2><p>Una sola fuente de verdad para Ventas, Recepción, Inventario y Corte. Solo se muestran materiales oficiales vinculados a Siesa.</p></div><div class="page-actions">${canUpdate?'<button class="btn btn-primary" id="sync-siesa">Actualizar maestro Siesa</button>':""}<button class="btn btn-ghost" id="inventory-help">Ver guía</button></div></section>
+    <section class="page-head"><div><h2>Maestro de materiales e inventario</h2><p>Una sola fuente de verdad para Ventas, Recepción, Inventario y Corte. Solo se muestran materiales oficiales vinculados a Siesa.</p></div><div class="page-actions">${canUpdate?'<button class="btn btn-primary" id="sync-siesa">Actualizar maestro Siesa</button>':""}<button class="btn btn-help" id="inventory-help">Ver guía</button></div></section>
     ${workspaceIntro({title:"Inventario oficial",description:"Referencia y nombre se protegen con el maestro Siesa. Los registros de prueba quedan fuera de esta operación sin borrar su historial.",cards:actionCards([
       {id:"search-inventory",title:"Buscar material oficial",description:"Busca por referencia, nombre, familia o marca.",icon:"⌕",tone:"primary"},
       {id:"inventory-source",title:"Fuente Siesa",description:"Consulta la última actualización y el número de materiales cargados.",icon:"✓",tone:"success"},
@@ -19,7 +19,7 @@ export async function renderInventory(root){
     ])})}
     <section class="material-master-strip" id="material-master-strip">${loading("Consultando estado del maestro…")}</section>
     <section class="card card-pad">
-      <div class="toolbar"><input class="control search-wide" id="inv-search" placeholder="Referencia, material, familia o marca"><button class="btn btn-primary" id="inv-filter">Buscar</button></div>
+      <div class="toolbar"><input class="control search-wide" id="inv-search" placeholder="Referencia, material, familia o marca"><button class="btn btn-search" id="inv-filter">Buscar</button></div>
       <div class="selection-hint"><strong>Catálogo operacional</strong><span>Los movimientos manuales solo se permiten cuando la referencia y el nombre corresponden al maestro oficial.</span></div>
       <div id="inv-result">${loading()}</div>
     </section>`;
