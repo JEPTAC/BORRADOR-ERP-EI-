@@ -26,8 +26,8 @@ check(!fs.existsSync(path.join(root,"assets/js/modules/sandbox.js")),"sandbox.js
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"qa-total.js no debe existir.");
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"qa-flow.js no debe existir.");
 check(!/\.from\s*\(/.test(jsFiles.map(f=>fs.readFileSync(f,"utf8")).join("\n")),"El navegador no debe acceder a tablas directamente; use RPC.");
-check(read("assets/js/config.js").includes('10.30.0-modern-erp'),"Versión visual incorrecta.");
-check(read("service-worker.js").includes('10-30-0-modern-erp'),"Cache del Service Worker no corresponde a V10.30.0.");
+check(read("assets/js/config.js").includes('10.31.0-blue-immersive'),"Versión visual incorrecta.");
+check(read("service-worker.js").includes('10-31-0-blue-immersive'),"Cache del Service Worker no corresponde a V10.31.0.");
 check(read("assets/js/services/drive.js").includes("export async function uploadWorkEvidence"),"drive.js no exporta uploadWorkEvidence requerido por Workforce.");
 check(read("assets/js/services/supabase.js").includes("export async function clearLocalSession"),"Falta recuperación de sesión local obsoleta.");
 check(read("assets/js/main.js").includes("await clearLocalSession()"),"Login no limpia una sesión anterior antes de autenticar.");
@@ -45,11 +45,11 @@ if(failures.length){
   process.exit(1);
 }
 const css=read("assets/css/app.css");
-check(css.includes("Modern ERP System"),"Falta el sistema visual V10.30.0.");
+check(css.includes("Blue Immersive Experience"),"Falta el sistema visual V10.31.0.");
 check((css.match(/:root\{/g)||[]).length===1,"app.css debe tener una sola raíz de tokens visuales.");
 check(css.includes('font-family:"Century Gothic"'),"La tipografía institucional no está aplicada en el sistema visual.");
 check(css.includes('.btn-primary{')&&css.includes('.btn-create{')&&css.includes('.btn-search{')&&css.includes('.modal-overlay{')&&css.includes('.sidebar{'),"Faltan componentes visuales o semánticos base.");
-check(css.includes(".global-shell{")&&read("assets/js/core/layout.js").includes("global-shell"),"Falta la shell global Modern ERP.");
+check(css.includes(".global-shell{")&&read("assets/js/core/layout.js").includes("global-shell"),"Falta la shell global Blue Immersive.");
 check(read("assets/js/core/guided.js").includes("Acciones disponibles"),"El centro de trabajo no usa la nueva jerarquía de acciones.");
 check(css.includes(".guided-action-card.accent .guided-action-icon:after"),"Las acciones de creación guiadas no tienen símbolo + inequívoco.");
 check(read("assets/js/core/ui.js").includes("semanticActionClass"),"Los asistentes no aplican semántica visual automática a Crear/Agregar/Nuevo.");
@@ -62,7 +62,7 @@ if(failures.length){
   failures.forEach(x=>console.error(`- ${x}`));
   process.exit(1);
 }
-console.log("VALIDACIÓN V10.30.0 CORRECTA");
+console.log("VALIDACIÓN V10.31.0 CORRECTA");
 console.log(`- ${jsFiles.length} archivos JavaScript de producción revisados.`);
 console.log("- Sin rutas, módulos ni RPC de Robot QA/Sandbox en el runtime.");
 console.log("- Acceso a datos productivos mediante RPC y administración Auth mediante Edge Function protegida.");

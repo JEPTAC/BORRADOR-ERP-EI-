@@ -1,4 +1,4 @@
-const CACHE="erp-electroingenieria-v10-30-0-modern-erp-20260814";
+const CACHE="erp-electroingenieria-v10-31-0-blue-immersive-20260814";
 const ASSETS=[
   "./",
   "./index.html",
