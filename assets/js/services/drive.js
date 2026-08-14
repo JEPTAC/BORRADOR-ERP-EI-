@@ -79,7 +79,10 @@ function isBridgeOrigin(origin) {
 
 function submitToBridge(payload) {
   return new Promise((resolve, reject) => {
-    const frameName = `erp_drive_${String(payload.uploadId).replace(/[^a-z0-9_-]/gi, "")}`;
+    const requestId = String(payload.requestId || payload.uploadId || (typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `drive_${Date.now()}_${Math.random().toString(36).slice(2)}`));
+    payload.requestId = requestId;
+    payload.uploadId = requestId;
+    const frameName = `erp_drive_${requestId.replace(/[^a-z0-9_-]/gi, "")}`;
     const iframe = document.createElement("iframe");
     iframe.name = frameName;
     iframe.hidden = true;
@@ -119,7 +122,7 @@ function submitToBridge(payload) {
       if (
         !isBridgeOrigin(event.origin) ||
         data?.source !== "ERP_EI_DRIVE_BRIDGE" ||
-        data?.uploadId !== payload.uploadId
+        ![data?.requestId, data?.uploadId].filter(Boolean).includes(requestId)
       ) return;
 
       if (data.ok && data.file) finish(resolve, data.file);
@@ -159,6 +162,8 @@ export async function uploadOrderFile(
     : `upload_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   const uploaded = await submitToBridge({
+    action: "UPLOAD",
+    requestId: uploadId,
     uploadId,
     origin: window.location.origin,
     accessToken: session.access_token,
@@ -191,6 +196,81 @@ export async function uploadOrderFile(
       uploadedByEmail: uploaded.uploadedByEmail || null
     }
   });
+}
+
+
+/**
+ * Carga evidencia de una actividad de Workforce y registra el archivo en la
+ * ejecución correspondiente. Usa el mismo puente institucional de Drive que
+ * los pedidos, pero identifica la carpeta con la ejecución de trabajo.
+ */
+export async function uploadWorkEvidence(
+  executionId,
+  file,
+  evidenceType = "FILE",
+  title = null
+) {
+  const id = String(executionId || "").trim();
+  if (!id) throw new Error("No se recibió la actividad asociada a la evidencia.");
+  if (!(file instanceof File)) throw new Error("Seleccione un archivo válido.");
+  if (file.size <= 0) throw new Error("El archivo está vacío.");
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error(`El archivo supera el máximo permitido de ${Math.floor(MAX_FILE_BYTES / 1024 / 1024)} MB.`);
+  }
+
+  const type = String(evidenceType || "FILE").trim().toUpperCase();
+  const allowed = new Set(["BEFORE_PHOTO", "AFTER_PHOTO", "FINAL_PHOTO", "FILE"]);
+  if (!allowed.has(type)) throw new Error("Tipo de evidencia de actividad inválido.");
+
+  const session = await currentSession();
+  if (!session?.access_token) throw new Error("Tu sesión venció. Ingresa nuevamente al ERP.");
+
+  const requestId = typeof crypto?.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `work_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const workTitle = safeName(title || "Actividad", "Actividad");
+
+  const uploaded = await submitToBridge({
+    action: "UPLOAD",
+    requestId,
+    uploadId: requestId,
+    origin: window.location.origin,
+    accessToken: session.access_token,
+    // Compatibilidad con el puente histórico: usa la ejecución como identificador
+    // de carpeta sin registrar el archivo como soporte de un pedido.
+    orderId: id,
+    orderNumber: workTitle,
+    workExecutionId: id,
+    workTitle,
+    evidenceType: type,
+    category: `WORK_EVIDENCE_${type}`,
+    fileName: safeName(file.name, "evidencia"),
+    mimeType: file.type || "application/octet-stream",
+    sizeBytes: file.size,
+    dataBase64: await fileToBase64(file),
+    clientVersion: CONFIG.version || "ERP_EI"
+  });
+
+  if (!uploaded?.id) throw new Error("Google Drive no devolvió el identificador de la evidencia.");
+
+  await api.workRegisterEvidence(id, {
+    evidenceType: type,
+    driveFileId: uploaded.id,
+    fileName: uploaded.name || file.name,
+    mimeType: uploaded.mimeType || file.type || "application/octet-stream",
+    sizeBytes: Number(uploaded.size || file.size),
+    webViewLink: uploaded.webViewLink || null,
+    metadata: {
+      workTitle,
+      driveParentId: uploaded.parentId || null,
+      uploadMode: "INSTITUTIONAL_APPS_SCRIPT",
+      uploadedByProfileId: uploaded.uploadedByProfileId || null,
+      uploadedByEmail: uploaded.uploadedByEmail || null,
+      clientVersion: CONFIG.version || "ERP_EI"
+    }
+  });
+
+  return uploaded;
 }
 
 /* Compatibilidad exclusiva para el lector PDF de Recepción. */

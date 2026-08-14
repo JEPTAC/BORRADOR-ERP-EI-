@@ -26,8 +26,9 @@ check(!fs.existsSync(path.join(root,"assets/js/modules/sandbox.js")),"sandbox.js
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-total.js")),"qa-total.js no debe existir.");
 check(!fs.existsSync(path.join(root,"assets/js/modules/qa-flow.js")),"qa-flow.js no debe existir.");
 check(!/\.from\s*\(/.test(jsFiles.map(f=>fs.readFileSync(f,"utf8")).join("\n")),"El navegador no debe acceder a tablas directamente; use RPC.");
-check(read("assets/js/config.js").includes('10.26.1-produccion-limpia'),"Versión de producción limpia incorrecta.");
-check(read("service-worker.js").includes('10-26-1-produccion-limpia'),"Cache del Service Worker no corresponde a V10.26.1.");
+check(read("assets/js/config.js").includes('10.26.2-estable'),"Versión de producción limpia incorrecta.");
+check(read("service-worker.js").includes('10-26-2-estable'),"Cache del Service Worker no corresponde a V10.26.2.");
+check(read("assets/js/services/drive.js").includes("export async function uploadWorkEvidence"),"drive.js no exporta uploadWorkEvidence requerido por Workforce.");
 check(fs.existsSync(path.join(root,"templates/historical_orders.csv")),"Falta la plantilla de importación histórica.");
 
 if(failures.length){
@@ -35,7 +36,7 @@ if(failures.length){
   failures.forEach(x=>console.error(`- ${x}`));
   process.exit(1);
 }
-console.log("VALIDACIÓN V10.26.1 CORRECTA");
+console.log("VALIDACIÓN V10.26.2 CORRECTA");
 console.log(`- ${jsFiles.length} archivos JavaScript de producción revisados.`);
 console.log("- Sin rutas, módulos ni RPC de Robot QA/Sandbox en el runtime.");
 console.log("- Acceso a datos únicamente mediante RPC.");

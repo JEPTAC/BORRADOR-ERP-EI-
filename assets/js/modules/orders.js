@@ -12,6 +12,7 @@ import {isPickingFlow,renderPickingFlow} from "./picking-flow.js";
 import {isCuttingFlow,renderCuttingOrder} from "./cutting-flow.js";
 import {isShippingFlow,renderShippingFlow} from "./shipping-flow.js";
 import {parallelWorkFooter} from "./active-work.js";
+import {mountOrderCancellationAction} from "./order-cancellation.js";
 
 let currentList={filters:{page:1,pageSize:50,assignment:"ALL",includeHistory:true},root:null,data:null};
 
@@ -376,11 +377,12 @@ export async function openOrder(orderId){
 }
 
 function renderSimpleOrder(host,data){
-  if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
-  if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
-  if(isCuttingFlow(data)){renderCuttingOrder(host,data);return;}
-  if(isPickingFlow(data)){renderPickingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
-  if(isShippingFlow(data)){renderShippingFlow(host,data,{reload:()=>openOrder(data.order.id),refreshLists});return;}
+  const cancellationOptions={reload:()=>openOrder(data.order.id),refresh:refreshLists};
+  if(isOrderReceptionStep(data)){renderOrderReception(host,data,{reload:cancellationOptions.reload,refreshLists});mountOrderCancellationAction(host,data,cancellationOptions);return;}
+  if(isFinancialFlowStep(data)){renderFinancialFlow(host,data,{reload:cancellationOptions.reload,refreshLists});mountOrderCancellationAction(host,data,cancellationOptions);return;}
+  if(isCuttingFlow(data)){renderCuttingOrder(host,data);mountOrderCancellationAction(host,data,cancellationOptions);return;}
+  if(isPickingFlow(data)){renderPickingFlow(host,data,{reload:cancellationOptions.reload,refreshLists});mountOrderCancellationAction(host,data,cancellationOptions);return;}
+  if(isShippingFlow(data)){renderShippingFlow(host,data,{reload:cancellationOptions.reload,refreshLists});mountOrderCancellationAction(host,data,cancellationOptions);return;}
   const order=data.order;
   const task=activeTask(data);
   const status=simpleStatus(task?.status||order.status);
@@ -438,6 +440,7 @@ function renderSimpleOrder(host,data){
     </div>`;
 
   host.querySelectorAll("[data-close]").forEach(button=>button.onclick=()=>host.replaceChildren());
+  mountOrderCancellationAction(host,data,cancellationOptions);
   host.querySelector("[data-next-action]")?.addEventListener("click",()=>runSimpleIntent(data,next.button));
   host.querySelectorAll("[data-status-choice]").forEach(button=>button.onclick=()=>runSimpleIntent(data,button.dataset.statusChoice));
   host.querySelectorAll("[data-secondary]").forEach(button=>button.onclick=()=>runSecondary(data,button.dataset.secondary));

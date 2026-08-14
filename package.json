@@ -1,11 +1,11 @@
 {
   "name": "erp-electroingenieria-v10",
-  "version": "10.26.1",
+  "version": "10.26.2",
   "private": true,
   "type": "module",
   "scripts": {
     "serve": "npx http-server . -p 4173 -c-1",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs && node --experimental-vm-modules scripts/link-check.mjs"
   },
   "devDependencies": {
     "http-server": "^14.1.1"
