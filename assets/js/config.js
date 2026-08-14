@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  version: "10.31.0-blue-immersive",
+  version: "10.32.0-refined-workspaces",
   build: "2026-08-14.8",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
