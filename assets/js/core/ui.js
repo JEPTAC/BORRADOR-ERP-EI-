@@ -193,7 +193,7 @@ function validatePanel(panel){
 
 export function wizard({
   title,
-  subtitle="Te acompañaremos paso a paso para completar la operación.",
+  subtitle="Completa la información requerida en cada etapa del proceso.",
   steps=[],
   finishLabel="Confirmar y guardar",
   cancelLabel="Cancelar",
@@ -208,7 +208,7 @@ export function wizard({
     <div class="modal-overlay wizard-overlay">
       <section class="modal wizard-modal ${size}" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1">
         <header class="modal-head wizard-head">
-          <div><span class="wizard-kicker">Asistente guiado</span><h3 id="${titleId}">${fmt.escape(title)}</h3><p>${fmt.escape(subtitle)}</p></div>
+          <div><span class="wizard-kicker">Flujo asistido</span><h3 id="${titleId}">${fmt.escape(title)}</h3><p>${fmt.escape(subtitle)}</p></div>
           <button type="button" class="icon-btn" data-close aria-label="Cerrar ventana">×</button>
         </header>
         <div class="wizard-progress" role="list">

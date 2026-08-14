@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.27.0-super-admin",
-  build: "2026-08-14.4",
+  version: "10.28.0-visual-enterprise",
+  build: "2026-08-14.5",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -21,10 +21,10 @@ export const CONFIG = Object.freeze({
 
 export const NAV_GROUPS = [
   {label:"Inicio y gestión comercial",items:[
-    {id:"dashboard",label:"Centro de operación",icon:"dashboard"},
-    {id:"orders",label:"Control de pedidos",icon:"orders"},
-    {id:"sales",label:"Registro de ventas",icon:"sales"},
-    {id:"credit",label:"Solicitudes de crédito",icon:"credit"}
+    {id:"dashboard",label:"Centro de operaciones",icon:"dashboard"},
+    {id:"orders",label:"Pedidos",icon:"orders"},
+    {id:"sales",label:"Ventas",icon:"sales"},
+    {id:"credit",label:"Crédito",icon:"credit"}
   ]},
   {label:"Operación de suministros",items:[
     {id:"cartera",label:"Cartera",icon:"wallet",step:"CARTERA"},
@@ -37,14 +37,14 @@ export const NAV_GROUPS = [
     {id:"shipping",label:"Despachos y entregas",icon:"shipping",steps:["CLIENT_POINT","CLIENT_PICKUP","LOCAL_DISPATCH","NATIONAL_DISPATCH","CLOSURE"]}
   ]},
   {label:"Personas y productividad",items:[
-    {id:"workforce",label:"Mi jornada y actividades",icon:"timer"}
+    {id:"workforce",label:"Jornada y actividades",icon:"timer"}
   ]},
   {label:"Control y análisis",items:[
     {id:"inventory",label:"Inventario",icon:"inventory"},
-    {id:"approvals",label:"Centro de excepciones",icon:"approvals"},
+    {id:"approvals",label:"Excepciones y aprobaciones",icon:"approvals"},
     {id:"vsm",label:"Flujo y tiempos",icon:"vsm"},
-    {id:"reports",label:"Reportes",icon:"reports"},
-    {id:"imports",label:"Importar historial",icon:"imports"},
+    {id:"reports",label:"Analítica y reportes",icon:"reports"},
+    {id:"imports",label:"Histórico",icon:"imports"},
     {id:"audit",label:"Auditoría",icon:"audit"},
     {id:"admin",label:"Administración",icon:"admin"}
   ]}

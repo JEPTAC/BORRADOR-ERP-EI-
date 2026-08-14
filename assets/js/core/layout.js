@@ -16,13 +16,13 @@ export function renderLogin(error=""){
       <section class="login-hero">
         <div class="login-brand"><img src="./assets/img/logo-electroingenieria.png" alt="Electroingeniería"></div>
         <div class="login-message">
-          <span class="eyebrow">Gestión integral de suministros</span>
-          <h1>La operación completa, clara y bajo control.</h1>
-          <p>Administra pedidos, cartera, compras, recepción, alistamiento, corte, facturación, inventario, despachos y tiempos desde un solo lugar.</p>
+          <span class="eyebrow">Plataforma operativa empresarial</span>
+          <h1>Una operación conectada, precisa y trazable.</h1>
+          <p>Centraliza pedidos, abastecimiento, logística, inventario, despachos, tiempos y decisiones en una plataforma única de operación.</p>
           <div class="login-features">
-            <div><span class="login-feature-icon">${icon("dashboard")}</span><strong>Operación guiada</strong><span>Cada persona encuentra sus tareas, prioridades y próximos pasos.</span></div>
-            <div><span class="login-feature-icon">${icon("audit")}</span><strong>Trazabilidad completa</strong><span>Decisiones, tiempos, novedades y evidencias quedan organizadas.</span></div>
-            <div><span class="login-feature-icon">${icon("reports")}</span><strong>Control en tiempo real</strong><span>Consulta responsables, avances y cargas de trabajo desde un solo lugar.</span></div>
+            <div><span class="login-feature-icon">${icon("dashboard")}</span><strong>Operación coordinada</strong><span>Cada rol visualiza prioridades, tareas activas y acciones disponibles.</span></div>
+            <div><span class="login-feature-icon">${icon("audit")}</span><strong>Trazabilidad integral</strong><span>Movimientos, tiempos, decisiones y evidencias permanecen documentados.</span></div>
+            <div><span class="login-feature-icon">${icon("reports")}</span><strong>Decisiones con datos</strong><span>Consulta cargas, responsables, excepciones y avance operativo en una sola vista.</span></div>
           </div>
         </div>
         <div class="login-note">Electroingeniería S.A.S. · Trabajando con buena energía</div>
@@ -30,16 +30,16 @@ export function renderLogin(error=""){
       <section class="login-panel">
         <div class="login-card">
           <div class="login-card-icon"><img src="./assets/img/iso-electroingenieria.png" alt=""></div>
-          <span class="eyebrow">Acceso corporativo</span>
-          <h2>Bienvenido al ERP</h2>
-          <p class="sub">Ingresa con tu correo y contraseña de trabajo.</p>
+          <span class="eyebrow">Acceso seguro</span>
+          <h2>Acceso al ERP</h2>
+          <p class="sub">Ingresa con tus credenciales corporativas.</p>
           ${error?`<div class="login-error" role="alert"><strong>No fue posible ingresar</strong><span>${fmt.escape(error)}</span></div>`:""}
           <form id="login-form">
             <div class="field"><label for="email">Correo corporativo</label><div class="input-shell">${icon("credit")}<input class="control" id="email" name="email" type="email" autocomplete="username" placeholder="nombre@ei.com.co" required></div></div>
             <div class="field"><label for="password">Contraseña</label><div class="input-shell">${icon("admin")}<input class="control" id="password" name="password" type="password" autocomplete="current-password" placeholder="Escribe tu contraseña" required></div></div>
-            <button class="btn btn-primary btn-block" type="submit">Ingresar al ERP ${icon("chevron")}</button>
+            <button class="btn btn-primary btn-block" type="submit">Acceder al ERP ${icon("chevron")}</button>
           </form>
-          <p class="login-help">¿Tienes problemas para ingresar? Comunícate con el administrador del sistema.</p>
+          <p class="login-help">Si necesitas recuperar el acceso, contacta al administrador del ERP.</p>
           <p class="version-note">Versión ${CONFIG.version}</p>
         </div>
       </section>
@@ -62,7 +62,7 @@ export function renderShell(){
           <img class="sidebar-logo" src="./assets/img/logo-electroingenieria.png" alt="Electroingeniería">
           <button class="sidebar-close" id="sidebar-close" type="button" aria-label="Cerrar menú"><span aria-hidden="true"></span></button>
         </div>
-        <div class="sidebar-product"><strong>ERP Operativo</strong><small>Gestión de suministros</small></div>
+        <div class="sidebar-product"><strong>ERP Corporativo</strong><small>Operación y suministros</small></div>
       </header>
       <nav class="nav-scroll" id="sidebar-nav" aria-label="Navegación principal">${navHtml()}</nav>
       <footer class="sidebar-foot"><div class="user-chip"><div class="avatar">${fmt.initials(p.name)}</div><div class="user-data"><strong>${fmt.escape(p.name||"Usuario")}</strong><small>${fmt.escape(fmt.roles(p.roles||[]))}</small></div><button class="icon-btn logout-btn" id="logout" title="Cerrar sesión" aria-label="Cerrar sesión">${icon("logout")}</button></div></footer>
@@ -70,7 +70,7 @@ export function renderShell(){
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" tabindex="-1" aria-label="Cerrar menú"></button>
     <main class="main" id="main-content">
       <header class="topbar">
-        <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operación</h1><p id="top-subtitle">Visibilidad y control de la operación</p></div></div>
+        <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operaciones</h1><p id="top-subtitle">Visibilidad, control y ejecución</p></div></div>
         <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Abrir búsqueda" aria-controls="mobile-search-panel" aria-expanded="false">${icon("search")}</button><button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
       </header>
       <div class="mobile-search-panel" id="mobile-search-panel" hidden><label>${icon("search")}<input id="mobile-global-search" class="control" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global móvil"></label></div>

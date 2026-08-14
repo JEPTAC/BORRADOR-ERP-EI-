@@ -16,14 +16,14 @@ export async function renderDashboard(root){
   const partialSummary=partialData.summary||{};
   const partialOrders=partialData.orders||[];
   const cards=[];
-  if(can("sales","canCreate")||can("orders","canCreate"))cards.push({id:"guide-new-order",title:"Crear un pedido",description:"El asistente te pedirá solo la información necesaria, paso a paso.",icon:"＋",tone:"accent"});
+  if(can("sales","canCreate")||can("orders","canCreate"))cards.push({id:"guide-new-order",title:"Crear un pedido",description:"Registra únicamente la información necesaria y valida el pedido antes de crearlo.",icon:"＋",tone:"accent"});
   if(state.modules.some(m=>["cartera","caja","purchasing","receiving","picking","cutting","billing","shipping"].includes(m.code)&&m.canRead))cards.push({id:"guide-my-work",title:"Ver mis tareas",description:"Abre los pedidos asignados a tu usuario y continúa la etapa correspondiente.",icon:"✓",tone:"primary"});
   if(can("approvals","canRead"))cards.push({id:"guide-approvals",title:"Centro de excepciones",description:"Atiende Novedades, Reportes, Aprobaciones y alertas SLA desde una sola bandeja.",icon:"!",tone:"warning"});
   if(can("orders","canRead"))cards.push({id:"guide-orders",title:"Buscar un pedido",description:"Encuentra rápidamente un pedido por número, cliente, etapa o estado.",icon:"⌕"});
 
   root.innerHTML=`
-    <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div></section>
-    ${workspaceIntro({title:`Hola, ${state.profile?.name?.split(" ")[0]||"bienvenido"}`,description:"Aquí encuentras las opciones principales disponibles para tu rol. Selecciona una tarjeta y el ERP te guiará.",cards:actionCards(cards)})}
+    <section class="page-head"><div><h2>Estado de la operación</h2><p>Indicadores, cargas, excepciones y actividad reciente en una sola vista.</p></div></section>
+    ${workspaceIntro({title:`Hola, ${state.profile?.name?.split(" ")[0]||"bienvenido"}`,description:"Accede a las funciones prioritarias habilitadas para tu rol y continúa la operación desde un único punto.",cards:actionCards(cards)})}
     <section class="grid grid-kpi">
       ${kpi("Pedidos activos",k.activeOrders,"Actualmente en proceso")}${kpi("Mis tareas",k.myTasks,"Asignadas a tu usuario")}${kpi("Pedidos parciales",partialSummary.partialPending||0,"Con mercancía pendiente","warning")}${kpi("Pedidos bloqueados",k.blocked,"Necesitan intervención","warning")}${kpi("Excepciones escaladas",exceptionData.escalated||0,exceptionData.critical?`${exceptionData.critical} crítica(s) por SLA`:"SLA bajo control",exceptionData.critical?"danger":exceptionData.escalated?"warning":"success")}${kpi("Prioridad alta",k.critical,"Urgentes o críticos","danger")}${kpi("Cerrados hoy",k.closedToday,"Entregas finalizadas","success")}${kpi("Decisiones pendientes",exceptionData.pendingApprovals??k.pendingApprovals,"Solicitudes por revisar")}
     </section>
@@ -33,7 +33,7 @@ export async function renderDashboard(root){
     <div class="section-gap"></div>
     <section class="grid grid-2">
       <article class="card"><header class="card-head"><h3>Pedidos actualizados recientemente</h3><button class="btn btn-ghost" id="all-orders">Ver todos</button></header><div class="card-body">${recent.length?recentTable(recent):empty()}</div></article>
-      <article class="card"><header class="card-head"><h3>Cómo trabajar en el ERP</h3></header><div class="card-body"><div class="timeline">${principle("Selecciona una tarea","Entra al módulo correspondiente y elige visualmente el pedido que vas a gestionar.")}${principle("Sigue el asistente","El ERP te mostrará qué información registrar y validará cada paso.")}${principle("Revisa antes de confirmar","La última pantalla resume lo que se guardará para evitar errores.")}${principle("Consulta la trazabilidad","Cada decisión, tiempo y documento queda dentro del expediente del pedido.")}</div><button class="btn btn-ghost" id="dashboard-help">Ver guía rápida</button></div></article>
+      <article class="card"><header class="card-head"><h3>Principios de operación</h3></header><div class="card-body"><div class="timeline">${principle("Selecciona una tarea","Ubica el pedido o tarea correspondiente y abre su etapa activa.")}${principle("Completa la etapa activa","Registra la información solicitada y valida los datos antes de avanzar.")}${principle("Revisa antes de confirmar","La última pantalla resume lo que se guardará para evitar errores.")}${principle("Consulta la trazabilidad","Cada decisión, tiempo y documento queda dentro del expediente del pedido.")}</div><button class="btn btn-ghost" id="dashboard-help">Ver guía operativa</button></div></article>
     </section>`;
 
   root.querySelector("#guide-new-order")?.addEventListener("click",()=>navigate("sales",{create:"1"}));
@@ -41,7 +41,7 @@ export async function renderDashboard(root){
   root.querySelector("#guide-approvals")?.addEventListener("click",()=>navigate("approvals"));
   root.querySelector("#guide-orders")?.addEventListener("click",()=>navigate("orders"));
   root.querySelector("#all-orders").onclick=()=>navigate("orders");
-  root.querySelector("#dashboard-help").onclick=()=>guide({title:"Guía rápida del ERP",description:"La operación sigue el mismo patrón en todos los módulos.",items:[{title:"Elige una opción",detail:"Las tarjetas grandes muestran lo que puedes hacer según tu rol."},{title:"Selecciona un pedido",detail:"Las tarjetas de pedidos muestran cliente, etapa, prioridad y responsable."},{title:"Completa pasos cortos",detail:"Los formularios extensos se dividieron en pasos sencillos."},{title:"Confirma la información",detail:"Antes de guardar verás un resumen completo."}]});
+  root.querySelector("#dashboard-help").onclick=()=>guide({title:"Guía operativa del ERP",description:"La operación sigue el mismo patrón en todos los módulos.",items:[{title:"Elige una opción",detail:"Las acciones disponibles corresponden a los permisos asignados a tu rol."},{title:"Selecciona un pedido",detail:"Las tarjetas de pedidos muestran cliente, etapa, prioridad y responsable."},{title:"Completa pasos cortos",detail:"Cada proceso presenta solo los campos requeridos para la etapa actual."},{title:"Confirma la información",detail:"Antes de guardar verás un resumen completo."}]});
   root.querySelectorAll("[data-step]").forEach(element=>element.onclick=()=>navigate("orders",{step:element.dataset.step,history:"0"}));
   root.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>window.dispatchEvent(new CustomEvent("erp:open-order",{detail:element.dataset.order})));
 }

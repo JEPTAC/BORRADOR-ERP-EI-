@@ -1,7 +1,7 @@
 import {fmt,statusBadge,priorityBadge} from "./format.js";
 
-export function workspaceIntro({title,description,helper="Selecciona una opción para comenzar.",cards=""}){
-  return `<section class="guided-workspace"><div class="guided-workspace-head"><div><span class="guided-kicker">Trabajo sencillo y guiado</span><h3>${fmt.escape(title)}</h3><p>${fmt.escape(description)}</p></div><div class="guided-helper-pill">${fmt.escape(helper)}</div></div>${cards}</section>`;
+export function workspaceIntro({title,description,helper="Selecciona una acción para continuar.",cards=""}){
+  return `<section class="guided-workspace"><div class="guided-workspace-head"><div><span class="guided-kicker">Centro de trabajo</span><h3>${fmt.escape(title)}</h3><p>${fmt.escape(description)}</p></div><div class="guided-helper-pill">${fmt.escape(helper)}</div></div>${cards}</section>`;
 }
 
 export function orderVisualCards(rows,{queue=false}={}){
