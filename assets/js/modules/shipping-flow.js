@@ -24,9 +24,6 @@ function destination(delivery,order={}){
 function deliveryEvidence(data,taskId){return (data.files||[]).filter(file=>file.file_category==="DELIVERY_EVIDENCE"&&(!taskId||file.task_id===taskId)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]||null}
 
 async function storeShippingFile(data,file,category,taskId){
-  if(data?.order?.is_test){
-    return api.registerDriveFile({orderId:data.order.id,taskId,category,driveFileId:`SANDBOX-${crypto.randomUUID()}`,fileName:file.name,mimeType:file.type||"application/octet-stream",webViewLink:null,webContentLink:null,sizeBytes:file.size||0,metadata:{sandbox:true,bytesUploaded:false}});
-  }
   return uploadOrderFile(data.order.id,file,category,taskId,data.order.order_number);
 }
 

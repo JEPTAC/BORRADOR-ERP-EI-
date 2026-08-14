@@ -3,7 +3,6 @@ import {fmt,statusBadge} from "../core/format.js";
 import {empty,loading,wizard,toast,guide,modal} from "../core/ui.js";
 import {summaryItem} from "../core/guided.js";
 import {openOrder} from "./orders.js";
-import {hasRole} from "../core/state.js";
 
 let activeMode="CENTER";
 let activeState="OPEN";
@@ -77,7 +76,6 @@ function exceptionCard(item){
   const level=Number(item.slaLevel||0);
   const open=item.itemType==="ISSUE"?item.status==="OPEN":item.status==="PENDING";
   const typeLabel=item.itemType==="APPROVAL"?"APROBACIÓN":item.subtype==="NOVELTY"?"NOVEDAD":"REPORTE";
-  const canDecideApproval=item.itemType==="APPROVAL"&&item.canResolve&&(String(item.subtype||"").toUpperCase()!=="CANCELLATION"||hasRole("jefe_logistica"));
   return `<article class="exception-card sla-${level} ${open?"open":"closed"}" data-exception-id="${fmt.escape(item.id)}">
     <div class="exception-card-rail"></div>
     <div class="exception-card-main">
@@ -86,7 +84,7 @@ function exceptionCard(item){
       <h3>${fmt.escape(readable(item.title||item.subtype))}</h3><p>${fmt.escape(item.detail||"")}</p>
       <footer><span>Registró: <strong>${fmt.escape(item.actorName||"Usuario")}</strong></span><span>${Number(item.slaLevel||0)>=2&&item.escalatedRole?"Escalado a":"Destino"}: <strong>${fmt.escape(fmt.role((Number(item.slaLevel||0)>=2&&item.escalatedRole)||item.targetRole||"Sin asignar"))}</strong></span><span>${fmt.date(item.createdAt)}</span></footer>
     </div>
-    <div class="exception-card-actions"><button class="btn btn-ghost" data-open-order="${fmt.escape(item.orderId)}">Ver pedido</button>${open&&item.itemType==="ISSUE"&&item.canResolve?`<button class="btn btn-primary" data-resolve-issue="${fmt.escape(item.id)}">Solucionar</button>`:""}${open&&canDecideApproval?`<button class="btn btn-primary" data-go-approval>Decidir</button>`:""}</div>
+    <div class="exception-card-actions"><button class="btn btn-ghost" data-open-order="${fmt.escape(item.orderId)}">Ver pedido</button>${open&&item.itemType==="ISSUE"&&item.canResolve?`<button class="btn btn-primary" data-resolve-issue="${fmt.escape(item.id)}">Solucionar</button>`:""}${open&&item.itemType==="APPROVAL"&&item.canResolve?`<button class="btn btn-primary" data-go-approval>Decidir</button>`:""}</div>
   </article>`;
 }
 
@@ -126,7 +124,7 @@ async function loadApprovals(root){
     const data=await api.approvals(status||null,1,150);
     target.innerHTML=data.items.length?approvalCards(data.items):empty("Sin solicitudes","No hay decisiones para este grupo.");
     target.querySelectorAll("[data-order]").forEach(button=>button.onclick=()=>openOrder(button.dataset.order));
-    target.querySelectorAll("[data-decide]").forEach(button=>button.onclick=()=>approvalDecision(JSON.parse(button.dataset.request),button.dataset.decision,async()=>{await Promise.all([load(),loadSummary(root)])}));
+    target.querySelectorAll("[data-decide]").forEach(button=>button.onclick=()=>decisionWizard(JSON.parse(button.dataset.request),button.dataset.decision,async()=>{await Promise.all([load(),loadSummary(root)])}));
   };
   toolbar.querySelectorAll("[data-approval-status]").forEach(button=>button.addEventListener("click",()=>{
     status=button.dataset.approvalStatus;
@@ -136,25 +134,7 @@ async function loadApprovals(root){
   await load();
 }
 
-function approvalCards(rows){return `<div class="decision-grid">${rows.map(request=>{
-  const cancellation=String(request.requestType||"").toUpperCase()==="CANCELLATION";
-  const canDecide=request.status==="PENDING"&&Boolean(request.canDecide)&&(cancellation?hasRole("jefe_logistica"):true);
-  return `<article class="decision-card sla-${Number(request.slaLevel||0)}"><div class="decision-card-head"><div><strong>${fmt.escape(request.orderNumber)}</strong><span>${fmt.escape(request.clientName)}</span></div>${statusBadge(request.status)}</div><div class="decision-card-body"><div class="exception-identifiers">${slaBadge(Number(request.slaLevel||0),request.ageBusinessSeconds)}${priorityBadge(request.priority)}</div><label>Solicitud</label><h3>${fmt.escape(fmt.request(request.requestType))}</h3>${cancellation?'<span class="decision-exception-code">DECISIÓN DE JEFATURA LOGÍSTICA</span>':request.requestPayload?.exceptionCode?`<span class="decision-exception-code">${fmt.escape(request.requestPayload.exceptionCode.replaceAll("_"," "))}</span>`:""}<p>${fmt.escape(request.reason)}</p><div class="decision-meta"><span>Solicita: <strong>${fmt.escape(request.requestedBy)}</strong></span><span>Destino: <strong>${fmt.escape(fmt.role(request.assignedRole||"jefe_logistica"))}</strong></span><span>${businessAge(request.ageBusinessSeconds)}</span></div></div><footer class="decision-card-foot"><button class="btn btn-ghost" data-order="${request.orderId}">Ver pedido</button>${canDecide?`<button class="btn ${cancellation?"btn-danger":"btn-success"}" data-decide data-decision="APPROVED" data-request='${fmt.escape(JSON.stringify(request))}'>${cancellation?"Cancelar pedido":"Aprobar"}</button><button class="btn btn-ghost" data-decide data-decision="REJECTED" data-request='${fmt.escape(JSON.stringify(request))}'>Rechazar</button>`:""}</footer></article>`;
-}).join("")}</div>`}
-
-function approvalDecision(request,decision,reload){
-  if(String(request.requestType||"").toUpperCase()==="CANCELLATION")return cancellationDecision(request,decision,reload);
-  return decisionWizard(request,decision,reload);
-}
-
-function cancellationDecision(request,decision,reload){
-  const approve=decision==="APPROVED";
-  if(approve){
-    modal({title:"Cancelar pedido",confirmLabel:"Sí, cancelar pedido",cancelLabel:"Volver",body:`<div class="wizard-confirm-box"><strong>${fmt.escape(request.orderNumber)} será cancelado</strong><p>La solicitud fue realizada por ${fmt.escape(request.requestedBy)}. Al confirmar, el pedido saldrá de las colas activas y sus tareas abiertas quedarán cerradas como canceladas.</p></div><div class="review-text"><strong>Nota de quien solicita</strong><p>${fmt.escape(request.reason)}</p></div>`,onConfirm:async()=>{await api.decideOrderCancellation(request.id,"APPROVED");toast("Pedido cancelado.","success",6500);await reload()}});
-    return;
-  }
-  modal({title:"Rechazar cancelación",confirmLabel:"Rechazar solicitud",cancelLabel:"Volver",body:`<div class="review-text"><strong>${fmt.escape(request.orderNumber)}</strong><p>${fmt.escape(request.reason)}</p></div><div class="field"><label>Motivo del rechazo *</label><textarea class="control" name="reason" rows="4" required autofocus placeholder="Indica por qué no se autoriza la cancelación"></textarea></div>`,onConfirm:async dialog=>{const reason=dialog.querySelector('[name="reason"]').value.trim();if(!reason)throw new Error("Indica el motivo del rechazo.");await api.decideOrderCancellation(request.id,"REJECTED",reason);toast("Solicitud de cancelación rechazada.","success",5500);await reload()}});
-}
+function approvalCards(rows){return `<div class="decision-grid">${rows.map(request=>`<article class="decision-card sla-${Number(request.slaLevel||0)}"><div class="decision-card-head"><div><strong>${fmt.escape(request.orderNumber)}</strong><span>${fmt.escape(request.clientName)}</span></div>${statusBadge(request.status)}</div><div class="decision-card-body"><div class="exception-identifiers">${slaBadge(Number(request.slaLevel||0),request.ageBusinessSeconds)}${priorityBadge(request.priority)}</div><label>Solicitud</label><h3>${fmt.escape(fmt.request(request.requestType))}</h3>${request.requestPayload?.exceptionCode?`<span class="decision-exception-code">${fmt.escape(request.requestPayload.exceptionCode.replaceAll("_"," "))}</span>`:""}<p>${fmt.escape(request.reason)}</p><div class="decision-meta"><span>Solicita: <strong>${fmt.escape(request.requestedBy)}</strong></span><span>Destino: <strong>${fmt.escape(fmt.role(request.assignedRole||"jefe_logistica"))}</strong></span><span>${businessAge(request.ageBusinessSeconds)}</span></div></div><footer class="decision-card-foot"><button class="btn btn-ghost" data-order="${request.orderId}">Ver pedido</button>${request.status==="PENDING"?`<button class="btn btn-success" data-decide data-decision="APPROVED" data-request='${fmt.escape(JSON.stringify(request))}'>Aprobar</button><button class="btn btn-danger" data-decide data-decision="REJECTED" data-request='${fmt.escape(JSON.stringify(request))}'>Rechazar</button>`:""}</footer></article>`).join("")}</div>`}
 
 function decisionWizard(request,decision,reload){
   const approve=decision==="APPROVED";

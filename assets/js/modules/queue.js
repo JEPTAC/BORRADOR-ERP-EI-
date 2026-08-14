@@ -8,24 +8,22 @@ import {renderSentOrdersPanel} from "./shipping-flow.js";
 import {hasRole} from "../core/state.js";
 
 export async function renderQueue(root,{moduleId,steps,params={}}){
-  const sandbox=params.sandbox==="1"&&hasRole("super_admin");
   let selected=params.step&&steps.includes(params.step)?params.step:steps[0];
-  let page=Number(params.page||1),assignment=sandbox?"ALL":params.assignment||"ALL";
-  const showSentOrders=!sandbox&&moduleId==="shipping"&&(hasRole("ventas")||hasRole("super_admin"));
+  let page=Number(params.page||1),assignment=params.assignment||"ALL";
+  const showSentOrders=moduleId==="shipping"&&(hasRole("ventas")||hasRole("super_admin"));
   root.innerHTML=`
-    ${sandbox?`<section class="sandbox-queue-banner"><strong>MODO SANDBOX · SUPER ADMIN</strong><span>Esta cola muestra exclusivamente pedidos TEST. Ningún dato productivo se modifica.</span><button class="btn btn-ghost btn-compact" id="sandbox-back">Volver al Bot</button></section>`:""}
-    <section class="page-head simple-page-head"><div><h2>${moduleTitle(moduleId)}${sandbox?" · Sandbox":""}</h2><p>${sandbox?"Prueba el módulo real con pedidos ficticios completamente aislados.":"Abre un pedido y marca su situación. El ERP te pedirá únicamente lo indispensable para avanzar."}</p></div><div class="page-actions"><button class="btn btn-ghost" id="queue-help">¿Cómo funciona?</button></div></section>
+    <section class="page-head simple-page-head"><div><h2>${moduleTitle(moduleId)}</h2><p>Abre un pedido y marca su situación. El ERP te pedirá únicamente lo indispensable para avanzar.</p></div><div class="page-actions"><button class="btn btn-ghost" id="queue-help">¿Cómo funciona?</button></div></section>
     ${steps.length>1?`<section class="simple-stage-selector"><span>Etapa:</span>${steps.map(step=>`<button type="button" data-step="${step}" class="${step===selected?"active":""}">${fmt.escape(fmt.step(step))}</button>`).join("")}</section>`:""}
     <section class="card card-pad simple-queue-panel">
       <div class="queue-filter-bar simple-filter-bar">
         <div class="queue-filter-main"><input class="control search-wide" id="queue-search" placeholder="Buscar pedido o cliente"><select class="control" id="queue-status"><option value="">Todos los estados</option><option value="QUEUED">Pendiente</option><option value="ASSIGNED">Asignado</option><option value="IN_PROGRESS">En gestión</option><option value="WAITING">En espera</option><option value="BLOCKED">Con novedad</option></select><button class="btn btn-primary" id="queue-filter">Buscar</button></div>
-        ${sandbox?"":`<div class="queue-scope" aria-label="Alcance de la cola"><button class="btn ${assignment==="ALL"?"btn-primary":"btn-ghost"}" data-assignment="ALL">Toda la cola</button><button class="btn ${assignment==="UNASSIGNED"?"btn-primary":"btn-ghost"}" data-assignment="UNASSIGNED">Sin asignar</button><button class="btn ${assignment==="MINE"?"btn-primary":"btn-ghost"}" data-assignment="MINE">Mis pedidos</button></div>`}
+        <div class="queue-scope" aria-label="Alcance de la cola"><button class="btn ${assignment==="ALL"?"btn-primary":"btn-ghost"}" data-assignment="ALL">Toda la cola</button><button class="btn ${assignment==="UNASSIGNED"?"btn-primary":"btn-ghost"}" data-assignment="UNASSIGNED">Sin asignar</button><button class="btn ${assignment==="MINE"?"btn-primary":"btn-ghost"}" data-assignment="MINE">Mis pedidos</button></div>
       </div>
       <div class="simple-queue-message"><strong>Lista de trabajo</strong><span>Busca el pedido y usa la acción de la derecha. El popup te guiará paso a paso sin mostrar formularios innecesarios.</span></div>
       ${showSentOrders?`<section class="sent-orders-panel"><header><div><span>Seguimiento comercial</span><h3>Pedidos enviados</h3><p>Ventas y Superadministración pueden enviar un reporte de no entrega a Logística.</p></div></header><div id="sent-orders-result">${loading("Consultando pedidos enviados…")}</div></section>`:""}
-      ${moduleId==="picking"&&!sandbox?`<section class="cut-pickup-queue"><header><div><span>Entrega desde Corte</span><h3>Cortes por recoger</h3><p>Recoge primero las referencias terminadas y después continúa con la verificación normal del pedido.</p></div><span class="cut-pickup-queue-count" id="cut-pickup-count">0</span></header><div id="cut-pickup-result">${loading("Consultando cortes listos…")}</div></section>`:""}
+      ${moduleId==="picking"?`<section class="cut-pickup-queue"><header><div><span>Entrega desde Corte</span><h3>Cortes por recoger</h3><p>Recoge primero las referencias terminadas y después continúa con la verificación normal del pedido.</p></div><span class="cut-pickup-queue-count" id="cut-pickup-count">0</span></header><div id="cut-pickup-result">${loading("Consultando cortes listos…")}</div></section>`:""}
       <div id="queue-result">${loading()}</div>
-      ${moduleId==="picking"&&!sandbox?`<section class="picking-partial-queue"><header><div><span>Continuidad del pedido</span><h3>Pedidos parciales pendientes</h3><p>El mismo pedido vuelve aquí cuando termina la primera salida y llega la mercancía faltante.</p></div></header><div id="picking-partial-result">${loading("Consultando parciales…")}</div></section>`:""}
+      ${moduleId==="picking"?`<section class="picking-partial-queue"><header><div><span>Continuidad del pedido</span><h3>Pedidos parciales pendientes</h3><p>El mismo pedido vuelve aquí cuando termina la primera salida y llega la mercancía faltante.</p></div></header><div id="picking-partial-result">${loading("Consultando parciales…")}</div></section>`:""}
     </section>`;
 
   async function load(newPage=1){
@@ -34,18 +32,18 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
     target.innerHTML=loading("Consultando pedidos…");
     try{
       const search=root.querySelector("#queue-search").value.trim();
-      const pickupPromise=moduleId==="picking"&&!sandbox?loadCutPickups(search):Promise.resolve(new Set());
+      const pickupPromise=moduleId==="picking"?loadCutPickups(search):Promise.resolve(new Set());
       const [data,pickupIds]=await Promise.all([
-        (sandbox?api.sandboxOrders({step:selected,status:root.querySelector("#queue-status").value||null,search,page,pageSize:50}):api.listOrders({step:selected,status:root.querySelector("#queue-status").value||null,search,assignment,page,pageSize:50,includeHistory:false})),
+        api.listOrders({step:selected,status:root.querySelector("#queue-status").value||null,search,assignment,page,pageSize:50,includeHistory:false}),
         pickupPromise
       ]);
-      const rows=moduleId==="picking"&&!sandbox?data.items.filter(item=>!pickupIds.has(item.id)):data.items;
+      const rows=moduleId==="picking"?data.items.filter(item=>!pickupIds.has(item.id)):data.items;
       const content=rows.length?workList(rows):empty("No hay pedidos en esta cola",assignment==="MINE"?"No tienes pedidos asignados. Consulta Toda la cola para tomar uno.":"No existen pedidos activos con estos filtros.");
       const countLabel=moduleId==="picking"&&pickupIds.size?`${rows.length} pedido(s) para alistar`:`${fmt.number(data.pagination?.totalItems||0)} pedido(s)`;
       target.innerHTML=`<div class="queue-result-head"><div><strong>${countLabel}</strong><span>${fmt.step(selected)} · ${scopeLabel(assignment)}</span></div></div>${content}${rows.length?paginationHtml(data.pagination):""}`;
       target.querySelectorAll("[data-order]").forEach(element=>element.onclick=()=>{const row=rows.find(item=>item.id===element.dataset.order);if(row?.purchaseShadow)openPurchaseArrival(row,{refreshLists:()=>load(page)});else openOrder(element.dataset.order)});
       target.querySelectorAll("[data-page]").forEach(element=>element.onclick=()=>load(Number(element.dataset.page)));
-      if(moduleId==="picking"&&!sandbox)await loadPendingPartials();
+      if(moduleId==="picking")await loadPendingPartials();
       if(showSentOrders){const sent=root.querySelector("#sent-orders-result");if(sent)await renderSentOrdersPanel(sent,{search,page:1,onOpen:openOrder});}
     }catch(error){
       target.innerHTML=`<div class="module-error"><strong>No fue posible consultar esta cola</strong><p>${fmt.escape(error.message)}</p><button class="btn btn-primary" id="retry-queue">Reintentar</button></div>`;
@@ -88,7 +86,6 @@ export async function renderQueue(root,{moduleId,steps,params={}}){
     }
   }
 
-  root.querySelector("#sandbox-back")?.addEventListener("click",()=>location.hash="#/sandbox");
   root.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
     selected=button.dataset.step;
     root.querySelectorAll("[data-step]").forEach(item=>item.classList.toggle("active",item===button));

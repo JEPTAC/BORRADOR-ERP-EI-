@@ -39,9 +39,6 @@ function registeredInvoice(data){
 }
 
 async function storeBillingFile(data,file,category,taskId){
-  if(data?.order?.is_test){
-    return api.registerDriveFile({orderId:data.order.id,taskId,category,driveFileId:`SANDBOX-${crypto.randomUUID()}`,fileName:file.name,mimeType:file.type||"application/octet-stream",webViewLink:null,webContentLink:null,sizeBytes:file.size||0,metadata:{sandbox:true,bytesUploaded:false}});
-  }
   return uploadOrderFile(data.order.id,file,category,taskId,data.order.order_number);
 }
 
@@ -316,7 +313,7 @@ function openInvoiceUpload(data,{reload,refreshLists,source}){
     title:"Subir factura",
     confirmLabel:"Guardar factura",
     size:"wide",
-    body:`<div class="billing-upload-note"><strong>${data.order.is_test?"Archivo simulado · Sandbox":"Carga directa mediante Google Drive"}</strong><p>Selecciona la factura en PDF. El ERP registrará automáticamente el nombre y la fecha de carga.</p></div><div class="field"><label>Factura PDF *</label><input class="control" name="file" type="file" accept="application/pdf,.pdf" required autofocus></div>`,
+    body:`<div class="billing-upload-note"><strong>Carga directa mediante Google Drive</strong><p>Selecciona la factura en PDF. El ERP registrará automáticamente el nombre y la fecha de carga.</p></div><div class="field"><label>Factura PDF *</label><input class="control" name="file" type="file" accept="application/pdf,.pdf" required autofocus></div>`,
     onConfirm:async dialog=>{
       const file=dialog.querySelector('[name="file"]').files[0];
       if(!file)throw new Error("Selecciona la factura en PDF.");

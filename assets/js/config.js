@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.25.11-qa-pool-protection",
-  build: "2026-08-13.6",
+  version: "10.26.1-produccion-limpia",
+  build: "2026-08-14.1",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {
@@ -45,8 +45,6 @@ export const NAV_GROUPS = [
     {id:"vsm",label:"Flujo y tiempos",icon:"vsm"},
     {id:"reports",label:"Reportes",icon:"reports"},
     {id:"imports",label:"Importar historial",icon:"imports"},
-    {id:"sandbox",label:"Bot de pruebas",icon:"qa"},
-    {id:"qa",label:"QA total del sistema",icon:"qa"},
     {id:"audit",label:"Auditoría",icon:"audit"},
     {id:"admin",label:"Administración",icon:"admin"}
   ]}

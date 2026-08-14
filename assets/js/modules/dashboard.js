@@ -20,7 +20,6 @@ export async function renderDashboard(root){
   if(state.modules.some(m=>["cartera","caja","purchasing","receiving","picking","cutting","billing","shipping"].includes(m.code)&&m.canRead))cards.push({id:"guide-my-work",title:"Ver mis tareas",description:"Abre los pedidos asignados a tu usuario y continúa la etapa correspondiente.",icon:"✓",tone:"primary"});
   if(can("approvals","canRead"))cards.push({id:"guide-approvals",title:"Centro de excepciones",description:"Atiende Novedades, Reportes, Aprobaciones y alertas SLA desde una sola bandeja.",icon:"!",tone:"warning"});
   if(can("orders","canRead"))cards.push({id:"guide-orders",title:"Buscar un pedido",description:"Encuentra rápidamente un pedido por número, cliente, etapa o estado.",icon:"⌕"});
-  if(can("qa","canRead"))cards.push({id:"guide-qa",title:"Validar el ERP",description:"Ejecuta las pruebas automáticas antes de habilitar nuevos cambios.",icon:"▶",tone:"success"});
 
   root.innerHTML=`
     <section class="page-head"><div><h2>Resumen de la operación</h2><p>Consulta cargas de trabajo, pedidos críticos, tiempos y decisiones pendientes.</p></div></section>
@@ -41,7 +40,6 @@ export async function renderDashboard(root){
   root.querySelector("#guide-my-work")?.addEventListener("click",()=>navigate("orders",{assignment:"MINE",history:"0"}));
   root.querySelector("#guide-approvals")?.addEventListener("click",()=>navigate("approvals"));
   root.querySelector("#guide-orders")?.addEventListener("click",()=>navigate("orders"));
-  root.querySelector("#guide-qa")?.addEventListener("click",()=>navigate("qa"));
   root.querySelector("#all-orders").onclick=()=>navigate("orders");
   root.querySelector("#dashboard-help").onclick=()=>guide({title:"Guía rápida del ERP",description:"La operación sigue el mismo patrón en todos los módulos.",items:[{title:"Elige una opción",detail:"Las tarjetas grandes muestran lo que puedes hacer según tu rol."},{title:"Selecciona un pedido",detail:"Las tarjetas de pedidos muestran cliente, etapa, prioridad y responsable."},{title:"Completa pasos cortos",detail:"Los formularios extensos se dividieron en pasos sencillos."},{title:"Confirma la información",detail:"Antes de guardar verás un resumen completo."}]});
   root.querySelectorAll("[data-step]").forEach(element=>element.onclick=()=>navigate("orders",{step:element.dataset.step,history:"0"}));

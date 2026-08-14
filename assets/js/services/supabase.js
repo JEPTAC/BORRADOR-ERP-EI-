@@ -18,8 +18,7 @@ export function getSupabase(){
   if(!window.supabase?.createClient)throw new Error("No fue posible iniciar el servicio del ERP. Recarga la página e inténtalo nuevamente.");
   client=window.supabase.createClient(CONFIG.supabase.url,CONFIG.supabase.publishableKey,{
     auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"pkce",storageKey:"ei-erp-supply-v10"},
-    // V10.25.11: no permitir que PostgREST multiplique 503/504 en segundo plano.
-    // El QA decide explícitamente cuándo reanudar; la app normal falla rápido y recuperable.
+    // Evita reintentos automáticos de PostgREST ante 503/504; la interfaz informa el fallo y permite reintentar de forma controlada.
     db:{retry:false}
   });
   return client;

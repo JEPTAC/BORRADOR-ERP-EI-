@@ -6,15 +6,12 @@ import {uploadOrderFile} from "../services/drive.js";
 
 let currentRoot=null;
 let currentPage=1;
-let sandboxMode=false;
 
 export function isCuttingFlow(data){return data?.order?.current_step_code==="CORTE"}
 
-export async function renderCutting(root,{params={}}={}){
+export async function renderCutting(root){
   currentRoot=root;
-  sandboxMode=params.sandbox==="1";
   root.innerHTML=`
-    ${sandboxMode?`<section class="sandbox-queue-banner"><strong>MODO SANDBOX · CORTE</strong><span>Carretos, consumos y evidencia son simulados. Producción permanece intacta.</span><button class="btn btn-ghost btn-compact" id="sandbox-cut-back">Volver al Bot</button></section>`:""}
     <section class="page-head cutting-page-head">
       <div><span class="cutting-kicker">Centro de corte</span><h2>Corte por referencia</h2><p>Selecciona una referencia y completa una sola secuencia guiada: iniciar, elegir origen, ejecutar y cerrar con evidencia.</p></div>
       <div class="page-actions"><button class="btn btn-ghost" id="cutting-refresh">Actualizar</button></div>
@@ -23,7 +20,6 @@ export async function renderCutting(root,{params={}}={}){
       <div class="cutting-toolbar"><input class="control search-wide" id="cutting-search" placeholder="Buscar referencia o nombre del cable"><button class="btn btn-primary" id="cutting-search-button">Buscar</button></div>
       <div id="cutting-result">${loading("Consultando referencias de Corte…")}</div>
     </section>`;
-  root.querySelector("#sandbox-cut-back")?.addEventListener("click",()=>navigate("sandbox"));
   root.querySelector("#cutting-search-button")?.addEventListener("click",()=>loadCuttingGroups(1));
   root.querySelector("#cutting-refresh")?.addEventListener("click",()=>loadCuttingGroups(currentPage));
   root.querySelector("#cutting-search")?.addEventListener("keydown",e=>{if(e.key==="Enter")loadCuttingGroups(1)});
@@ -38,7 +34,7 @@ async function loadCuttingGroups(page=1){
   target.innerHTML=loading("Organizando trabajo por referencia…");
   try{
     const search=root.querySelector("#cutting-search")?.value.trim()||"";
-    const data=await (sandboxMode?api.sandboxCuttingWork(search,page,50):api.cuttingWork(search,page,50));
+    const data=await api.cuttingWork(search,page,50);
     const rows=data.items||[];
     target.innerHTML=rows.length?`<div class="cutting-result-head"><div><strong>${fmt.number(data.pagination?.totalItems||rows.length)} referencia(s)</strong><span>Las ejecuciones iniciadas permanecen visibles hasta cargar su evidencia final.</span></div></div><div class="erp-work-list cutting-group-list">${rows.map(groupRow).join("")}</div>${paginationHtml(data.pagination)}`:empty("No hay referencias pendientes","Cuando existan cortes por ejecutar aparecerán aquí.");
     target.querySelectorAll("[data-cut-group]").forEach(b=>b.addEventListener("click",()=>openCutGroup(b.dataset.cutGroup)));
@@ -61,7 +57,7 @@ function groupRow(group){
 export function renderCuttingOrder(host,data){
   host.innerHTML=`<div class="modal-overlay simple-process-overlay"><section class="modal simple-process-modal cutting-order-notice"><header class="modal-head simple-process-head"><div><span class="wizard-kicker">Corte por referencia</span><h3>${fmt.escape(data.order.order_number)}</h3><p>${fmt.escape(data.order.client_name)}</p></div><button class="icon-btn" data-close aria-label="Cerrar">×</button></header><div class="modal-body simple-process-body"><section class="cutting-order-message"><span>CT</span><div><h4>Los cortes se ejecutan agrupados por referencia</h4><p>Abre el Centro de Corte para trabajar la referencia completa y registrar su tiempo hasta la evidencia final.</p></div></section><button class="btn btn-primary btn-large cutting-open-center" data-open-cutting>Abrir Centro de corte</button></div>${guidedFooter()}</section></div>`;
   bindClose(host);
-  host.querySelector("[data-open-cutting]")?.addEventListener("click",()=>{host.replaceChildren();navigate("cutting",data.order.is_test?{sandbox:"1"}:{})});
+  host.querySelector("[data-open-cutting]")?.addEventListener("click",()=>{host.replaceChildren();navigate("cutting")});
 }
 
 async function openCutGroup(groupKey,{message=""}={}){
@@ -70,7 +66,7 @@ async function openCutGroup(groupKey,{message=""}={}){
   try{
     const active=await api.cuttingActiveExecution(groupKey);
     if(active){renderExecution(host,active,{message});return}
-    const data=await (sandboxMode?api.sandboxCuttingGroup(groupKey):api.cuttingGroup(groupKey));
+    const data=await api.cuttingGroup(groupKey);
     renderStart(host,data);
   }catch(error){
     host.innerHTML=`<div class="modal-overlay"><section class="modal"><header class="modal-head"><h3>No fue posible abrir la referencia</h3><button class="icon-btn" data-close>×</button></header><div class="modal-body"><p class="danger">${fmt.escape(error.message)}</p></div></section></div>`;
@@ -144,14 +140,11 @@ function renderEvidence(host,data){
     if(!file.type?.startsWith("image/")){toast("Debes seleccionar una imagen.","error");input.value="";return}
     button.disabled=true;const original=button.textContent;
     try{
-      if(data.isTest){button.textContent="Registrando evidencia Sandbox…";await api.sandboxCuttingEvidence(e.id,{fileName:file.name,mimeType:file.type,sizeBytes:file.size})}
-      else{
-        button.textContent="Subiendo foto…";
-        const uploaded=await uploadOrderFile(data.anchorOrderId,file,"CUTTING_EVIDENCE",null,data.anchorOrderNumber);
-        if(!uploaded?.file?.id)throw new Error("Google Drive no devolvió la evidencia cargada.");
-        button.textContent="Registrando evidencia…";
-        await api.cuttingRegisterEvidence(e.id,uploaded.file.id);
-      }
+      button.textContent="Subiendo foto…";
+      const uploaded=await uploadOrderFile(data.anchorOrderId,file,"CUTTING_EVIDENCE",null,data.anchorOrderNumber);
+      if(!uploaded?.file?.id)throw new Error("Google Drive no devolvió la evidencia cargada.");
+      button.textContent="Registrando evidencia…";
+      await api.cuttingRegisterEvidence(e.id,uploaded.file.id);
       button.textContent="Finalizando corte…";await finalizeExecution(host,e.id);
     }catch(error){toast(error.message||"No fue posible cerrar Corte.","error",9000);button.disabled=false;button.textContent=original;input.value=""}
   });
@@ -194,8 +187,7 @@ function originRow(r){return `<button type="button" class="cut-origin-row" data-
 async function loadOrigins(host,state,search=""){
   const target=host.querySelector("[data-origin-results]");if(!target)return;target.innerHTML=loading("Buscando carretos compatibles…");
   try{
-    if(sandboxMode){const g=await api.sandboxCuttingGroup(state.groupKey);state.origins=normalizeOrigins(g.reels||[]).filter(r=>!search||`${r.lotNumber||""} ${r.serialNumber||""} ${r.location||""}`.toLowerCase().includes(search.toLowerCase()))}
-    else{const data=await api.cuttingOriginSearch(state.groupKey,search,60);state.origins=normalizeOrigins(data.items||[])}
+    const data=await api.cuttingOriginSearch(state.groupKey,search,60);state.origins=normalizeOrigins(data.items||[])
     target.innerHTML=originRows(state.origins);target.querySelectorAll("[data-origin-lot]").forEach(b=>b.addEventListener("click",()=>selectOrigin(host,state,b.dataset.originLot)));
   }catch(error){target.innerHTML=`<div class="module-error"><strong>No fue posible consultar carretos</strong><p>${fmt.escape(error.message)}</p></div>`}
 }
@@ -224,14 +216,10 @@ async function previewBatch(host,state){
   const reel=Number(host.querySelector("[data-reel-length]")?.value||0),scrap=Number(host.querySelector("[data-scrap-length]")?.value||0);
   if(reel<=0){toast("Indica la cantidad real encontrada.","error");return}if(scrap<0){toast("La merma no puede ser negativa.","error");return}
   state.reelLength=reel;state.scrapLength=scrap;showStep(host,3);const target=host.querySelector("[data-cut-plan]");target.innerHTML=loading("Distribuyendo cortes completos…");
-  try{state.plan=sandboxMode?localSandboxPlan(state):await api.cuttingExecutionPlan(state.executionId,state.selectedLotId,reel,scrap);renderPlan(host,state)}
+  try{state.plan=await api.cuttingExecutionPlan(state.executionId,state.selectedLotId,reel,scrap);renderPlan(host,state)}
   catch(error){state.plan=null;target.innerHTML=`<div class="module-error"><strong>No fue posible calcular el plan</strong><p>${fmt.escape(error.message)}</p></div>`}
 }
 
-function localSandboxPlan(state){
-  const required=Number(state.group.totalLength||0),capacity=Math.max(state.reelLength-state.scrapLength,0),cut=Math.min(required,capacity);
-  return {canExecute:capacity>=required,reason:capacity>=required?null:"En Sandbox selecciona un carreto que cubra el grupo.",systemLength:Number(state.selectedOrigin?.available||0),confirmedLength:state.reelLength,discrepancy:state.reelLength-Number(state.selectedOrigin?.available||0),plannedLength:cut,plannedCuts:Number(state.group.cutCount||0),scrapLength:state.scrapLength,reelRemaining:state.reelLength-cut-state.scrapLength,groupRemainingAfter:Math.max(required-cut,0),groupCompleted:capacity>=required,partialBatch:capacity<required,approvalRequired:false,approvalReady:true,plan:[]};
-}
 
 function renderPlan(host,state){
   const p=state.plan||{},target=host.querySelector("[data-cut-plan]"),button=host.querySelector("[data-execute-batch]");
@@ -247,7 +235,7 @@ async function executeBatch(host,state,button){
   button.disabled=true;const original=button.textContent;button.textContent="Registrando corte…";
   try{
     const payload={inventoryLotId:state.selectedLotId,reelLength:state.reelLength,scrapLength:state.scrapLength,expectedPlannedLength:Number(state.plan?.plannedLength||0)};
-    const result=await (sandboxMode?api.sandboxExecuteCutGroup(state.groupKey,payload):api.executeCutGroup(state.groupKey,payload));
+    const result=await api.executeCutGroup(state.groupKey,payload);
     await loadCuttingGroups(currentPage);
     if(result.waitingEvidence||result.groupCompleted){toast("Corte físico completo. Falta la foto final para cerrar.","success",7000);const detail=await api.cuttingExecution(state.executionId);renderEvidence(host,detail)}
     else{const message=`${fmt.number(result.cutLength,3)} m registrados. Quedan ${fmt.number(result.groupRemainingLength,3)} m.`;toast(message,"success",7000);await openCutGroup(state.groupKey,{message})}
@@ -257,9 +245,9 @@ async function executeBatch(host,state,button){
 async function openFullReelDialog(host,state,item){
   const req=state.items.find(r=>String(r.requirementId)===String(item?.dataset.requirementId));if(!req)return;
   try{
-    if(!state.origins.length){if(sandboxMode){const g=await api.sandboxCuttingGroup(state.groupKey);state.origins=normalizeOrigins(g.reels||[])}else{const result=await api.cuttingOriginSearch(state.groupKey,"",60);state.origins=normalizeOrigins(result.items||[])}}
+    if(!state.origins.length){const result=await api.cuttingOriginSearch(state.groupKey,"",60);state.origins=normalizeOrigins(result.items||[])}
     if(!state.origins.length){toast("No hay carretos compatibles disponibles.","error");return}
-    nestedDialog(host,{title:"Carreto completo",confirmLabel:"Confirmar carreto completo",body:`<div class="cut-dialog-guide"><strong>${fmt.escape(req.orderNumber||"Pedido")} · ${fmt.escape(state.group.reference||"")}</strong><span>Usa esta opción solo cuando el carreto físico completo coincide exactamente con los ${fmt.number(req.remainingLength,3)} m pendientes.</span></div><div class="field"><label>Carreto físico *</label><select class="control" name="lotId" required><option value="">Seleccionar…</option>${state.origins.map(r=>`<option value="${fmt.escape(r.lotId)}">${fmt.escape([r.lotNumber,r.serialNumber].filter(Boolean).join(" · ")||"Carreto")} · ${fmt.number(r.available,3)} m · ${fmt.escape(r.locationName||r.location||"")}</option>`).join("")}</select></div><div class="field"><label>Medida exacta</label><input class="control" name="reelLength" type="number" step="0.0001" value="${Number(req.remainingLength||0)}" readonly></div>`,onConfirm:async dialog=>{const lotId=dialog.querySelector('[name="lotId"]').value;await (sandboxMode?api.sandboxResolveCutRequirement(req.requirementId,"FULL_REEL",{inventoryLotId:lotId,reelLength:Number(req.remainingLength)}):api.resolveCutRequirement(req.requirementId,"FULL_REEL",{inventoryLotId:lotId,reelLength:Number(req.remainingLength)}));toast("Carreto completo registrado.","success");await openCutGroup(state.groupKey)}});
+    nestedDialog(host,{title:"Carreto completo",confirmLabel:"Confirmar carreto completo",body:`<div class="cut-dialog-guide"><strong>${fmt.escape(req.orderNumber||"Pedido")} · ${fmt.escape(state.group.reference||"")}</strong><span>Usa esta opción solo cuando el carreto físico completo coincide exactamente con los ${fmt.number(req.remainingLength,3)} m pendientes.</span></div><div class="field"><label>Carreto físico *</label><select class="control" name="lotId" required><option value="">Seleccionar…</option>${state.origins.map(r=>`<option value="${fmt.escape(r.lotId)}">${fmt.escape([r.lotNumber,r.serialNumber].filter(Boolean).join(" · ")||"Carreto")} · ${fmt.number(r.available,3)} m · ${fmt.escape(r.locationName||r.location||"")}</option>`).join("")}</select></div><div class="field"><label>Medida exacta</label><input class="control" name="reelLength" type="number" step="0.0001" value="${Number(req.remainingLength||0)}" readonly></div>`,onConfirm:async dialog=>{const lotId=dialog.querySelector('[name="lotId"]').value;await api.resolveCutRequirement(req.requirementId,"FULL_REEL",{inventoryLotId:lotId,reelLength:Number(req.remainingLength)});toast("Carreto completo registrado.","success");await openCutGroup(state.groupKey)}});
   }catch(error){toast(error.message,"error",8000)}
 }
 
@@ -269,7 +257,7 @@ function requestRemainderApproval(host,state){
 }
 
 function toggleNoCut(item,show){const panel=item?.querySelector('[data-resolution-panel="NO_CUT"]');if(panel)panel.hidden=!show}
-async function resolveNoCut(host,state,item,button){const id=item?.dataset.requirementId,reason=item?.querySelector("[data-no-cut-reason]")?.value.trim();if(!reason){toast("Escribe el motivo.","error");return}button.disabled=true;try{await (sandboxMode?api.sandboxResolveCutRequirement(id,"NO_CUT",{reason}):api.resolveCutRequirement(id,"NO_CUT",{reason}));toast("Corrección registrada.","success");await openCutGroup(state.groupKey)}catch(error){toast(error.message,"error");button.disabled=false}}
+async function resolveNoCut(host,state,item,button){const id=item?.dataset.requirementId,reason=item?.querySelector("[data-no-cut-reason]")?.value.trim();if(!reason){toast("Escribe el motivo.","error");return}button.disabled=true;try{await api.resolveCutRequirement(id,"NO_CUT",{reason});toast("Corrección registrada.","success");await openCutGroup(state.groupKey)}catch(error){toast(error.message,"error");button.disabled=false}}
 
 function nestedDialog(host,{title,body,confirmLabel="Confirmar",onConfirm}){
   return taskPanel(host,{title,body,confirmLabel,kicker:"Acción especial de Corte",tone:"cut-task-panel",onConfirm:async panel=>onConfirm(panel)});

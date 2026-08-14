@@ -11,7 +11,7 @@ export function pendingCancellation(data){
 
 export function mountOrderCancellationAction(host,data,{reload=null,refresh=null}={}){
   const order=data?.order;
-  if(!host||!order||order.is_test)return;
+  if(!host||!order)return;
   const status=String(order.status||"").toUpperCase();
   if(["CLOSED","CANCELLED"].includes(status))return;
 
