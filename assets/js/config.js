@@ -1,6 +1,6 @@
 export const CONFIG = Object.freeze({
-  version: "10.29.0-visual-premium",
-  build: "2026-08-14.6",
+  version: "10.30.0-modern-erp",
+  build: "2026-08-14.7",
   appName: "ERP Electroingeniería",
   company: "Electroingeniería S.A.S.",
   supabase: {

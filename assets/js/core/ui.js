@@ -181,7 +181,11 @@ export function modal({title,body,confirmLabel="Guardar",cancelLabel="Cancelar",
 
 function semanticActionClass(label,fallback="btn-primary"){
   const value=String(label||"").trim().toLowerCase();
-  return /^(crear|agregar|nuevo|nueva|añadir)\b/.test(value)?"btn-create":fallback;
+  if(/^(crear|agregar|nuevo|nueva|añadir)\b/.test(value))return "btn-create";
+  if(/^(buscar|consultar)\b/.test(value))return "btn-search";
+  if(/^(eliminar|borrar|rechazar|anular)\b/.test(value))return "btn-danger";
+  if(/^(aprobar|finalizar|completar|mercancía ok|pasar a cierre)\b/.test(value))return "btn-success";
+  return fallback;
 }
 
 function validatePanel(panel){
@@ -216,7 +220,7 @@ export function wizard({
           <div><span class="wizard-kicker">Flujo asistido</span><h3 id="${titleId}">${fmt.escape(title)}</h3><p>${fmt.escape(subtitle)}</p></div>
           <button type="button" class="icon-btn icon-close" data-close aria-label="Cerrar ventana">×</button>
         </header>
-        <div class="wizard-progress" role="list">
+        <div class="wizard-progress" role="list" style="--wizard-steps:${steps.length}">
           ${steps.map((step,index)=>`<button type="button" class="wizard-progress-item ${index===0?"active":""}" data-wizard-jump="${index}" role="listitem"><span>${index+1}</span><strong>${fmt.escape(step.title)}</strong></button>`).join("")}
         </div>
         <form class="wizard-form" novalidate>

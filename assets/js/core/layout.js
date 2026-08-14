@@ -54,25 +54,36 @@ function navHtml(){return NAV_GROUPS.map(group=>{
 
 export function renderShell(){
   const p=state.profile||{};
-  const quickOrder=allowed("sales")?`<button class="btn btn-create top-new-order" id="quick-order"><span>Nuevo pedido</span></button>`:"";
+  const quickOrder=allowed("sales")?`<button class="btn btn-create shell-new-order" id="quick-order"><span>Nuevo pedido</span></button>`:"";
   document.querySelector("#app").innerHTML=`<div class="shell">
+    <header class="global-shell" aria-label="Barra global del ERP">
+      <div class="shell-brand">
+        <button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button>
+        <span class="shell-brand-mark"><img src="./assets/img/iso-electroingenieria.png" alt=""></span>
+        <span class="shell-brand-copy"><strong>ERP Electroingeniería</strong><small>Operación y suministros</small></span>
+      </div>
+      <div class="shell-context" aria-live="polite">
+        <div class="shell-breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div>
+        <div class="shell-current"><strong id="top-title">Centro de operaciones</strong><span id="top-subtitle">Visibilidad, control y ejecución</span></div>
+      </div>
+      <div class="top-actions">
+        <div id="active-work-slot" class="active-work-slot"></div>
+        <label class="global-search-shell">${icon("search")}<input id="global-search" class="global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>
+        ${quickOrder}
+        <button class="icon-btn mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Abrir búsqueda" aria-controls="mobile-search-panel" aria-expanded="false">${icon("search")}</button>
+        <button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button>
+      </div>
+    </header>
     <aside class="sidebar" id="sidebar" aria-label="Menú principal" aria-hidden="true">
       <header class="sidebar-head">
-        <div class="sidebar-brand-row">
-          <img class="sidebar-logo" src="./assets/img/logo-electroingenieria.png" alt="Electroingeniería">
-          <button class="sidebar-close" id="sidebar-close" type="button" aria-label="Cerrar menú"><span aria-hidden="true"></span></button>
-        </div>
-        <div class="sidebar-product"><strong>ERP Corporativo</strong><small>Operación y suministros</small></div>
+        <div class="sidebar-heading"><span>Navegación</span><strong>Módulos del ERP</strong></div>
+        <button class="sidebar-close" id="sidebar-close" type="button" aria-label="Cerrar menú"><span aria-hidden="true"></span></button>
       </header>
       <nav class="nav-scroll" id="sidebar-nav" aria-label="Navegación principal">${navHtml()}</nav>
       <footer class="sidebar-foot"><div class="user-chip"><div class="avatar">${fmt.initials(p.name)}</div><div class="user-data"><strong>${fmt.escape(p.name||"Usuario")}</strong><small>${fmt.escape(fmt.roles(p.roles||[]))}</small></div><button class="icon-btn logout-btn" id="logout" title="Cerrar sesión" aria-label="Cerrar sesión">${icon("logout")}</button></div></footer>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" tabindex="-1" aria-label="Cerrar menú"></button>
     <main class="main" id="main-content">
-      <header class="topbar">
-        <div class="topbar-left"><button class="icon-btn mobile-menu" id="menu-toggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="top-title"><div class="breadcrumb"><span>ERP</span><b>›</b><span id="top-section">Operación</span></div><h1 id="top-title">Centro de operaciones</h1><p id="top-subtitle">Visibilidad, control y ejecución</p></div></div>
-        <div class="top-actions"><div id="active-work-slot" class="active-work-slot"></div><label class="global-search-shell">${icon("search")}<input id="global-search" class="control global-search" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global"></label>${quickOrder}<button class="icon-btn mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Abrir búsqueda" aria-controls="mobile-search-panel" aria-expanded="false">${icon("search")}</button><button class="icon-btn refresh-btn" id="refresh-page" title="Actualizar información" aria-label="Actualizar información">${icon("refresh")}</button></div>
-      </header>
       <div class="mobile-search-panel" id="mobile-search-panel" hidden><label>${icon("search")}<input id="mobile-global-search" class="control" placeholder="Buscar pedido, cliente o referencia…" aria-label="Búsqueda global móvil"></label></div>
       <div class="content" id="page-content"></div>
     </main>
